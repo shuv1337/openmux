@@ -2,6 +2,7 @@
  * StatusBar - bottom status bar showing workspaces and mode
  */
 
+import { useState, useEffect } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLayout } from '../contexts/LayoutContext';
 import { useKeyboardState } from '../contexts/KeyboardContext';
@@ -15,6 +16,17 @@ export function StatusBar({ width }: StatusBarProps) {
   const theme = useTheme();
   const { state, activeWorkspace, populatedWorkspaces, paneCount } = useLayout();
   const { state: kbState } = useKeyboardState();
+
+  // Real-time clock
+  const [time, setTime] = useState(() => new Date().toLocaleTimeString());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTime(new Date().toLocaleTimeString());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <box
@@ -52,7 +64,7 @@ export function StatusBar({ width }: StatusBarProps) {
           </text>
         )}
         <text fg={theme.statusBar.foregroundColor}>
-          {new Date().toLocaleTimeString()}
+          {time}
         </text>
       </box>
     </box>

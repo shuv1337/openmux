@@ -108,12 +108,15 @@ export function useKeyboardState(): KeyboardContextValue {
   return context;
 }
 
+/** Layout modes for cycling */
+const LAYOUT_MODES: Array<'vertical' | 'horizontal' | 'stacked'> = ['vertical', 'horizontal', 'stacked'];
+
 /**
  * Hook for handling keyboard input across all modes
  */
 export function useKeyboardHandler() {
   const { state: kbState, dispatch: kbDispatch } = useKeyboardState();
-  const { dispatch: layoutDispatch } = useLayout();
+  const { dispatch: layoutDispatch, activeWorkspace } = useLayout();
 
   const handleKeyDown = useCallback((event: {
     key: string;
@@ -122,7 +125,12 @@ export function useKeyboardHandler() {
     shift?: boolean;
     meta?: boolean;
   }) => {
-    const { key, ctrl } = event;
+    const { key, ctrl, alt } = event;
+
+    // Handle Alt keybindings (prefix-less actions) in normal mode
+    if (kbState.mode === 'normal' && alt) {
+      return handleAltKey(key, layoutDispatch, activeWorkspace.layoutMode);
+    }
 
     // Handle Ctrl+B to enter prefix mode (only in normal mode)
     if (kbState.mode === 'normal' && ctrl && key.toLowerCase() === PREFIX_KEY) {
@@ -154,9 +162,66 @@ export function useKeyboardHandler() {
 
     // Normal mode - pass through to terminal
     return false;
-  }, [kbState.mode, kbDispatch, layoutDispatch]);
+  }, [kbState.mode, kbDispatch, layoutDispatch, activeWorkspace.layoutMode]);
 
   return { handleKeyDown, mode: kbState.mode };
+}
+
+/**
+ * Handle Alt key combinations (prefix-less actions)
+ */
+function handleAltKey(
+  key: string,
+  layoutDispatch: ReturnType<typeof useLayout>['dispatch'],
+  currentLayoutMode: 'vertical' | 'horizontal' | 'stacked'
+): boolean {
+  // Alt+hjkl for navigation
+  const direction = keyToDirection(key);
+  if (direction) {
+    layoutDispatch({ type: 'NAVIGATE', direction });
+    return true;
+  }
+
+  // Alt+1-9 for workspace switching
+  if (/^[1-9]$/.test(key)) {
+    const workspaceId = parseInt(key, 10) as WorkspaceId;
+    layoutDispatch({ type: 'SWITCH_WORKSPACE', workspaceId });
+    return true;
+  }
+
+  switch (key) {
+    // Alt+n or Alt+Enter for new pane
+    case 'n':
+    case 'Enter':
+      layoutDispatch({ type: 'NEW_PANE' });
+      return true;
+
+    // Alt+[ to cycle layout mode backward
+    case '[':
+      {
+        const currentIndex = LAYOUT_MODES.indexOf(currentLayoutMode);
+        const newIndex = (currentIndex - 1 + LAYOUT_MODES.length) % LAYOUT_MODES.length;
+        layoutDispatch({ type: 'SET_LAYOUT_MODE', mode: LAYOUT_MODES[newIndex]! });
+      }
+      return true;
+
+    // Alt+] to cycle layout mode forward
+    case ']':
+      {
+        const currentIndex = LAYOUT_MODES.indexOf(currentLayoutMode);
+        const newIndex = (currentIndex + 1) % LAYOUT_MODES.length;
+        layoutDispatch({ type: 'SET_LAYOUT_MODE', mode: LAYOUT_MODES[newIndex]! });
+      }
+      return true;
+
+    // Alt+x to close pane
+    case 'x':
+      layoutDispatch({ type: 'CLOSE_PANE' });
+      return true;
+
+    default:
+      return false;
+  }
 }
 
 function handlePrefixModeKey(

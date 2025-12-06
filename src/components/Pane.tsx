@@ -14,6 +14,7 @@ interface PaneProps {
   width: number;
   height: number;
   children?: ReactNode;
+  onClick?: () => void;
 }
 
 export function Pane({
@@ -25,6 +26,7 @@ export function Pane({
   width,
   height,
   children,
+  onClick,
 }: PaneProps) {
   const theme = useTheme();
 
@@ -62,6 +64,7 @@ export function Pane({
       }}
       title={displayTitle}
       titleAlignment="left"
+      onMouseDown={onClick}
     >
       {children ?? (
         <box

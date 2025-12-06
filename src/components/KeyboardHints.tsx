@@ -11,6 +11,12 @@ interface KeyHint {
 }
 
 const NORMAL_MODE_HINTS: KeyHint[] = [
+  { key: 'Alt+hjkl', description: 'Navigate panes' },
+  { key: 'Alt+n', description: 'New pane' },
+  { key: 'Alt+1-9', description: 'Switch workspace' },
+  { key: 'Alt+[/]', description: 'Cycle layout mode' },
+  { key: 'Alt+x', description: 'Close pane' },
+  { key: 'Click', description: 'Focus pane' },
   { key: 'Ctrl+b', description: 'Enter prefix mode' },
 ];
 

@@ -2,14 +2,19 @@
  * PaneContainer - renders master-stack layout panes
  */
 
+import { useCallback } from 'react';
 import type { PaneData, LayoutMode } from '../core/types';
 import { useLayout } from '../contexts/LayoutContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Pane } from './Pane';
 
 export function PaneContainer() {
-  const { activeWorkspace, panes } = useLayout();
+  const { activeWorkspace, dispatch } = useLayout();
   const theme = useTheme();
+
+  const handlePaneClick = useCallback((paneId: string) => {
+    dispatch({ type: 'FOCUS_PANE', paneId });
+  }, [dispatch]);
 
   if (!activeWorkspace.mainPane) {
     return (
@@ -21,7 +26,7 @@ export function PaneContainer() {
         }}
       >
         <text fg="#666666">
-          No panes. Press Ctrl+b then n to create a pane.
+          No panes. Press Ctrl+b n or Alt+n to create a pane.
         </text>
       </box>
     );
@@ -39,6 +44,7 @@ export function PaneContainer() {
         pane={activeWorkspace.mainPane}
         isFocused={activeWorkspace.focusedPaneId === activeWorkspace.mainPane.id}
         isMain={true}
+        onFocus={handlePaneClick}
       />
 
       {/* Render stack panes */}
@@ -48,6 +54,7 @@ export function PaneContainer() {
           stackPanes={activeWorkspace.stackPanes}
           activeStackIndex={activeWorkspace.activeStackIndex}
           focusedPaneId={activeWorkspace.focusedPaneId}
+          onFocus={handlePaneClick}
         />
       ) : (
         // Vertical/Horizontal mode: render all stack panes
@@ -57,6 +64,7 @@ export function PaneContainer() {
             pane={pane}
             isFocused={activeWorkspace.focusedPaneId === pane.id}
             isMain={false}
+            onFocus={handlePaneClick}
           />
         ))
       )}
@@ -68,10 +76,15 @@ interface PaneRendererProps {
   pane: PaneData;
   isFocused: boolean;
   isMain: boolean;
+  onFocus: (paneId: string) => void;
 }
 
-function PaneRenderer({ pane, isFocused, isMain }: PaneRendererProps) {
+function PaneRenderer({ pane, isFocused, isMain, onFocus }: PaneRendererProps) {
   const rect = pane.rectangle ?? { x: 0, y: 0, width: 40, height: 12 };
+
+  const handleClick = useCallback(() => {
+    onFocus(pane.id);
+  }, [onFocus, pane.id]);
 
   return (
     <Pane
@@ -82,6 +95,7 @@ function PaneRenderer({ pane, isFocused, isMain }: PaneRendererProps) {
       y={rect.y}
       width={rect.width}
       height={rect.height}
+      onClick={handleClick}
     />
   );
 }
@@ -90,12 +104,14 @@ interface StackedPanesRendererProps {
   stackPanes: PaneData[];
   activeStackIndex: number;
   focusedPaneId: string | null;
+  onFocus: (paneId: string) => void;
 }
 
 function StackedPanesRenderer({
   stackPanes,
   activeStackIndex,
   focusedPaneId,
+  onFocus,
 }: StackedPanesRendererProps) {
   if (stackPanes.length === 0) return null;
 
@@ -103,6 +119,14 @@ function StackedPanesRenderer({
   if (!activePane) return null;
 
   const rect = activePane.rectangle ?? { x: 0, y: 0, width: 40, height: 12 };
+
+  const handleClick = useCallback(() => {
+    onFocus(activePane.id);
+  }, [onFocus, activePane.id]);
+
+  const handleTabClick = useCallback((paneId: string) => {
+    onFocus(paneId);
+  }, [onFocus]);
 
   return (
     <>
@@ -122,6 +146,7 @@ function StackedPanesRenderer({
           <text
             key={pane.id}
             fg={index === activeStackIndex ? '#00AAFF' : '#666666'}
+            onMouseDown={() => handleTabClick(pane.id)}
           >
             {index === activeStackIndex ? `[${pane.title ?? 'pane'}]` : ` ${pane.title ?? 'pane'} `}
           </text>
@@ -137,6 +162,7 @@ function StackedPanesRenderer({
         y={rect.y + 1}
         width={rect.width}
         height={Math.max(1, rect.height - 1)}
+        onClick={handleClick}
       />
     </>
   );

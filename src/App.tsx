@@ -34,12 +34,12 @@ function AppContent() {
   // Handle keyboard input
   useKeyboard(
     useCallback(
-      (event: { name: string; ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean }) => {
+      (event: { name: string; ctrl?: boolean; shift?: boolean; option?: boolean; meta?: boolean }) => {
         handleKeyDown({
           key: event.name,
           ctrl: event.ctrl,
           shift: event.shift,
-          alt: event.alt,
+          alt: event.option, // OpenTUI uses 'option' for Alt key
           meta: event.meta,
         });
       },

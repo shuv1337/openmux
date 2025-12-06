@@ -35,16 +35,25 @@ bun dev
 
 ## Keyboard Shortcuts
 
-### Normal Mode
+### Normal Mode (Alt shortcuts - no prefix needed)
+- `Alt+h/j/k/l` - Navigate panes
+- `Alt+n` - New pane
+- `Alt+1-9` - Switch to workspace 1-9
+- `Alt+[` / `Alt+]` - Cycle layout mode (vertical → horizontal → stacked)
+- `Alt+x` - Close pane
 - `Ctrl+b` - Enter prefix mode
 
-### Prefix Mode (2s timeout)
-- `n` or `Enter` - New pane (splits based on layout mode)
-- `h/j/k/l` - Navigate panes (left/down/up/right)
+### Mouse
+- `Click` - Focus pane
+- `Click tab` - Switch to stacked pane (in stacked mode)
+
+### Prefix Mode (Ctrl+b, 2s timeout)
+- `n` or `Enter` - New pane
+- `h/j/k/l` - Navigate panes
 - `1-9` - Switch to workspace 1-9
-- `v` - Set layout mode: vertical (side by side)
-- `s` - Set layout mode: horizontal (stacked)
-- `t` - Set layout mode: tabbed/stacked
+- `v` - Set layout mode: vertical
+- `s` - Set layout mode: horizontal
+- `t` - Set layout mode: stacked (tabbed)
 - `x` - Close current pane
 - `r` - Enter resize mode
 - `?` - Toggle keyboard hints
