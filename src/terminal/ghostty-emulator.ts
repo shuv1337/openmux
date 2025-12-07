@@ -228,6 +228,16 @@ export class GhosttyEmulator {
   }
 
   /**
+   * Get cursor key mode (DECCKM - DEC mode 1)
+   * When enabled, arrow keys should send application sequences (\x1bOx instead of \x1b[x)
+   */
+  getCursorKeyMode(): 'normal' | 'application' {
+    // DEC mode 1 = DECCKM (Cursor Key Mode)
+    // false = DEC mode, not ANSI mode
+    return this.terminal.getMode(1, false) ? 'application' : 'normal';
+  }
+
+  /**
    * Get terminal state in our format
    * Uses dirty line tracking for efficient updates
    */
@@ -250,6 +260,7 @@ export class GhosttyEmulator {
       },
       alternateScreen: this.isAlternateScreen(),
       mouseTracking: false,
+      cursorKeyMode: this.getCursorKeyMode(),
     };
   }
 

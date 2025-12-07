@@ -20,7 +20,7 @@ import { inputHandler } from './terminal';
 function AppContent() {
   const { width, height } = useTerminalDimensions();
   const { dispatch, activeWorkspace, panes } = useLayout();
-  const { createPTY, resizePTY, setPanePosition, writeToFocused, writeToPTY, pasteToFocused, getFocusedCwd, isInitialized } = useTerminal();
+  const { createPTY, resizePTY, setPanePosition, writeToFocused, writeToPTY, pasteToFocused, getFocusedCwd, getFocusedCursorKeyMode, isInitialized } = useTerminal();
   const renderer = useRenderer();
 
   // Track pending CWD for new panes (captured before NEW_PANE dispatch)
@@ -152,6 +152,11 @@ function AppContent() {
 
         // If not handled by multiplexer and in normal mode, forward to PTY
         if (!handled && mode === 'normal') {
+          // Get the focused pane's cursor key mode (DECCKM)
+          // This affects how arrow keys are encoded (application vs normal mode)
+          const cursorKeyMode = getFocusedCursorKeyMode();
+          inputHandler.setCursorMode(cursorKeyMode);
+
           // Convert keyboard event to terminal escape sequence
           const sequence = inputHandler.encodeKey({
             key: event.name,
@@ -166,7 +171,7 @@ function AppContent() {
           }
         }
       },
-      [handleKeyDown, mode, writeToFocused]
+      [handleKeyDown, mode, writeToFocused, getFocusedCursorKeyMode]
     )
   );
 

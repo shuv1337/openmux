@@ -32,6 +32,8 @@ interface TerminalContextValue {
   setPanePosition: (ptyId: string, x: number, y: number) => void;
   /** Get the current working directory of the focused pane */
   getFocusedCwd: () => Promise<string | null>;
+  /** Get the cursor key mode (DECCKM) from the focused pane */
+  getFocusedCursorKeyMode: () => 'normal' | 'application';
   /** Check if ghostty is initialized */
   isInitialized: boolean;
 }
@@ -183,6 +185,27 @@ export function TerminalProvider({ children }: TerminalProviderProps) {
     return true;
   }, [activeWorkspace]);
 
+  // Get the cursor key mode from the focused pane
+  const getFocusedCursorKeyMode = useCallback((): 'normal' | 'application' => {
+    const focusedPaneId = activeWorkspace.focusedPaneId;
+    if (!focusedPaneId) return 'normal';
+
+    // Find the focused pane's PTY ID
+    let focusedPtyId: string | undefined;
+    if (activeWorkspace.mainPane?.id === focusedPaneId) {
+      focusedPtyId = activeWorkspace.mainPane.ptyId;
+    } else {
+      const stackPane = activeWorkspace.stackPanes.find(p => p.id === focusedPaneId);
+      focusedPtyId = stackPane?.ptyId;
+    }
+
+    if (!focusedPtyId) return 'normal';
+
+    // Get terminal state which includes cursor key mode
+    const terminalState = ptyManager.getTerminalState(focusedPtyId);
+    return terminalState?.cursorKeyMode ?? 'normal';
+  }, [activeWorkspace]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -199,6 +222,7 @@ export function TerminalProvider({ children }: TerminalProviderProps) {
     resizePTY,
     setPanePosition,
     getFocusedCwd,
+    getFocusedCursorKeyMode,
     isInitialized,
   };
 

@@ -140,6 +140,8 @@ export interface TerminalState {
   cursor: TerminalCursor;
   alternateScreen: boolean;
   mouseTracking: boolean;
+  /** Cursor key mode (DECCKM) - when 'application', arrow keys send \x1bOx instead of \x1b[x */
+  cursorKeyMode?: 'normal' | 'application';
   title?: string;
 }
 
