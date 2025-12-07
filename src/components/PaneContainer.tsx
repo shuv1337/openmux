@@ -166,7 +166,6 @@ function StackedPanesRenderer({
           height: 1,
           flexDirection: 'row',
         }}
-        backgroundColor="#1a1a1a"
       >
         {stackPanes.map((pane, index) => (
           <text
