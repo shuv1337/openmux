@@ -1,19 +1,23 @@
 # openmux
 
-A terminal multiplexer with BSP (Binary Space Partitioning) layout, built with:
+A terminal multiplexer with master-stack layout (Zellij-style), built with:
 
 - **Bun** - Fast JavaScript runtime
 - **OpenTUI** - Terminal UI library with React reconciler
 - **bun-pty** - PTY support for Bun
-- **libghostty-vt** (planned) - Terminal parsing via WASM
+- **ghostty-web** - Terminal emulation via WASM
 
 ## Features
 
-- BSP tiling layout (like bspwm/i3wm)
+- Master-stack tiling layout (like Zellij)
 - i3-gaps style gaps and borders
 - Vim-style `hjkl` navigation
 - Tmux-style `Ctrl+b` prefix key
-- Dynamic splits and pane management
+- 9 workspaces with isolated pane layouts
+- Session persistence and management
+- Pane zoom (fullscreen focused pane)
+- Kitty Graphics and Sixel protocol support
+- Mouse tracking (click to focus, tabbed pane switching)
 
 ## Installation
 
@@ -41,6 +45,8 @@ bun dev
 - `Alt+1-9` - Switch to workspace 1-9
 - `Alt+[` / `Alt+]` - Cycle layout mode (vertical → horizontal → stacked)
 - `Alt+x` - Close pane
+- `Alt+z` - Toggle zoom (fullscreen focused pane)
+- `Alt+s` - Open session picker
 - `Ctrl+b` - Enter prefix mode
 
 ### Mouse
@@ -52,9 +58,12 @@ bun dev
 - `h/j/k/l` - Navigate panes
 - `1-9` - Switch to workspace 1-9
 - `v` - Set layout mode: vertical
-- `s` - Set layout mode: horizontal
+- `H` - Set layout mode: horizontal
 - `t` - Set layout mode: stacked (tabbed)
 - `x` - Close current pane
+- `z` - Toggle zoom
+- `s` - Open session picker
+- `]` - Paste from clipboard
 - `r` - Enter resize mode
 - `?` - Toggle keyboard hints
 - `Esc` - Exit prefix mode
@@ -67,42 +76,86 @@ bun dev
 ## Concepts
 
 ### Workspaces
-Like i3/sway, openmux supports multiple workspaces (1-9). Each workspace has its own BSP tree of panes. The status bar shows populated workspaces dynamically - empty workspaces don't appear unless active.
+Like i3/sway, openmux supports multiple workspaces (1-9). Each workspace has its own layout tree of panes. The status bar shows populated workspaces dynamically - empty workspaces don't appear unless active.
 
 ### Layout Modes (Zellij-style)
 Each workspace has a layout mode that determines how panes are arranged:
-- **Vertical** (`│`): Main pane on left, new panes stack vertically on right (equal height)
-- **Horizontal** (`─`): Main pane on top, new panes stack horizontally on bottom (equal width)
-- **Stacked** (`▣`): Main pane on left, new panes tabbed on right (only active visible)
+- **Vertical** (`│`): Main pane on left, stack panes split vertically on right
+- **Horizontal** (`─`): Main pane on top, stack panes split horizontally on bottom
+- **Stacked** (`▣`): Main pane on left, stack panes tabbed on right (only active visible)
+
+### Sessions
+Sessions persist your workspace layouts and pane working directories. Sessions are auto-saved to `~/.config/openmux/sessions/` and can be switched via the session picker (`Alt+s` or `Ctrl+b s`).
 
 ## Project Structure
 
 ```
 src/
-├── core/           # BSP tree implementation
-│   ├── types.ts    # Type definitions
-│   ├── bsp-tree.ts # BSP tree class
-│   ├── config.ts   # Configuration
-│   └── operations/ # Insert, remove, layout, resize, navigate
-├── components/     # OpenTUI React components
-├── contexts/       # React contexts (Layout, Keyboard, Theme)
-├── terminal/       # PTY management and terminal parsing
-└── index.tsx       # Entry point
+├── core/                           # Core layout and session management
+│   ├── types.ts                    # Type definitions (Workspace, Pane, etc.)
+│   ├── config.ts                   # Configuration and defaults
+│   ├── keyboard-utils.ts           # hjkl to Direction conversion
+│   ├── operations/
+│   │   ├── index.ts                # Layout operations exports
+│   │   └── master-stack-layout.ts  # Master-stack layout calculations
+│   └── session/                    # Session persistence
+│       ├── index.ts                # Session exports
+│       ├── session-manager.ts      # High-level session operations
+│       ├── session-serializer.ts   # Serialize/deserialize sessions
+│       └── session-storage.ts      # Disk I/O for sessions
+│
+├── components/                     # OpenTUI React components
+│   ├── index.ts                    # Component exports
+│   ├── Pane.tsx                    # Individual pane with border/focus
+│   ├── PaneContainer.tsx           # Layout pane renderer
+│   ├── TerminalView.tsx            # Terminal rendering with buffer API
+│   ├── StatusBar.tsx               # Bottom status bar
+│   ├── KeyboardHints.tsx           # Keyboard shortcuts overlay
+│   └── SessionPicker.tsx           # Session selection modal
+│
+├── contexts/                       # React contexts for state
+│   ├── index.ts                    # Context exports
+│   ├── LayoutContext.tsx           # Workspace/pane layout state reducer
+│   ├── TerminalContext.tsx         # PTY management and lifecycle
+│   ├── KeyboardContext.tsx         # Prefix mode and key state
+│   ├── SessionContext.tsx          # Session management and persistence
+│   └── ThemeContext.tsx            # Theme/styling configuration
+│
+├── terminal/                       # PTY and terminal emulation
+│   ├── index.ts                    # Terminal exports
+│   ├── pty-manager.ts              # PTY session lifecycle (bun-pty)
+│   ├── ghostty-emulator.ts         # Terminal emulator (ghostty-web WASM)
+│   ├── input-handler.ts            # Key/mouse to escape sequence encoder
+│   ├── graphics-passthrough.ts     # Kitty Graphics/Sixel protocol
+│   ├── capabilities.ts             # Terminal capability detection
+│   └── terminal-colors.ts          # Color palette detection
+│
+├── utils/
+│   ├── index.ts                    # Utils exports
+│   └── clipboard.ts                # Clipboard read/write
+│
+├── App.tsx                         # Main app component with context hierarchy
+└── index.tsx                       # Entry point (Bun serve + OpenTUI renderer)
 ```
 
 ## Development Status
 
-This is a proof of concept. Current status:
+Current status:
 
-- [x] BSP tree data structures
-- [x] Layout calculation with gaps
+- [x] Master-stack layout with gaps
 - [x] OpenTUI component layer
 - [x] Keyboard navigation system
-- [x] PTY integration (basic)
-- [ ] libghostty-vt WASM integration
-- [ ] Full terminal emulation
+- [x] PTY integration
+- [x] ghostty-web WASM terminal emulation
+- [x] Workspaces (1-9)
+- [x] Layout modes (vertical/horizontal/stacked)
+- [x] Session persistence
+- [x] Pane zoom
+- [x] Mouse support
+- [x] Graphics protocol passthrough (Kitty/Sixel)
 - [ ] Scrollback support
-- [ ] Session persistence
+- [ ] Session restore on startup
+- [ ] Configurable keybindings
 
 ## License
 

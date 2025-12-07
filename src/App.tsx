@@ -176,18 +176,20 @@ function AppContent() {
   useKeyboard(
     useCallback(
       (event: { name: string; ctrl?: boolean; shift?: boolean; option?: boolean; meta?: boolean; sequence?: string }) => {
-        // If session picker is open, route keys to it
+        // If session picker is open, route keys to it and block all other input
+        // This prevents alt+ and prefix+ commands from working in the background
         if (sessionState.showSessionPicker) {
           const sessionPickerHandler = (globalThis as unknown as { __sessionPickerKeyHandler?: (e: { key: string; ctrl?: boolean; alt?: boolean; shift?: boolean }) => boolean }).__sessionPickerKeyHandler;
           if (sessionPickerHandler) {
-            const handled = sessionPickerHandler({
+            sessionPickerHandler({
               key: event.name,
               ctrl: event.ctrl,
               alt: event.option,
               shift: event.shift,
             });
-            if (handled) return;
           }
+          // Always return when picker is open - don't let keys fall through to multiplexer
+          return;
         }
 
         // First, check if this is a multiplexer command
