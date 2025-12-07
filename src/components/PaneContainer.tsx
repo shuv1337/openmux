@@ -12,15 +12,20 @@ import { Pane } from './Pane';
 export function PaneContainer() {
   const { activeWorkspace, dispatch } = useLayout();
   const theme = useTheme();
-  const { writeToPTY } = useTerminal();
+  const { writeToPTY, isMouseTrackingEnabled } = useTerminal();
 
   const handlePaneClick = useCallback((paneId: string) => {
     dispatch({ type: 'FOCUS_PANE', paneId });
   }, [dispatch]);
 
   const handleMouseInput = useCallback((ptyId: string, data: string) => {
-    writeToPTY(ptyId, data);
-  }, [writeToPTY]);
+    // Only forward mouse events if the child application has enabled mouse tracking
+    // (via escape sequences like \x1b[?1000h)
+    // Otherwise the shell will echo them as raw text
+    if (isMouseTrackingEnabled(ptyId)) {
+      writeToPTY(ptyId, data);
+    }
+  }, [writeToPTY, isMouseTrackingEnabled]);
 
   if (!activeWorkspace.mainPane) {
     return (

@@ -34,6 +34,8 @@ interface TerminalContextValue {
   getFocusedCwd: () => Promise<string | null>;
   /** Get the cursor key mode (DECCKM) from the focused pane */
   getFocusedCursorKeyMode: () => 'normal' | 'application';
+  /** Check if mouse tracking is enabled for a PTY */
+  isMouseTrackingEnabled: (ptyId: string) => boolean;
   /** Check if ghostty is initialized */
   isInitialized: boolean;
 }
@@ -206,6 +208,13 @@ export function TerminalProvider({ children }: TerminalProviderProps) {
     return terminalState?.cursorKeyMode ?? 'normal';
   }, [activeWorkspace]);
 
+  // Check if mouse tracking is enabled for a PTY
+  // This is used to determine if mouse events should be forwarded to the child process
+  const isMouseTrackingEnabled = useCallback((ptyId: string): boolean => {
+    const terminalState = ptyManager.getTerminalState(ptyId);
+    return terminalState?.mouseTracking ?? false;
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -223,6 +232,7 @@ export function TerminalProvider({ children }: TerminalProviderProps) {
     setPanePosition,
     getFocusedCwd,
     getFocusedCursorKeyMode,
+    isMouseTrackingEnabled,
     isInitialized,
   };
 

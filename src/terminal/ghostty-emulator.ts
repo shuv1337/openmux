@@ -238,6 +238,27 @@ export class GhosttyEmulator {
   }
 
   /**
+   * Check if mouse tracking is enabled by the application running in the terminal
+   *
+   * Mouse tracking modes (DEC private modes):
+   * - 1000: Normal Mouse Tracking (X10 compatible) - reports button press/release
+   * - 1002: Button-Event Tracking - reports motion when button pressed
+   * - 1003: Any-Event Tracking - reports all motion
+   * - 1006: SGR Extended Mode - extended coordinate format
+   *
+   * Returns true if any mouse tracking mode is enabled
+   */
+  isMouseTrackingEnabled(): boolean {
+    // Check if any mouse tracking mode is enabled
+    // These are DEC private modes (second param = false)
+    const mode1000 = this.terminal.getMode(1000, false); // Normal tracking
+    const mode1002 = this.terminal.getMode(1002, false); // Button-event tracking
+    const mode1003 = this.terminal.getMode(1003, false); // Any-event tracking
+
+    return mode1000 || mode1002 || mode1003;
+  }
+
+  /**
    * Get terminal state in our format
    * Uses dirty line tracking for efficient updates
    */
@@ -259,7 +280,7 @@ export class GhosttyEmulator {
         style: 'block',
       },
       alternateScreen: this.isAlternateScreen(),
-      mouseTracking: false,
+      mouseTracking: this.isMouseTrackingEnabled(),
       cursorKeyMode: this.getCursorKeyMode(),
     };
   }

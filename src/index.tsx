@@ -18,6 +18,8 @@ async function main() {
     const renderer = await createCliRenderer({
       exitOnCtrlC: false,
       exitSignals: ['SIGTERM', 'SIGQUIT', 'SIGABRT'], // No SIGINT
+      useMouse: true, // Enable mouse tracking to properly consume mouse escape sequences
+      enableMouseMovement: true, // Track mouse movement for drag and hover events
     });
 
     // Render the app
