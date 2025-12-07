@@ -14,7 +14,7 @@ import {
 import type { KeyMode, KeyboardState, WorkspaceId } from '../core/types';
 import { PREFIX_KEY, DEFAULT_CONFIG } from '../core/config';
 import { useLayout } from './LayoutContext';
-import { keyToDirection } from '../core/bsp-tree';
+import { keyToDirection } from '../core/keyboard-utils';
 
 type KeyboardAction =
   | { type: 'ENTER_PREFIX_MODE' }
