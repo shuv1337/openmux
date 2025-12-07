@@ -12,15 +12,13 @@ import {
   type Dispatch,
 } from 'react';
 import type { KeyMode, KeyboardState, WorkspaceId } from '../core/types';
-import { PREFIX_KEY, DEFAULT_CONFIG, RESIZE_STEP } from '../core/config';
+import { PREFIX_KEY, DEFAULT_CONFIG } from '../core/config';
 import { useLayout } from './LayoutContext';
 import { keyToDirection } from '../core/bsp-tree';
 
 type KeyboardAction =
   | { type: 'ENTER_PREFIX_MODE' }
   | { type: 'EXIT_PREFIX_MODE' }
-  | { type: 'ENTER_RESIZE_MODE' }
-  | { type: 'EXIT_RESIZE_MODE' }
   | { type: 'TOGGLE_HINTS' };
 
 function keyboardReducer(state: KeyboardState, action: KeyboardAction): KeyboardState {
@@ -37,19 +35,6 @@ function keyboardReducer(state: KeyboardState, action: KeyboardAction): Keyboard
         ...state,
         mode: 'normal',
         prefixActivatedAt: undefined,
-      };
-
-    case 'ENTER_RESIZE_MODE':
-      return {
-        ...state,
-        mode: 'resize',
-        prefixActivatedAt: undefined,
-      };
-
-    case 'EXIT_RESIZE_MODE':
-      return {
-        ...state,
-        mode: 'normal',
       };
 
     case 'TOGGLE_HINTS':
@@ -151,13 +136,10 @@ export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
       return true;
     }
 
-    // Handle Escape to exit any mode
-    if (key === 'Escape') {
+    // Handle Escape to exit prefix mode
+    if (key === 'Escape' || key === 'escape') {
       if (kbState.mode === 'prefix') {
         kbDispatch({ type: 'EXIT_PREFIX_MODE' });
-        return true;
-      } else if (kbState.mode === 'resize') {
-        kbDispatch({ type: 'EXIT_RESIZE_MODE' });
         return true;
       }
       return false;
@@ -166,11 +148,6 @@ export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
     // Prefix mode commands
     if (kbState.mode === 'prefix') {
       return handlePrefixModeKey(key, kbDispatch, layoutDispatch, onPaste, onNewPane, onQuit);
-    }
-
-    // Resize mode commands
-    if (kbState.mode === 'resize') {
-      return handleResizeModeKey(key, kbDispatch, layoutDispatch);
     }
 
     // Normal mode - pass through to terminal
@@ -237,6 +214,11 @@ function handleAltKey(
       layoutDispatch({ type: 'CLOSE_PANE' });
       return true;
 
+    // Alt+z to toggle zoom
+    case 'z':
+      layoutDispatch({ type: 'TOGGLE_ZOOM' });
+      return true;
+
     default:
       return false;
   }
@@ -286,11 +268,6 @@ function handlePrefixModeKey(
       exitPrefix();
       return true;
 
-    // Enter resize mode
-    case 'r':
-      kbDispatch({ type: 'ENTER_RESIZE_MODE' });
-      return true;
-
     // Layout mode: vertical (panes side by side)
     case 'v':
       layoutDispatch({ type: 'SET_LAYOUT_MODE', mode: 'vertical' });
@@ -316,6 +293,12 @@ function handlePrefixModeKey(
       exitPrefix();
       return true;
 
+    // Toggle zoom on focused pane
+    case 'z':
+      layoutDispatch({ type: 'TOGGLE_ZOOM' });
+      exitPrefix();
+      return true;
+
     // Toggle hints
     case '?':
       kbDispatch({ type: 'TOGGLE_HINTS' });
@@ -329,24 +312,4 @@ function handlePrefixModeKey(
     default:
       return false;
   }
-}
-
-function handleResizeModeKey(
-  key: string,
-  kbDispatch: Dispatch<KeyboardAction>,
-  layoutDispatch: ReturnType<typeof useLayout>['dispatch']
-): boolean {
-  const direction = keyToDirection(key);
-
-  if (direction) {
-    layoutDispatch({ type: 'RESIZE', direction, delta: RESIZE_STEP });
-    return true;
-  }
-
-  if (key === 'Enter' || key === 'Escape') {
-    kbDispatch({ type: 'EXIT_RESIZE_MODE' });
-    return true;
-  }
-
-  return false;
 }

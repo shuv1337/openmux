@@ -60,8 +60,5 @@ export const DEFAULT_THEME: Theme = {
   },
 };
 
-/** Resize step amount (as ratio) */
-export const RESIZE_STEP = 0.05;
-
 /** Prefix key (used with Ctrl) */
 export const PREFIX_KEY = 'b';

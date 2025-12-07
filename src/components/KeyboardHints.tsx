@@ -15,6 +15,7 @@ const NORMAL_MODE_HINTS: KeyHint[] = [
   { key: 'Alt+n', description: 'New pane' },
   { key: 'Alt+1-9', description: 'Switch workspace' },
   { key: 'Alt+[/]', description: 'Cycle layout mode' },
+  { key: 'Alt+z', description: 'Toggle zoom' },
   { key: 'Alt+x', description: 'Close pane' },
   { key: 'Ctrl/Cmd+V', description: 'Paste' },
   { key: 'Click', description: 'Focus pane' },
@@ -26,18 +27,12 @@ const PREFIX_MODE_HINTS: KeyHint[] = [
   { key: 'h/j/k/l', description: 'Navigate panes' },
   { key: '1-9', description: 'Switch workspace' },
   { key: 'v/s/t', description: 'Layout: vert/horiz/stack' },
+  { key: 'z', description: 'Toggle zoom' },
   { key: 'x', description: 'Close pane' },
   { key: '] or p', description: 'Paste' },
-  { key: 'r', description: 'Enter resize mode' },
   { key: 'q', description: 'Quit openmux' },
   { key: '?', description: 'Toggle hints' },
   { key: 'Esc', description: 'Exit prefix mode' },
-];
-
-const RESIZE_MODE_HINTS: KeyHint[] = [
-  { key: 'h/l', description: 'Resize width' },
-  { key: 'j/k', description: 'Resize height' },
-  { key: 'Enter/Esc', description: 'Exit resize mode' },
 ];
 
 interface KeyboardHintsProps {
@@ -50,12 +45,7 @@ export function KeyboardHints({ width, height }: KeyboardHintsProps) {
 
   if (!state.showHints) return null;
 
-  const hints =
-    state.mode === 'normal'
-      ? NORMAL_MODE_HINTS
-      : state.mode === 'prefix'
-      ? PREFIX_MODE_HINTS
-      : RESIZE_MODE_HINTS;
+  const hints = state.mode === 'normal' ? NORMAL_MODE_HINTS : PREFIX_MODE_HINTS;
 
   // Center the hints overlay
   const overlayWidth = 40;

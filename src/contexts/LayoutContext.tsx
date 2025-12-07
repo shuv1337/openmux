@@ -34,6 +34,7 @@ function createWorkspace(id: WorkspaceId, layoutMode: LayoutMode): Workspace {
     focusedPaneId: null,
     activeStackIndex: 0,
     layoutMode,
+    zoomed: false,
   };
 }
 
@@ -50,12 +51,12 @@ type LayoutAction =
   | { type: 'NEW_PANE'; ptyId?: string; title?: string }
   | { type: 'CLOSE_PANE' }
   | { type: 'CLOSE_PANE_BY_ID'; paneId: NodeId }
-  | { type: 'RESIZE'; direction: Direction; delta: number }
   | { type: 'SET_VIEWPORT'; viewport: Rectangle }
   | { type: 'SWITCH_WORKSPACE'; workspaceId: WorkspaceId }
   | { type: 'SET_LAYOUT_MODE'; mode: LayoutMode }
   | { type: 'SET_PANE_PTY'; paneId: NodeId; ptyId: string }
-  | { type: 'SWAP_MAIN' }; // Swap focused pane with main
+  | { type: 'SWAP_MAIN' } // Swap focused pane with main
+  | { type: 'TOGGLE_ZOOM' }; // Toggle zoom on focused pane
 
 function getActiveWorkspace(state: LayoutState): Workspace {
   let workspace = state.workspaces.get(state.activeWorkspaceId);
@@ -87,11 +88,17 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
         activeStackIndex = stackIndex;
       }
 
-      const updated: Workspace = {
+      let updated: Workspace = {
         ...workspace,
         focusedPaneId: action.paneId,
         activeStackIndex,
       };
+
+      // If zoomed, recalculate layout so new focused pane gets fullscreen
+      if (workspace.zoomed) {
+        updated = recalculateLayout(updated, state.viewport, state.config);
+      }
+
       return { ...state, workspaces: updateWorkspace(state, updated) };
     }
 
@@ -153,11 +160,17 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
         const newPane = allPanes[newIndex];
         if (newPane) {
           const activeStackIndex = newIndex > 0 ? newIndex - 1 : workspace.activeStackIndex;
-          const updated: Workspace = {
+          let updated: Workspace = {
             ...workspace,
             focusedPaneId: newPane.id,
             activeStackIndex,
           };
+
+          // If zoomed, recalculate layout so new focused pane gets fullscreen
+          if (workspace.zoomed) {
+            updated = recalculateLayout(updated, state.viewport, state.config);
+          }
+
           return { ...state, workspaces: updateWorkspace(state, updated) };
         }
       }
@@ -328,12 +341,6 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
       return { ...state, workspaces: newWorkspaces };
     }
 
-    case 'RESIZE': {
-      // Resize is a no-op in master-stack layout for now
-      // Could be used to adjust the main/stack split ratio in the future
-      return state;
-    }
-
     case 'SET_VIEWPORT': {
       // Recalculate layout for all workspaces
       const newWorkspaces = new Map<WorkspaceId, Workspace>();
@@ -409,6 +416,19 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
         ...workspace,
         mainPane: focusedPane,
         stackPanes: newStack,
+      };
+
+      updated = recalculateLayout(updated, state.viewport, state.config);
+      return { ...state, workspaces: updateWorkspace(state, updated) };
+    }
+
+    case 'TOGGLE_ZOOM': {
+      const workspace = getActiveWorkspace(state);
+      if (!workspace.focusedPaneId) return state;
+
+      let updated: Workspace = {
+        ...workspace,
+        zoomed: !workspace.zoomed,
       };
 
       updated = recalculateLayout(updated, state.viewport, state.config);

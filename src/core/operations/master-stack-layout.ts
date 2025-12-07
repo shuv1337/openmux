@@ -18,11 +18,35 @@ export function calculateMasterStackLayout(
   viewport: Rectangle,
   config: BSPConfig
 ): Workspace {
-  const { mainPane, stackPanes, layoutMode } = workspace;
+  const { mainPane, stackPanes, layoutMode, zoomed, focusedPaneId } = workspace;
 
   // No panes - nothing to calculate
   if (!mainPane) {
     return workspace;
+  }
+
+  // Zoomed mode - focused pane takes full viewport
+  if (zoomed && focusedPaneId) {
+    const focusedIsMain = mainPane.id === focusedPaneId;
+    const focusedStackIndex = stackPanes.findIndex(p => p.id === focusedPaneId);
+
+    if (focusedIsMain) {
+      return {
+        ...workspace,
+        mainPane: { ...mainPane, rectangle: { ...viewport } },
+        stackPanes: stackPanes.map(p => ({ ...p, rectangle: undefined })),
+      };
+    } else if (focusedStackIndex >= 0) {
+      return {
+        ...workspace,
+        mainPane: { ...mainPane, rectangle: undefined },
+        stackPanes: stackPanes.map((p, i) =>
+          i === focusedStackIndex
+            ? { ...p, rectangle: { ...viewport } }
+            : { ...p, rectangle: undefined }
+        ),
+      };
+    }
   }
 
   // Single pane - takes full viewport

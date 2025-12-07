@@ -38,6 +38,32 @@ export function PaneContainer() {
     );
   }
 
+  // When zoomed, only render the focused pane
+  if (activeWorkspace.zoomed) {
+    const focusedPaneId = activeWorkspace.focusedPaneId;
+    let focusedPane: PaneData | null = null;
+
+    if (activeWorkspace.mainPane.id === focusedPaneId) {
+      focusedPane = activeWorkspace.mainPane;
+    } else {
+      focusedPane = activeWorkspace.stackPanes.find(p => p.id === focusedPaneId) ?? null;
+    }
+
+    if (focusedPane && focusedPane.rectangle) {
+      return (
+        <box style={{ position: 'relative', flexGrow: 1 }}>
+          <PaneRenderer
+            pane={focusedPane}
+            isFocused={true}
+            isMain={focusedPane.id === activeWorkspace.mainPane.id}
+            onFocus={handlePaneClick}
+            onMouseInput={handleMouseInput}
+          />
+        </box>
+      );
+    }
+  }
+
   return (
     <box
       style={{

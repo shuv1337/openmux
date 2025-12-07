@@ -45,6 +45,8 @@ export interface Workspace {
   /** For stacked mode: which stack pane is visible */
   activeStackIndex: number;
   layoutMode: LayoutMode;
+  /** Whether the focused pane is zoomed (fullscreen) */
+  zoomed: boolean;
 }
 
 /** Rectangle representing a region in terminal coordinates */
@@ -148,7 +150,7 @@ export interface TerminalState {
 /**
  * Keyboard mode for prefix key system
  */
-export type KeyMode = 'normal' | 'prefix' | 'resize';
+export type KeyMode = 'normal' | 'prefix';
 
 /**
  * Keyboard state

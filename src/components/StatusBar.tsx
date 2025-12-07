@@ -2,7 +2,6 @@
  * StatusBar - bottom status bar showing workspaces and mode
  */
 
-import { useState, useEffect } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLayout } from '../contexts/LayoutContext';
 import { useKeyboardState } from '../contexts/KeyboardContext';
@@ -14,19 +13,8 @@ interface StatusBarProps {
 
 export function StatusBar({ width }: StatusBarProps) {
   const theme = useTheme();
-  const { state, activeWorkspace, populatedWorkspaces, paneCount } = useLayout();
+  const { state, activeWorkspace, populatedWorkspaces } = useLayout();
   const { state: kbState } = useKeyboardState();
-
-  // Real-time clock
-  const [time, setTime] = useState(() => new Date().toLocaleTimeString());
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTime(new Date().toLocaleTimeString());
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
 
   return (
     <box
@@ -38,34 +26,22 @@ export function StatusBar({ width }: StatusBarProps) {
       }}
       backgroundColor={theme.statusBar.backgroundColor}
     >
-      {/* Left section: Mode indicator and app name */}
+      {/* Left section: app name and workspace tabs */}
       <box style={{ flexDirection: 'row', gap: 1 }}>
-        <ModeIndicator mode={kbState.mode} />
         <text fg={theme.statusBar.foregroundColor}>
           [openmux]
         </text>
-        <LayoutModeIndicator mode={activeWorkspace.layoutMode} />
-      </box>
-
-      {/* Center section: Workspace tabs */}
-      <box style={{ flexDirection: 'row', gap: 1 }}>
         <WorkspaceTabs
           populatedWorkspaces={populatedWorkspaces}
           activeWorkspaceId={state.activeWorkspaceId}
-          paneCount={paneCount}
         />
       </box>
 
-      {/* Right section: Time and hints */}
+      {/* Right section: Mode and layout mode */}
       <box style={{ flexDirection: 'row', gap: 1 }}>
-        {kbState.mode === 'normal' && (
-          <text fg="#666666">
-            Ctrl+b ?
-          </text>
-        )}
-        <text fg={theme.statusBar.foregroundColor}>
-          {time}
-        </text>
+        <ModeIndicator mode={kbState.mode} />
+        {activeWorkspace.zoomed && <text fg="#666666">[ZOOMED]</text>}
+        <LayoutModeIndicator mode={activeWorkspace.layoutMode} />
       </box>
     </box>
   );
@@ -78,23 +54,13 @@ interface ModeIndicatorProps {
 function ModeIndicator({ mode }: ModeIndicatorProps) {
   if (mode === 'normal') return null;
 
-  const modeColors: Record<KeyMode, string> = {
-    normal: '#888888',
-    prefix: '#FFD700',
-    resize: '#00FF00',
-  };
-
   const modeLabels: Record<KeyMode, string> = {
     normal: '',
     prefix: '[PREFIX]',
-    resize: '[RESIZE]',
   };
 
   return (
-    <text
-      fg="#000000"
-      bg={modeColors[mode]}
-    >
+    <text fg="#666666">
       {modeLabels[mode]}
     </text>
   );
@@ -105,15 +71,15 @@ interface LayoutModeIndicatorProps {
 }
 
 function LayoutModeIndicator({ mode }: LayoutModeIndicatorProps) {
-  const modeSymbols: Record<LayoutMode, string> = {
-    vertical: '│',
-    horizontal: '─',
-    stacked: '▣',
+  const modeLabels: Record<LayoutMode, string> = {
+    vertical: '[VERTICAL]',
+    horizontal: '[HORIZONTAL]',
+    stacked: '[STACKED]',
   };
 
   return (
     <text fg="#666666">
-      {modeSymbols[mode]}
+      {modeLabels[mode]}
     </text>
   );
 }
@@ -121,32 +87,23 @@ function LayoutModeIndicator({ mode }: LayoutModeIndicatorProps) {
 interface WorkspaceTabsProps {
   populatedWorkspaces: WorkspaceId[];
   activeWorkspaceId: WorkspaceId;
-  paneCount: number;
 }
 
-function WorkspaceTabs({ populatedWorkspaces, activeWorkspaceId, paneCount }: WorkspaceTabsProps) {
+function WorkspaceTabs({ populatedWorkspaces, activeWorkspaceId }: WorkspaceTabsProps) {
   const theme = useTheme();
 
   if (populatedWorkspaces.length === 0) {
     return <text fg="#666666">No workspaces</text>;
   }
 
-  return (
-    <>
-      {populatedWorkspaces.map((id) => {
-        const isActive = id === activeWorkspaceId;
+  const tabs = populatedWorkspaces.map((id) => {
+    const isActive = id === activeWorkspaceId;
+    return isActive ? `[${id}]` : ` ${id} `;
+  }).join('');
 
-        return (
-          <text
-            key={id}
-            fg={isActive
-              ? theme.statusBar.activeTabColor
-              : theme.statusBar.inactiveTabColor}
-          >
-            {isActive ? `[${id}:${paneCount}]` : ` ${id} `}
-          </text>
-        );
-      })}
-    </>
+  return (
+    <text fg={theme.statusBar.activeTabColor}>
+      {tabs}
+    </text>
   );
 }
