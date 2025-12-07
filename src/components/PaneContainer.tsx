@@ -2,7 +2,7 @@
  * PaneContainer - renders master-stack layout panes
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { PaneData, LayoutMode } from '../core/types';
 import { useLayout } from '../contexts/LayoutContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -154,6 +154,59 @@ function StackedPanesRenderer({
     }
   }, [activePane.ptyId, onMouseInput]);
 
+  // Calculate visible tabs based on scroll offset
+  const visibleTabs = useMemo(() => {
+    const visibleWidth = rect.width;
+
+    // Build tab info with positions
+    const tabItems = stackPanes.map((pane, index) => {
+      const isActive = index === activeStackIndex;
+      const label = isActive
+        ? `[${pane.title ?? 'pane'}]`
+        : ` ${pane.title ?? 'pane'} `;
+      return { pane, label, width: label.length, isActive, index };
+    });
+
+    let pos = 0;
+    const tabsWithPos = tabItems.map((tab) => {
+      const start = pos;
+      pos += tab.width;
+      return { ...tab, start, end: pos };
+    });
+
+    // Calculate scroll offset to keep active tab visible
+    const activeTab = tabsWithPos[activeStackIndex];
+    let scrollOffset = 0;
+    if (activeTab) {
+      if (activeTab.end > visibleWidth) {
+        scrollOffset = activeTab.end - visibleWidth;
+      }
+      if (activeTab.start < scrollOffset) {
+        scrollOffset = activeTab.start;
+      }
+    }
+
+    // Filter and trim tabs to fit visible area
+    const result: Array<{ pane: PaneData; label: string; isActive: boolean }> = [];
+    for (const tab of tabsWithPos) {
+      const visibleStart = scrollOffset;
+      const visibleEnd = scrollOffset + visibleWidth;
+
+      // Skip tabs completely outside visible area
+      if (tab.end <= visibleStart || tab.start >= visibleEnd) continue;
+
+      // Calculate visible portion of this tab
+      const labelStart = Math.max(0, visibleStart - tab.start);
+      const labelEnd = Math.min(tab.width, visibleEnd - tab.start);
+      const visibleLabel = tab.label.slice(labelStart, labelEnd);
+
+      if (visibleLabel.length > 0) {
+        result.push({ pane: tab.pane, label: visibleLabel, isActive: tab.isActive });
+      }
+    }
+    return result;
+  }, [stackPanes, activeStackIndex, rect.width]);
+
   return (
     <>
       {/* Tab headers for stacked panes */}
@@ -167,13 +220,13 @@ function StackedPanesRenderer({
           flexDirection: 'row',
         }}
       >
-        {stackPanes.map((pane, index) => (
+        {visibleTabs.map(({ pane, label, isActive }) => (
           <text
             key={pane.id}
-            fg={index === activeStackIndex ? '#00AAFF' : '#666666'}
+            fg={isActive ? '#00AAFF' : '#666666'}
             onMouseDown={() => handleTabClick(pane.id)}
           >
-            {index === activeStackIndex ? `[${pane.title ?? 'pane'}]` : ` ${pane.title ?? 'pane'} `}
+            {label}
           </text>
         ))}
       </box>
