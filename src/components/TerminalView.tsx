@@ -21,6 +21,10 @@ interface TerminalViewProps {
 const WHITE = RGBA.fromInts(255, 255, 255);
 const BLACK = RGBA.fromInts(0, 0, 0);
 
+// Scrollbar colors
+const SCROLLBAR_TRACK = RGBA.fromInts(40, 40, 40);
+const SCROLLBAR_THUMB = RGBA.fromInts(100, 100, 100);
+
 // Text attributes for buffer API
 const ATTR_BOLD = 1;
 const ATTR_ITALIC = 2;
@@ -70,23 +74,59 @@ export const TerminalView = memo(function TerminalView({
       return;
     }
 
+    // Get scroll state
+    const scrollState = ptyManager.getScrollState(ptyId);
+    const viewportOffset = scrollState?.viewportOffset ?? 0;
+    const scrollbackLength = scrollState?.scrollbackLength ?? 0;
+    const isAtBottom = viewportOffset === 0;
+
     const rows = Math.min(state.rows, height);
     const cols = Math.min(state.cols, width);
     // Use top-left cell bg as fallback to paint unused area; default to black
-    const fallbackBgColor = state.cells?.[0]?.[0]?.bg ?? BLACK;
+    const fallbackBgColor = state.cells?.[0]?.[0]?.bg ?? { r: 0, g: 0, b: 0 };
     const fallbackBg = RGBA.fromInts(fallbackBgColor.r, fallbackBgColor.g, fallbackBgColor.b);
     const fallbackFg = BLACK;
 
+    // Pre-fetch all rows we need for rendering (optimization: fetch once per row, not per cell)
+    const emulator = viewportOffset > 0 ? ptyManager.getEmulator(ptyId) : null;
+    const rowCache: (TerminalCell[] | null)[] = new Array(rows);
+
     for (let y = 0; y < rows; y++) {
-      const row = state.cells[y];
-      if (!row) continue;
+      if (viewportOffset === 0) {
+        // Normal case: use live terminal rows
+        rowCache[y] = state.cells[y] ?? null;
+      } else {
+        // Scrolled back: calculate which row to fetch
+        const absoluteY = scrollbackLength - viewportOffset + y;
+
+        if (absoluteY < 0) {
+          // Before scrollback
+          rowCache[y] = null;
+        } else if (absoluteY < scrollbackLength) {
+          // In scrollback buffer
+          rowCache[y] = emulator?.getScrollbackLine(absoluteY) ?? null;
+        } else {
+          // In live terminal area
+          const liveY = absoluteY - scrollbackLength;
+          rowCache[y] = state.cells[liveY] ?? null;
+        }
+      }
+    }
+
+    for (let y = 0; y < rows; y++) {
+      const row = rowCache[y];
 
       for (let x = 0; x < cols; x++) {
-        const cell = row[x];
-        if (!cell) continue;
+        const cell = row?.[x] ?? null;
 
-        // Check if this is the cursor position
-        const isCursor = isFocused && state.cursor.visible &&
+        if (!cell) {
+          // No cell data - use fallback
+          buffer.setCell(x + offsetX, y + offsetY, ' ', fallbackFg, fallbackBg, 0);
+          continue;
+        }
+
+        // Only show cursor when at bottom (not scrolled back) and focused
+        const isCursor = isAtBottom && isFocused && state.cursor.visible &&
                          state.cursor.y === y && state.cursor.x === x;
 
         // Determine cell colors
@@ -137,7 +177,30 @@ export const TerminalView = memo(function TerminalView({
         }
       }
     }
-  }, [width, height, isFocused, offsetX, offsetY]);
+
+    // Render scrollbar when scrolled back (not at bottom)
+    if (!isAtBottom && scrollbackLength > 0) {
+      const totalLines = scrollbackLength + rows;
+      const thumbHeight = Math.max(1, Math.floor(rows * rows / totalLines));
+      const scrollRange = rows - thumbHeight;
+      // Position: 0 at top (fully scrolled back), scrollRange at bottom (at live terminal)
+      const thumbPosition = Math.floor((1 - viewportOffset / scrollbackLength) * scrollRange);
+
+      // Render scrollbar on the rightmost column
+      const scrollbarX = offsetX + width - 1;
+      for (let y = 0; y < rows; y++) {
+        const isThumb = y >= thumbPosition && y < thumbPosition + thumbHeight;
+        buffer.setCell(
+          scrollbarX,
+          y + offsetY,
+          isThumb ? '█' : '░',
+          isThumb ? SCROLLBAR_THUMB : SCROLLBAR_TRACK,
+          SCROLLBAR_TRACK,
+          0
+        );
+      }
+    }
+  }, [width, height, isFocused, offsetX, offsetY, ptyId]);
 
   const terminalState = terminalStateRef.current;
 

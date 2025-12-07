@@ -18,6 +18,7 @@ A terminal multiplexer with master-stack layout (Zellij-style), built with:
 - Pane zoom (fullscreen focused pane)
 - Kitty Graphics and Sixel protocol support
 - Mouse tracking (click to focus, tabbed pane switching)
+- Scrollback support with mouse wheel and scrollbar
 
 ## Installation
 
@@ -52,6 +53,9 @@ bun dev
 ### Mouse
 - `Click` - Focus pane
 - `Click tab` - Switch to stacked pane (in stacked mode)
+- `Scroll wheel` - Scroll through terminal history (when not in alternate screen apps like vim)
+- `Click scrollbar` - Jump to position in scrollback
+- `Drag scrollbar` - Scroll through history by dragging
 
 ### Prefix Mode (Ctrl+b, 2s timeout)
 - `n` or `Enter` - New pane
@@ -153,7 +157,7 @@ Current status:
 - [x] Pane zoom
 - [x] Mouse support
 - [x] Graphics protocol passthrough (Kitty/Sixel)
-- [ ] Scrollback support
+- [x] Scrollback support
 - [ ] Session restore on startup
 - [ ] Configurable keybindings
 

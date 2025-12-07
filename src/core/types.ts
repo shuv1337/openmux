@@ -148,6 +148,18 @@ export interface TerminalState {
 }
 
 /**
+ * Scroll state for a terminal pane
+ */
+export interface TerminalScrollState {
+  /** Number of lines scrolled back from bottom (0 = at bottom/live terminal) */
+  viewportOffset: number;
+  /** Total scrollback lines available */
+  scrollbackLength: number;
+  /** Whether currently at the bottom (for sticky scroll detection) */
+  isAtBottom: boolean;
+}
+
+/**
  * Keyboard mode for prefix key system
  */
 export type KeyMode = 'normal' | 'prefix';

@@ -3,7 +3,7 @@
  */
 
 import { spawn, type IPty } from 'bun-pty';
-import type { PTYSession, TerminalState } from '../core/types';
+import type { PTYSession, TerminalState, TerminalScrollState } from '../core/types';
 import { DEFAULT_CONFIG } from '../core/config';
 import { GhosttyEmulator } from './ghostty-emulator';
 import { GraphicsPassthrough } from './graphics-passthrough';
@@ -72,6 +72,9 @@ interface PTYSessionInternal extends PTYSession {
   subscribers: Set<(state: TerminalState) => void>;
   exitCallbacks: Set<(exitCode: number) => void>;
   pendingNotify: boolean; // For render batching
+  scrollState: {
+    viewportOffset: number; // Lines scrolled back from bottom (0 = at bottom)
+  };
 }
 
 class PTYManagerImpl {
@@ -146,6 +149,9 @@ class PTYManagerImpl {
       subscribers: new Set(),
       exitCallbacks: new Set(),
       pendingNotify: false,
+      scrollState: {
+        viewportOffset: 0, // Start at bottom (live terminal)
+      },
     };
 
     // Wire up PTY data handler to ghostty emulator
@@ -187,6 +193,11 @@ class PTYManagerImpl {
       session.emulator.write(textData);
     }
 
+    // Auto-scroll to bottom when new data arrives (sticky scroll behavior)
+    if (session.scrollState.viewportOffset > 0) {
+      session.scrollState.viewportOffset = 0;
+    }
+
     // Batch notifications using setImmediate for best performance
     // This coalesces rapid PTY data events within the same event loop tick
     if (!session.pendingNotify) {
@@ -214,6 +225,12 @@ class PTYManagerImpl {
   write(sessionId: string, data: string): void {
     const session = this.sessions.get(sessionId);
     if (session) {
+      // Auto-scroll to bottom when user types (sticky scroll behavior)
+      if (session.scrollState.viewportOffset > 0) {
+        session.scrollState.viewportOffset = 0;
+        // Notify subscribers so UI updates to show bottom
+        this.notifySubscribers(session);
+      }
       session.pty.write(data);
     }
   }
@@ -308,6 +325,47 @@ class PTYManagerImpl {
    */
   getTerminalState(sessionId: string): TerminalState | undefined {
     return this.sessions.get(sessionId)?.emulator.getTerminalState();
+  }
+
+  /**
+   * Get scroll state for a session
+   */
+  getScrollState(sessionId: string): TerminalScrollState | undefined {
+    const session = this.sessions.get(sessionId);
+    if (!session) return undefined;
+
+    const scrollbackLength = session.emulator.getScrollbackLength();
+    return {
+      viewportOffset: session.scrollState.viewportOffset,
+      scrollbackLength,
+      isAtBottom: session.scrollState.viewportOffset === 0,
+    };
+  }
+
+  /**
+   * Set scroll offset for a session (clamped to valid range)
+   */
+  setScrollOffset(sessionId: string, offset: number): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
+    const maxOffset = session.emulator.getScrollbackLength();
+    session.scrollState.viewportOffset = Math.max(0, Math.min(offset, maxOffset));
+    this.notifySubscribers(session);
+  }
+
+  /**
+   * Scroll to bottom (reset offset to 0)
+   */
+  scrollToBottom(sessionId: string): void {
+    this.setScrollOffset(sessionId, 0);
+  }
+
+  /**
+   * Get the emulator for a session (for scrollback line access)
+   */
+  getEmulator(sessionId: string): GhosttyEmulator | undefined {
+    return this.sessions.get(sessionId)?.emulator;
   }
 
   /**

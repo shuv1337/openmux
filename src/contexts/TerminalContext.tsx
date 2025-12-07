@@ -12,6 +12,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import { initGhostty, isGhosttyInitialized, ptyManager, inputHandler, detectHostCapabilities } from '../terminal';
+import type { TerminalScrollState } from '../core/types';
 import { useLayout } from './LayoutContext';
 import { readFromClipboard } from '../utils/clipboard';
 
@@ -40,6 +41,16 @@ interface TerminalContextValue {
   getFocusedCursorKeyMode: () => 'normal' | 'application';
   /** Check if mouse tracking is enabled for a PTY */
   isMouseTrackingEnabled: (ptyId: string) => boolean;
+  /** Check if terminal is in alternate screen mode (vim, htop, etc.) */
+  isAlternateScreen: (ptyId: string) => boolean;
+  /** Get scroll state for a PTY */
+  getScrollState: (ptyId: string) => TerminalScrollState | undefined;
+  /** Scroll terminal by delta lines (positive = scroll up into history) */
+  scrollTerminal: (ptyId: string, delta: number) => void;
+  /** Set absolute scroll offset for a PTY */
+  setScrollOffset: (ptyId: string, offset: number) => void;
+  /** Scroll terminal to bottom (live content) */
+  scrollToBottom: (ptyId: string) => void;
   /** Check if ghostty is initialized */
   isInitialized: boolean;
 }
@@ -232,6 +243,36 @@ export function TerminalProvider({ children }: TerminalProviderProps) {
     return terminalState?.mouseTracking ?? false;
   }, []);
 
+  // Check if terminal is in alternate screen mode (vim, htop, etc.)
+  const isAlternateScreen = useCallback((ptyId: string): boolean => {
+    const terminalState = ptyManager.getTerminalState(ptyId);
+    return terminalState?.alternateScreen ?? false;
+  }, []);
+
+  // Get scroll state for a PTY
+  const getScrollState = useCallback((ptyId: string): TerminalScrollState | undefined => {
+    return ptyManager.getScrollState(ptyId);
+  }, []);
+
+  // Scroll terminal by delta lines (positive = scroll up into history)
+  const scrollTerminal = useCallback((ptyId: string, delta: number): void => {
+    const state = ptyManager.getScrollState(ptyId);
+    if (state) {
+      const newOffset = state.viewportOffset + delta;
+      ptyManager.setScrollOffset(ptyId, newOffset);
+    }
+  }, []);
+
+  // Set absolute scroll offset
+  const setScrollOffset = useCallback((ptyId: string, offset: number): void => {
+    ptyManager.setScrollOffset(ptyId, offset);
+  }, []);
+
+  // Scroll terminal to bottom (live content)
+  const scrollToBottom = useCallback((ptyId: string): void => {
+    ptyManager.scrollToBottom(ptyId);
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -252,6 +293,11 @@ export function TerminalProvider({ children }: TerminalProviderProps) {
     getSessionCwd,
     getFocusedCursorKeyMode,
     isMouseTrackingEnabled,
+    isAlternateScreen,
+    getScrollState,
+    scrollTerminal,
+    setScrollOffset,
+    scrollToBottom,
     isInitialized,
   };
 

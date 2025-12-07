@@ -2,9 +2,10 @@
  * Pane component - individual terminal pane with border and focus state
  */
 
-import { useCallback, type ReactNode } from 'react';
+import { useCallback, useRef, type ReactNode } from 'react';
 import type { MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
 import { useTheme } from '../contexts/ThemeContext';
+import { useTerminal } from '../contexts/TerminalContext';
 import { TerminalView } from './TerminalView';
 import { inputHandler } from '../terminal';
 
@@ -36,6 +37,38 @@ export function Pane({
   onMouseInput,
 }: PaneProps) {
   const theme = useTheme();
+  const { isMouseTrackingEnabled, isAlternateScreen, scrollTerminal, getScrollState, setScrollOffset } = useTerminal();
+
+  // Calculate inner dimensions (account for border)
+  const innerWidth = Math.max(1, width - 2);
+  const innerHeight = Math.max(1, height - 2);
+
+  // Track if we're dragging the scrollbar
+  const scrollbarDragRef = useRef<{ isDragging: boolean; startY: number; startOffset: number }>({
+    isDragging: false,
+    startY: 0,
+    startOffset: 0,
+  });
+
+  // Check if a position is on the scrollbar (rightmost column when scrolled)
+  const isOnScrollbar = useCallback((relX: number, relY: number): boolean => {
+    if (!ptyId) return false;
+    const scrollState = getScrollState(ptyId);
+    // Scrollbar is shown when not at bottom
+    if (!scrollState || scrollState.isAtBottom) return false;
+    // Scrollbar is on the rightmost column
+    return relX === innerWidth - 1 && relY >= 0 && relY < innerHeight;
+  }, [ptyId, getScrollState, innerWidth, innerHeight]);
+
+  // Convert Y position to scroll offset
+  const yToScrollOffset = useCallback((relY: number): number => {
+    if (!ptyId) return 0;
+    const scrollState = getScrollState(ptyId);
+    if (!scrollState || scrollState.scrollbackLength === 0) return 0;
+    // relY 0 = top = max offset, relY (innerHeight-1) = bottom = 0 offset
+    const ratio = 1 - (relY / Math.max(1, innerHeight - 1));
+    return Math.round(ratio * scrollState.scrollbackLength);
+  }, [ptyId, getScrollState, innerHeight]);
 
   // Dynamic border color based on focus state
   const borderColor = isFocused
@@ -56,10 +89,6 @@ export function Pane({
     rounded: 'rounded',
     bold: 'single', // fallback
   };
-
-  // Calculate inner dimensions (account for border)
-  const innerWidth = Math.max(1, width - 2);
-  const innerHeight = Math.max(1, height - 2);
 
   // Convert OpenTUI mouse event to PTY mouse sequence
   const handleMouseEvent = useCallback((event: OpenTUIMouseEvent, type: 'down' | 'up' | 'move' | 'drag' | 'scroll') => {
@@ -89,11 +118,31 @@ export function Pane({
     // Prevent default selection behavior
     event.preventDefault();
     onClick?.();
+
+    // Check if clicking on scrollbar
+    const relX = event.x - x - 1;
+    const relY = event.y - y - 1;
+    if (isOnScrollbar(relX, relY) && ptyId) {
+      // Start scrollbar drag
+      const scrollState = getScrollState(ptyId);
+      scrollbarDragRef.current = {
+        isDragging: true,
+        startY: relY,
+        startOffset: scrollState?.viewportOffset ?? 0,
+      };
+      // Jump to clicked position
+      const newOffset = yToScrollOffset(relY);
+      setScrollOffset(ptyId, newOffset);
+      return;
+    }
+
     handleMouseEvent(event, 'down');
-  }, [onClick, handleMouseEvent]);
+  }, [onClick, handleMouseEvent, x, y, isOnScrollbar, ptyId, getScrollState, yToScrollOffset, setScrollOffset]);
 
   const handleMouseUp = useCallback((event: OpenTUIMouseEvent) => {
     event.preventDefault();
+    // End scrollbar drag
+    scrollbarDragRef.current.isDragging = false;
     handleMouseEvent(event, 'up');
   }, [handleMouseEvent]);
 
@@ -105,11 +154,20 @@ export function Pane({
   const handleMouseDrag = useCallback((event: OpenTUIMouseEvent) => {
     // Prevent default selection behavior during drag
     event.preventDefault();
+
+    // Handle scrollbar dragging
+    if (scrollbarDragRef.current.isDragging && ptyId) {
+      const relY = event.y - y - 1;
+      const newOffset = yToScrollOffset(relY);
+      setScrollOffset(ptyId, newOffset);
+      return;
+    }
+
     handleMouseEvent(event, 'drag');
-  }, [handleMouseEvent]);
+  }, [handleMouseEvent, ptyId, y, yToScrollOffset, setScrollOffset]);
 
   const handleMouseScroll = useCallback((event: OpenTUIMouseEvent) => {
-    if (!onMouseInput) return;
+    if (!ptyId) return;
 
     // Calculate coordinates relative to pane content
     const relX = event.x - x - 1;
@@ -117,22 +175,39 @@ export function Pane({
 
     if (relX < 0 || relY < 0 || relX >= innerWidth || relY >= innerHeight) return;
 
-    // Scroll direction from event.scroll
-    const scrollUp = event.scroll?.delta && event.scroll.delta < 0;
-    const button = scrollUp ? 4 : 5; // 4 = scroll up, 5 = scroll down
+    // Check if terminal is in alternate screen or has mouse tracking enabled
+    // If so, forward scroll events to the PTY (apps like vim, htop need them)
+    const shouldForwardToApp = isAlternateScreen(ptyId) || isMouseTrackingEnabled(ptyId);
 
-    const sequence = inputHandler.encodeMouse({
-      type: 'scroll',
-      button,
-      x: relX,
-      y: relY,
-      shift: event.modifiers?.shift,
-      alt: event.modifiers?.alt,
-      ctrl: event.modifiers?.ctrl,
-    });
+    if (shouldForwardToApp && onMouseInput) {
+      // Forward to PTY as SGR mouse sequences (existing behavior)
+      const scrollUp = event.scroll?.delta && event.scroll.delta < 0;
+      const button = scrollUp ? 4 : 5; // 4 = scroll up, 5 = scroll down
 
-    onMouseInput(sequence);
-  }, [onMouseInput, x, y, innerWidth, innerHeight]);
+      const sequence = inputHandler.encodeMouse({
+        type: 'scroll',
+        button,
+        x: relX,
+        y: relY,
+        shift: event.modifiers?.shift,
+        alt: event.modifiers?.alt,
+        ctrl: event.modifiers?.ctrl,
+      });
+
+      onMouseInput(sequence);
+    } else {
+      // Handle scroll locally - scroll through scrollback buffer
+      // OpenTUI scroll events have direction: "up" | "down" | "left" | "right"
+      const direction = event.scroll?.direction;
+      if (direction === 'up') {
+        // Scroll up = look at older content = increase viewport offset
+        scrollTerminal(ptyId, 1);
+      } else if (direction === 'down') {
+        // Scroll down = look at newer content = decrease viewport offset
+        scrollTerminal(ptyId, -1);
+      }
+    }
+  }, [ptyId, x, y, innerWidth, innerHeight, onMouseInput, isAlternateScreen, isMouseTrackingEnabled, scrollTerminal]);
 
   return (
     <box

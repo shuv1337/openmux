@@ -228,6 +228,17 @@ export class GhosttyEmulator {
   }
 
   /**
+   * Get a line from the scrollback buffer
+   * @param offset Line offset from top of scrollback (0 = oldest line)
+   * @returns Array of cells, or null if not available
+   */
+  getScrollbackLine(offset: number): TerminalCell[] | null {
+    const line = this.terminal.getScrollbackLine(offset);
+    if (!line) return null;
+    return line.map(cell => this.convertCell(cell));
+  }
+
+  /**
    * Get cursor key mode (DECCKM - DEC mode 1)
    * When enabled, arrow keys should send application sequences (\x1bOx instead of \x1b[x)
    */
