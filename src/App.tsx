@@ -158,8 +158,14 @@ function AppContent() {
           inputHandler.setCursorMode(cursorKeyMode);
 
           // Convert keyboard event to terminal escape sequence
+          // Use event.sequence for single printable chars (handles shift for uppercase/symbols)
+          // Fall back to event.name for special keys (arrows, function keys, etc.)
+          // Don't use sequence for control chars (< 32) or DEL (127) as we need name for Shift+Tab etc.
+          const charCode = event.sequence?.charCodeAt(0) ?? 0;
+          const isPrintable = event.sequence?.length === 1 && charCode >= 32 && charCode < 127;
+          const keyToEncode = isPrintable ? event.sequence! : event.name;
           const sequence = inputHandler.encodeKey({
-            key: event.name,
+            key: keyToEncode,
             ctrl: event.ctrl,
             shift: event.shift,
             alt: event.option,
