@@ -74,13 +74,24 @@ export class GhosttyEmulator {
     this._rows = rows;
     this.colors = colors ?? getDefaultColors();
 
-    // Configure ghostty-web with queried colors
-    this.terminal = ghostty.createTerminal(cols, rows, {
+    const config = {
       scrollbackLimit: 10000,
-      bgColor: this.colors.background,
-      fgColor: this.colors.foreground,
-      palette: this.colors.palette,
-    });
+    } as {
+      scrollbackLimit: number;
+      bgColor?: number;
+      fgColor?: number;
+      palette?: number[];
+    };
+
+    // Only override the palette when we have real host colors; otherwise let ghostty default
+    if (!this.colors.isDefault) {
+      config.bgColor = this.colors.background;
+      config.fgColor = this.colors.foreground;
+      config.palette = this.colors.palette;
+    }
+
+    // Configure ghostty-web with queried colors
+    this.terminal = ghostty.createTerminal(cols, rows, config);
 
     // Initialize cached cells
     this.initializeCachedCells();
@@ -264,14 +275,27 @@ export class GhosttyEmulator {
     for (const [y, line] of dirtyLines) {
       if (y >= 0 && y < this._rows && this.cachedCells[y]) {
         const row = this.cachedCells[y];
+        const lineLength = Math.min(line.length, this._cols);
+        let lastCell: TerminalCell | null = null;
+
         // Update cells in place
-        for (let x = 0; x < Math.min(line.length, this._cols); x++) {
+        for (let x = 0; x < lineLength; x++) {
           const cell = this.convertCell(line[x]);
           row[x] = cell;
+          lastCell = cell;
         }
-        // Fill remaining cells with empty if line is shorter than cols
-        for (let x = line.length; x < this._cols; x++) {
-          row[x] = this.createEmptyCell();
+
+        // If the line is shorter than the viewport width, fill the remainder
+        // using the last cell's style so background colors (e.g., htop headers)
+        // continue across the row.
+        const fillCell =
+          lastCell ??
+          this.createEmptyCell(); // lineLength could be 0 on a cleared line
+        for (let x = lineLength; x < this._cols; x++) {
+          row[x] = {
+            ...fillCell,
+            char: ' ',
+          };
         }
         // Increment version for this row
         this.rowVersions[y]++;

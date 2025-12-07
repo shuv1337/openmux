@@ -18,17 +18,8 @@ interface TerminalViewProps {
   offsetY?: number;
 }
 
-// Pre-allocate common colors for performance
-const TRANSPARENT_BG = RGBA.fromValues(0, 0, 0, 0);
 const WHITE = RGBA.fromInts(255, 255, 255);
 const BLACK = RGBA.fromInts(0, 0, 0);
-
-/**
- * Check if a cell has the default background marker color (0,0,1)
- * This is a fast inline check - the marker distinguishes default bg from explicit black
- */
-const hasDefaultBgMarker = (cell: TerminalCell): boolean =>
-  cell.bg.r === 0 && cell.bg.g === 0 && cell.bg.b === 1;
 
 // Text attributes for buffer API
 const ATTR_BOLD = 1;
@@ -73,6 +64,10 @@ export const TerminalView = memo(function TerminalView({
 
     const rows = Math.min(state.rows, height);
     const cols = Math.min(state.cols, width);
+    // Use top-left cell bg as fallback to paint unused area; default to black
+    const fallbackBgColor = state.cells?.[0]?.[0]?.bg ?? BLACK;
+    const fallbackBg = RGBA.fromInts(fallbackBgColor.r, fallbackBgColor.g, fallbackBgColor.b);
+    const fallbackFg = BLACK;
 
     for (let y = 0; y < rows; y++) {
       const row = state.cells[y];
@@ -90,10 +85,6 @@ export const TerminalView = memo(function TerminalView({
         let fgR = cell.fg.r, fgG = cell.fg.g, fgB = cell.fg.b;
         let bgR = cell.bg.r, bgG = cell.bg.g, bgB = cell.bg.b;
 
-        // Check if background is the default marker (0,0,1) - make transparent
-        // This distinguishes default bg from explicit black (0,0,0) set by programs
-        const useTransparentBg = hasDefaultBgMarker(cell);
-
         // Apply dim effect
         if (cell.dim) {
           fgR = Math.floor(fgR * 0.5);
@@ -109,13 +100,11 @@ export const TerminalView = memo(function TerminalView({
         }
 
         let fg = RGBA.fromInts(fgR, fgG, fgB);
-        let bg = useTransparentBg
-          ? TRANSPARENT_BG
-          : RGBA.fromInts(bgR, bgG, bgB);
+        let bg = RGBA.fromInts(bgR, bgG, bgB);
 
         // Apply cursor styling
         if (isCursor) {
-          fg = bg !== TRANSPARENT_BG ? bg : BLACK;
+          fg = bg ?? BLACK;
           bg = WHITE;
         }
 
@@ -128,6 +117,16 @@ export const TerminalView = memo(function TerminalView({
 
         // Write cell directly to buffer (with offset for pane position)
         buffer.setCell(x + offsetX, y + offsetY, cell.char, fg, bg, attributes);
+      }
+    }
+
+    // Paint any unused area (when cols/rows are smaller than the pane) to avoid stale/transparent regions
+    if (cols < width || rows < height) {
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          if (y < rows && x < cols) continue;
+          buffer.setCell(x + offsetX, y + offsetY, ' ', fallbackFg, fallbackBg, 0);
+        }
       }
     }
   }, [width, height, isFocused, offsetX, offsetY]);

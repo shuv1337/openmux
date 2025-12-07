@@ -7,9 +7,13 @@
 import { createCliRenderer } from '@opentui/core';
 import { createRoot } from '@opentui/react';
 import { App } from './App';
+import { detectHostCapabilities } from './terminal';
 
 async function main() {
   try {
+    // Prime host capabilities (including color query) before the renderer takes over stdin
+    await detectHostCapabilities();
+
     // Create OpenTUI renderer - exclude SIGINT so Ctrl+C goes to PTY
     const renderer = await createCliRenderer({
       exitOnCtrlC: false,

@@ -26,6 +26,124 @@ export interface TerminalColors {
 let cachedColors: TerminalColors | null = null;
 
 /**
+ * Parse OSC color payloads such as:
+ * - rgb:xxxx/yyyy/zzzz
+ * - #rrggbb
+ */
+function parseOscColor(payload: string): number | null {
+  // rgb:xxxx/yyyy/zzzz
+  const rgbMatch = payload.match(/^rgb:([0-9a-fA-F]{2,4})\/([0-9a-fA-F]{2,4})\/([0-9a-fA-F]{2,4})$/);
+  if (rgbMatch) {
+    const [r, g, b] = rgbMatch.slice(1).map((p) => parseInt(p.slice(0, 2), 16));
+    return (r << 16) | (g << 8) | b;
+  }
+
+  // #rrggbb
+  const hexMatch = payload.match(/^#?([0-9a-fA-F]{6})$/);
+  if (hexMatch) {
+    return parseInt(hexMatch[1], 16);
+  }
+
+  return null;
+}
+
+/**
+ * Try to query colors from the host terminal using OSC 10/11.
+ * This should be called before the TUI takes over stdin.
+ */
+async function queryOscColors(timeoutMs: number): Promise<{ foreground?: number; background?: number; paletteOverrides?: Map<number, number> } | null> {
+  // Only attempt when we have a controllable TTY with raw mode.
+  const stdin = process.stdin as (NodeJS.ReadStream & { setRawMode?: (mode: boolean) => void; isRaw?: boolean });
+  if (!stdin.isTTY || typeof stdin.setRawMode !== 'function') {
+    return null;
+  }
+
+  return await new Promise<{ foreground?: number; background?: number; paletteOverrides?: Map<number, number> } | null>((resolve) => {
+    let buffer = '';
+    let resolved = false;
+    const decoder = new TextDecoder();
+
+    const originalRaw = stdin.isRaw ?? false;
+    const cleanup = () => {
+      if (resolved) return;
+      resolved = true;
+      stdin.off('data', onData);
+      try {
+        stdin.setRawMode?.(originalRaw);
+      } catch {
+        // ignore
+      }
+    };
+
+    const finish = (result: { foreground?: number; background?: number; paletteOverrides?: Map<number, number> } | null) => {
+      cleanup();
+      resolve(result);
+    };
+
+    const paletteOverrides = new Map<number, number>();
+
+    const onData = (chunk: Buffer) => {
+      buffer += decoder.decode(chunk);
+
+      const fgMatch = buffer.match(/\x1b]10;([^\x07\x1b]+)\x07/);
+      const bgMatch = buffer.match(/\x1b]11;([^\x07\x1b]+)\x07/);
+
+      const fg = fgMatch ? parseOscColor(fgMatch[1]) ?? undefined : undefined;
+      const bg = bgMatch ? parseOscColor(bgMatch[1]) ?? undefined : undefined;
+
+      // Parse OSC 4 responses; allow BEL or ST terminators
+      const paletteRegex = /\x1b]4;(\d+);([^\x07\x1b]+)(?:\x07|\x1b\\)/g;
+      let match: RegExpExecArray | null;
+      while ((match = paletteRegex.exec(buffer)) !== null) {
+        const idx = parseInt(match[1], 10);
+        const color = parseOscColor(match[2]);
+        if (!Number.isNaN(idx) && idx >= 0 && idx < 256 && color !== null) {
+          paletteOverrides.set(idx, color);
+        }
+      }
+
+      const haveAllPalette = paletteOverrides.size >= 16; // we only ask 0-15
+
+      if (fg !== undefined || bg !== undefined || haveAllPalette) {
+        finish({
+          foreground: fg,
+          background: bg,
+          paletteOverrides: paletteOverrides.size ? paletteOverrides : undefined,
+        });
+      }
+    };
+
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        finish(null);
+      }
+    }, timeoutMs);
+
+    try {
+      stdin.setRawMode?.(true);
+    } catch {
+      clearTimeout(timer);
+      resolve(null);
+      return;
+    }
+
+    stdin.on('data', onData);
+
+    try {
+      // Query default foreground/background (OSC 10/11) and base 0-15 (OSC 4)
+      let osc = '\x1b]10;?\x07\x1b]11;?\x07';
+      for (let i = 0; i < 16; i++) {
+        osc += `\x1b]4;${i};?\x07`;
+      }
+      process.stdout.write(osc);
+    } catch {
+      clearTimeout(timer);
+      finish(null);
+    }
+  });
+}
+
+/**
  * Generate the standard 256-color palette
  * Colors 0-15: ANSI colors (from base16 or defaults)
  * Colors 16-231: 6x6x6 color cube
@@ -80,23 +198,13 @@ function generate256Palette(base16?: number[]): number[] {
 }
 
 /**
- * Marker color for "default" background - slightly off-black (0,0,1)
- * This allows us to distinguish between:
- * - Default background (should be transparent): rgb(0,0,1)
- * - Explicit black set by programs like htop: rgb(0,0,0)
- *
- * The difference is imperceptible but lets us detect which cells
- * should be transparent vs which have intentional black backgrounds.
- */
-export const DEFAULT_BG_MARKER = 0x000001; // rgb(0,0,1)
-
-/**
  * Get default colors (used as fallback)
  */
 export function getDefaultColors(): TerminalColors {
   return {
     foreground: 0xFFFFFF,
-    background: DEFAULT_BG_MARKER, // Use marker instead of pure black
+    // Use a real opaque background; transparency is handled by layout rather than color markers
+    background: 0x000000,
     palette: generate256Palette(),
     isDefault: true,
   };
@@ -118,8 +226,32 @@ export async function queryHostColors(_timeoutMs: number = 500): Promise<Termina
     return cachedColors;
   }
 
-  // For now, use environment-based color detection instead of OSC queries
-  // OSC queries manipulate stdin which breaks TUI input handling
+  // First, try OSC queries (best-effort, only if TTY + raw mode available)
+  try {
+    const osc = await queryOscColors(Math.min(200, _timeoutMs));
+    if (osc && (osc.foreground !== undefined || osc.background !== undefined || osc.paletteOverrides)) {
+      const base16: (number | undefined)[] = new Array(16).fill(undefined);
+      if (osc.paletteOverrides) {
+        for (const [idx, color] of osc.paletteOverrides.entries()) {
+          if (idx >= 0 && idx < 16) {
+            base16[idx] = color;
+          }
+        }
+      }
+      const palette = generate256Palette(base16 as number[]);
+      cachedColors = {
+        foreground: osc.foreground ?? 0xFFFFFF,
+        background: osc.background ?? 0x000000,
+        palette,
+        isDefault: false,
+      };
+      return cachedColors;
+    }
+  } catch {
+    // Fall back to environment detection on any error
+  }
+
+  // Fallback to environment-based color detection
   cachedColors = detectColorsFromEnvironment();
   return cachedColors;
 }
