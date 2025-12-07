@@ -10,6 +10,11 @@ LIB_INSTALL_DIR="${LIB_INSTALL_DIR:-$HOME/.local/lib/openmux}"
 
 cd "$PROJECT_DIR"
 
+cleanup() {
+    # Remove bun-build temp files
+    find "$PROJECT_DIR" -maxdepth 1 -name "*.bun-build" -type f -delete 2>/dev/null || true
+}
+
 usage() {
     echo "Usage: $0 [--install]"
     echo ""
@@ -25,6 +30,10 @@ usage() {
 
 build() {
     echo "Building $BINARY_NAME..."
+
+    # Clean up any stale bun-build temp files
+    cleanup
+
     mkdir -p "$DIST_DIR"
 
     # Build the binary
@@ -51,6 +60,9 @@ export BUN_PTY_LIB="${BUN_PTY_LIB:-$SCRIPT_DIR/librust_pty.dylib}"
 exec "$SCRIPT_DIR/openmux-bin" "$@"
 WRAPPER
     chmod +x "$DIST_DIR/$BINARY_NAME"
+
+    # Clean up any temp files created during build
+    cleanup
 
     echo "Built: $DIST_DIR/$BINARY_NAME"
 }

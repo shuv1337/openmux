@@ -1,9 +1,5 @@
 /**
- * BSP tree operations
+ * Layout operations
  */
 
-export * from './insert';
-export * from './remove';
-export * from './layout';
-export * from './resize';
-export * from './navigate';
+export * from './master-stack-layout';
