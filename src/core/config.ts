@@ -27,6 +27,18 @@ export interface BSPConfig {
 
   /** Default shell */
   defaultShell: string;
+
+  /** Session storage directory path */
+  sessionStoragePath: string;
+
+  /** Auto-save interval in milliseconds (0 to disable) */
+  autoSaveInterval: number;
+}
+
+/** Get the session storage path (platform-aware) */
+function getSessionStoragePath(): string {
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
+  return `${home}/.config/openmux/sessions`;
 }
 
 export const DEFAULT_CONFIG: BSPConfig = {
@@ -39,6 +51,8 @@ export const DEFAULT_CONFIG: BSPConfig = {
   minPaneHeight: 5,
   prefixTimeout: 2000,
   defaultShell: process.env.SHELL ?? '/bin/bash',
+  sessionStoragePath: getSessionStoragePath(),
+  autoSaveInterval: 30000, // 30 seconds
 };
 
 export const DEFAULT_THEME: Theme = {

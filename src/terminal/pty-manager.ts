@@ -328,9 +328,14 @@ class PTYManagerImpl {
   destroySession(sessionId: string): void {
     const session = this.sessions.get(sessionId);
     if (session) {
+      // Notify subscribers with null to clear their state before destruction
+      // This prevents garbage data from being rendered during disposal
+      for (const callback of session.subscribers) {
+        callback(null as unknown as TerminalState);
+      }
+      session.subscribers.clear();
       session.pty.kill();
       session.emulator.dispose();
-      session.subscribers.clear();
       this.sessions.delete(sessionId);
     }
   }
@@ -339,7 +344,9 @@ class PTYManagerImpl {
    * Destroy all sessions
    */
   destroyAll(): void {
-    for (const [id] of this.sessions) {
+    // Collect IDs first to avoid modifying map while iterating
+    const sessionIds = Array.from(this.sessions.keys());
+    for (const id of sessionIds) {
       this.destroySession(id);
     }
   }

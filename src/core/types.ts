@@ -217,3 +217,50 @@ export interface PTYSession {
   cwd: string;
   shell: string;
 }
+
+// ============================================================================
+// Session Types
+// ============================================================================
+
+/** Session ID - unique identifier */
+export type SessionId = string;
+
+/** Session metadata for persistence and UI */
+export interface SessionMetadata {
+  id: SessionId;
+  name: string;
+  createdAt: number;
+  lastSwitchedAt: number;
+  autoNamed: boolean;
+}
+
+/** Serializable pane state for persistence */
+export interface SerializedPaneData {
+  id: string;
+  title?: string;
+  cwd: string;
+}
+
+/** Serializable workspace state */
+export interface SerializedWorkspace {
+  id: WorkspaceId;
+  mainPane: SerializedPaneData | null;
+  stackPanes: SerializedPaneData[];
+  focusedPaneId: string | null;
+  activeStackIndex: number;
+  layoutMode: LayoutMode;
+  zoomed: boolean;
+}
+
+/** Complete session state for persistence */
+export interface SerializedSession {
+  metadata: SessionMetadata;
+  workspaces: SerializedWorkspace[];
+  activeWorkspaceId: WorkspaceId;
+}
+
+/** Session index file structure */
+export interface SessionIndex {
+  sessions: SessionMetadata[];
+  activeSessionId: SessionId | null;
+}

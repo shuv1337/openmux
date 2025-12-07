@@ -100,6 +100,7 @@ interface KeyboardHandlerOptions {
   onPaste?: () => void;
   onNewPane?: () => void;
   onQuit?: () => void;
+  onToggleSessionPicker?: () => void;
 }
 
 /**
@@ -108,7 +109,7 @@ interface KeyboardHandlerOptions {
 export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
   const { state: kbState, dispatch: kbDispatch } = useKeyboardState();
   const { dispatch: layoutDispatch, activeWorkspace } = useLayout();
-  const { onPaste, onNewPane, onQuit } = options;
+  const { onPaste, onNewPane, onQuit, onToggleSessionPicker } = options;
 
   const handleKeyDown = useCallback((event: {
     key: string;
@@ -127,7 +128,7 @@ export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
 
     // Handle Alt keybindings (prefix-less actions) in normal mode
     if (kbState.mode === 'normal' && alt) {
-      return handleAltKey(key, layoutDispatch, activeWorkspace.layoutMode, onNewPane);
+      return handleAltKey(key, layoutDispatch, activeWorkspace.layoutMode, onNewPane, onToggleSessionPicker);
     }
 
     // Handle Ctrl+B to enter prefix mode (only in normal mode)
@@ -147,12 +148,12 @@ export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
 
     // Prefix mode commands
     if (kbState.mode === 'prefix') {
-      return handlePrefixModeKey(key, kbDispatch, layoutDispatch, onPaste, onNewPane, onQuit);
+      return handlePrefixModeKey(key, kbDispatch, layoutDispatch, onPaste, onNewPane, onQuit, onToggleSessionPicker);
     }
 
     // Normal mode - pass through to terminal
     return false;
-  }, [kbState.mode, kbDispatch, layoutDispatch, activeWorkspace.layoutMode, onPaste, onNewPane, onQuit]);
+  }, [kbState.mode, kbDispatch, layoutDispatch, activeWorkspace.layoutMode, onPaste, onNewPane, onQuit, onToggleSessionPicker]);
 
   return { handleKeyDown, mode: kbState.mode };
 }
@@ -164,7 +165,8 @@ function handleAltKey(
   key: string,
   layoutDispatch: ReturnType<typeof useLayout>['dispatch'],
   currentLayoutMode: 'vertical' | 'horizontal' | 'stacked',
-  onNewPane?: () => void
+  onNewPane?: () => void,
+  onToggleSessionPicker?: () => void
 ): boolean {
   // Alt+hjkl for navigation
   const direction = keyToDirection(key);
@@ -219,6 +221,11 @@ function handleAltKey(
       layoutDispatch({ type: 'TOGGLE_ZOOM' });
       return true;
 
+    // Alt+s to toggle session picker
+    case 's':
+      onToggleSessionPicker?.();
+      return true;
+
     default:
       return false;
   }
@@ -230,7 +237,8 @@ function handlePrefixModeKey(
   layoutDispatch: ReturnType<typeof useLayout>['dispatch'],
   onPaste?: () => void,
   onNewPane?: () => void,
-  onQuit?: () => void
+  onQuit?: () => void,
+  onToggleSessionPicker?: () => void
 ): boolean {
   const exitPrefix = () => kbDispatch({ type: 'EXIT_PREFIX_MODE' });
 
@@ -274,8 +282,14 @@ function handlePrefixModeKey(
       exitPrefix();
       return true;
 
-    // Layout mode: horizontal (panes stacked top/bottom)
+    // Session picker (prefix + s)
     case 's':
+      onToggleSessionPicker?.();
+      exitPrefix();
+      return true;
+
+    // Layout mode: horizontal (panes stacked top/bottom) - now 'h' instead of 's'
+    case 'H':
       layoutDispatch({ type: 'SET_LAYOUT_MODE', mode: 'horizontal' });
       exitPrefix();
       return true;

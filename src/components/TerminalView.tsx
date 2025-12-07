@@ -60,7 +60,15 @@ export const TerminalView = memo(function TerminalView({
   // Render callback that directly writes to buffer
   const renderTerminal = useCallback((buffer: OptimizedBuffer) => {
     const state = terminalStateRef.current;
-    if (!state) return;
+    if (!state) {
+      // Clear the buffer area when state is null (PTY destroyed)
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          buffer.setCell(x + offsetX, y + offsetY, ' ', BLACK, BLACK, 0);
+        }
+      }
+      return;
+    }
 
     const rows = Math.min(state.rows, height);
     const cols = Math.min(state.cols, width);

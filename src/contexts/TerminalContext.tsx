@@ -20,6 +20,8 @@ interface TerminalContextValue {
   createPTY: (paneId: string, cols: number, rows: number, cwd?: string) => string;
   /** Destroy a PTY session */
   destroyPTY: (ptyId: string) => void;
+  /** Destroy all PTY sessions */
+  destroyAllPTYs: () => void;
   /** Write input to the focused pane's PTY */
   writeToFocused: (data: string) => void;
   /** Write input to a specific PTY */
@@ -32,6 +34,8 @@ interface TerminalContextValue {
   setPanePosition: (ptyId: string, x: number, y: number) => void;
   /** Get the current working directory of the focused pane */
   getFocusedCwd: () => Promise<string | null>;
+  /** Get the CWD for a specific PTY session */
+  getSessionCwd: (ptyId: string) => Promise<string>;
   /** Get the cursor key mode (DECCKM) from the focused pane */
   getFocusedCursorKeyMode: () => 'normal' | 'application';
   /** Check if mouse tracking is enabled for a PTY */
@@ -105,6 +109,19 @@ export function TerminalProvider({ children }: TerminalProviderProps) {
   // Destroy a PTY session
   const destroyPTY = useCallback((ptyId: string) => {
     ptyManager.destroySession(ptyId);
+    ptyToPaneMap.current.delete(ptyId);
+  }, []);
+
+  // Destroy all PTY sessions
+  const destroyAllPTYs = useCallback(() => {
+    ptyManager.destroyAll();
+    ptyToPaneMap.current.clear();
+  }, []);
+
+  // Get CWD for a specific PTY session
+  const getSessionCwd = useCallback(async (ptyId: string): Promise<string> => {
+    const cwd = await ptyManager.getSessionCwd(ptyId);
+    return cwd ?? process.cwd();
   }, []);
 
   // Write to the focused pane's PTY
@@ -225,12 +242,14 @@ export function TerminalProvider({ children }: TerminalProviderProps) {
   const value: TerminalContextValue = {
     createPTY,
     destroyPTY,
+    destroyAllPTYs,
     writeToFocused,
     writeToPTY,
     pasteToFocused,
     resizePTY,
     setPanePosition,
     getFocusedCwd,
+    getSessionCwd,
     getFocusedCursorKeyMode,
     isMouseTrackingEnabled,
     isInitialized,

@@ -56,7 +56,9 @@ type LayoutAction =
   | { type: 'SET_LAYOUT_MODE'; mode: LayoutMode }
   | { type: 'SET_PANE_PTY'; paneId: NodeId; ptyId: string }
   | { type: 'SWAP_MAIN' } // Swap focused pane with main
-  | { type: 'TOGGLE_ZOOM' }; // Toggle zoom on focused pane
+  | { type: 'TOGGLE_ZOOM' } // Toggle zoom on focused pane
+  | { type: 'LOAD_SESSION'; workspaces: Map<WorkspaceId, Workspace>; activeWorkspaceId: WorkspaceId }
+  | { type: 'CLEAR_ALL' }; // Clear all workspaces (for session switch)
 
 function getActiveWorkspace(state: LayoutState): Workspace {
   let workspace = state.workspaces.get(state.activeWorkspaceId);
@@ -433,6 +435,31 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
 
       updated = recalculateLayout(updated, state.viewport, state.config);
       return { ...state, workspaces: updateWorkspace(state, updated) };
+    }
+
+    case 'LOAD_SESSION': {
+      // Load workspaces from a session, recalculating layouts
+      const newWorkspaces = new Map<WorkspaceId, Workspace>();
+      for (const [id, workspace] of action.workspaces) {
+        if (workspace.mainPane) {
+          newWorkspaces.set(id, recalculateLayout(workspace, state.viewport, state.config));
+        } else {
+          newWorkspaces.set(id, workspace);
+        }
+      }
+      return {
+        ...state,
+        workspaces: newWorkspaces,
+        activeWorkspaceId: action.activeWorkspaceId,
+      };
+    }
+
+    case 'CLEAR_ALL': {
+      return {
+        ...state,
+        workspaces: new Map(),
+        activeWorkspaceId: 1,
+      };
     }
 
     default:

@@ -2,7 +2,7 @@
  * Main App component for openmux
  */
 
-import { useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import { useKeyboard, useTerminalDimensions, useRenderer } from '@opentui/react';
 import type { PasteEvent } from '@opentui/core';
 import {
@@ -14,17 +14,24 @@ import {
   useKeyboardHandler,
   useTerminal,
 } from './contexts';
+import { SessionProvider, useSession } from './contexts/SessionContext';
 import { PaneContainer, StatusBar, KeyboardHints } from './components';
+import { SessionPicker } from './components/SessionPicker';
 import { inputHandler } from './terminal';
+import type { Workspace, WorkspaceId } from './core/types';
 
 function AppContent() {
   const { width, height } = useTerminalDimensions();
-  const { dispatch, activeWorkspace, panes } = useLayout();
-  const { createPTY, resizePTY, setPanePosition, writeToFocused, writeToPTY, pasteToFocused, getFocusedCwd, getFocusedCursorKeyMode, isInitialized } = useTerminal();
+  const { dispatch, activeWorkspace, panes, state: layoutState } = useLayout();
+  const { createPTY, resizePTY, setPanePosition, writeToFocused, writeToPTY, pasteToFocused, getFocusedCwd, getFocusedCursorKeyMode, isInitialized, destroyAllPTYs, getSessionCwd } = useTerminal();
+  const { togglePicker, state: sessionState } = useSession();
   const renderer = useRenderer();
 
   // Track pending CWD for new panes (captured before NEW_PANE dispatch)
   const pendingCwdRef = useRef<string | null>(null);
+
+  // Session management
+  const { saveSession } = useSession();
 
   // Create new pane handler that captures CWD first
   const handleNewPane = useCallback(async () => {
@@ -32,18 +39,27 @@ function AppContent() {
     const cwd = await getFocusedCwd();
     pendingCwdRef.current = cwd;
     dispatch({ type: 'NEW_PANE' });
-  }, [dispatch, getFocusedCwd]);
+    // Save session after pane creation (debounced by the save logic)
+    setTimeout(() => saveSession(), 500);
+  }, [dispatch, getFocusedCwd, saveSession]);
 
   // Create paste handler for manual paste (Ctrl+V, prefix+p/])
   const handlePaste = useCallback(() => {
     pasteToFocused();
   }, [pasteToFocused]);
 
-  // Quit handler - properly cleanup terminal before exiting
-  const handleQuit = useCallback(() => {
+  // Quit handler - save session and cleanup terminal before exiting
+  const handleQuit = useCallback(async () => {
+    // Save the current session before quitting
+    await saveSession();
     renderer.destroy();
     process.exit(0);
-  }, [renderer]);
+  }, [renderer, saveSession]);
+
+  // Session picker toggle handler
+  const handleToggleSessionPicker = useCallback(() => {
+    togglePicker();
+  }, [togglePicker]);
 
   // Handle bracketed paste from host terminal (Cmd+V sends this)
   useEffect(() => {
@@ -72,10 +88,25 @@ function AppContent() {
     };
   }, [renderer, activeWorkspace, writeToPTY]);
 
-  const { handleKeyDown, mode } = useKeyboardHandler({ onPaste: handlePaste, onNewPane: handleNewPane, onQuit: handleQuit });
+  const { handleKeyDown, mode } = useKeyboardHandler({
+    onPaste: handlePaste,
+    onNewPane: handleNewPane,
+    onQuit: handleQuit,
+    onToggleSessionPicker: handleToggleSessionPicker,
+  });
 
   // Track which panes have PTYs created
   const panesPtyCreated = useRef<Set<string>>(new Set());
+
+  // Register a function to clear PTY tracking (called when switching sessions)
+  useEffect(() => {
+    (globalThis as unknown as { __clearPtyTracking?: () => void }).__clearPtyTracking = () => {
+      panesPtyCreated.current.clear();
+    };
+    return () => {
+      delete (globalThis as unknown as { __clearPtyTracking?: () => void }).__clearPtyTracking;
+    };
+  }, []);
 
   // Update viewport when terminal resizes
   useEffect(() => {
@@ -109,9 +140,13 @@ function AppContent() {
         const cols = Math.max(1, rect.width - 2);
         const rows = Math.max(1, rect.height - 2);
 
-        // Use the pending CWD if available (from a previous pane)
-        const cwd = pendingCwdRef.current ?? undefined;
+        // Check for session-restored CWD first, then pending CWD from new pane
+        const sessionCwdMap = (globalThis as unknown as { __sessionCwdMap?: Map<string, string> }).__sessionCwdMap;
+        let cwd = sessionCwdMap?.get(pane.id) ?? pendingCwdRef.current ?? undefined;
         pendingCwdRef.current = null; // Clear after use
+
+        // Clear the pane's entry from session map after use
+        sessionCwdMap?.delete(pane.id);
 
         try {
           createPTY(pane.id, cols, rows, cwd);
@@ -141,6 +176,20 @@ function AppContent() {
   useKeyboard(
     useCallback(
       (event: { name: string; ctrl?: boolean; shift?: boolean; option?: boolean; meta?: boolean; sequence?: string }) => {
+        // If session picker is open, route keys to it
+        if (sessionState.showSessionPicker) {
+          const sessionPickerHandler = (globalThis as unknown as { __sessionPickerKeyHandler?: (e: { key: string; ctrl?: boolean; alt?: boolean; shift?: boolean }) => boolean }).__sessionPickerKeyHandler;
+          if (sessionPickerHandler) {
+            const handled = sessionPickerHandler({
+              key: event.name,
+              ctrl: event.ctrl,
+              alt: event.option,
+              shift: event.shift,
+            });
+            if (handled) return;
+          }
+        }
+
         // First, check if this is a multiplexer command
         const handled = handleKeyDown({
           key: event.name,
@@ -151,7 +200,7 @@ function AppContent() {
         });
 
         // If not handled by multiplexer and in normal mode, forward to PTY
-        if (!handled && mode === 'normal') {
+        if (!handled && mode === 'normal' && !sessionState.showSessionPicker) {
           // Get the focused pane's cursor key mode (DECCKM)
           // This affects how arrow keys are encoded (application vs normal mode)
           const cursorKeyMode = getFocusedCursorKeyMode();
@@ -177,7 +226,7 @@ function AppContent() {
           }
         }
       },
-      [handleKeyDown, mode, writeToFocused, getFocusedCursorKeyMode]
+      [handleKeyDown, mode, writeToFocused, getFocusedCursorKeyMode, sessionState.showSessionPicker]
     )
   );
 
@@ -197,14 +246,90 @@ function AppContent() {
 
       {/* Keyboard hints overlay */}
       <KeyboardHints width={width} height={height} />
+
+      {/* Session picker overlay */}
+      <SessionPicker width={width} height={height} />
     </box>
+  );
+}
+
+/**
+ * SessionBridge - bridges SessionContext with Layout and Terminal contexts
+ * This component lives inside all contexts and provides callbacks to SessionContext
+ */
+function SessionBridge({ children }: { children: React.ReactNode }) {
+  const { dispatch: layoutDispatch, state: layoutState } = useLayout();
+  const { createPTY, destroyAllPTYs, getSessionCwd, isInitialized } = useTerminal();
+
+  // Refs for stable callbacks
+  const layoutStateRef = useRef(layoutState);
+  const createPTYRef = useRef(createPTY);
+  const destroyAllPTYsRef = useRef(destroyAllPTYs);
+  const getSessionCwdRef = useRef(getSessionCwd);
+  const layoutDispatchRef = useRef(layoutDispatch);
+
+  useEffect(() => {
+    layoutStateRef.current = layoutState;
+    createPTYRef.current = createPTY;
+    destroyAllPTYsRef.current = destroyAllPTYs;
+    getSessionCwdRef.current = getSessionCwd;
+    layoutDispatchRef.current = layoutDispatch;
+  }, [layoutState, createPTY, destroyAllPTYs, getSessionCwd, layoutDispatch]);
+
+  // Callbacks for SessionProvider
+  const getCwd = useCallback(async (ptyId: string) => {
+    return getSessionCwdRef.current(ptyId);
+  }, []);
+
+  const getWorkspaces = useCallback(() => {
+    return layoutStateRef.current.workspaces;
+  }, []);
+
+  const getActiveWorkspaceId = useCallback(() => {
+    return layoutStateRef.current.activeWorkspaceId;
+  }, []);
+
+  const onSessionLoad = useCallback((
+    workspaces: Map<WorkspaceId, Workspace>,
+    activeWorkspaceId: WorkspaceId,
+    cwdMap: Map<string, string>
+  ) => {
+    // Load workspaces into layout
+    layoutDispatchRef.current({ type: 'LOAD_SESSION', workspaces, activeWorkspaceId });
+
+    // Store cwdMap in globalThis for AppContent to use
+    (globalThis as unknown as { __sessionCwdMap?: Map<string, string> }).__sessionCwdMap = cwdMap;
+
+    // Clear PTY tracking to allow new PTYs to be created for restored panes
+    (globalThis as unknown as { __clearPtyTracking?: () => void }).__clearPtyTracking?.();
+  }, []);
+
+  const onBeforeSwitch = useCallback(() => {
+    destroyAllPTYsRef.current();
+    layoutDispatchRef.current({ type: 'CLEAR_ALL' });
+    // Clear PTY tracking
+    (globalThis as unknown as { __clearPtyTracking?: () => void }).__clearPtyTracking?.();
+  }, []);
+
+  return (
+    <SessionProvider
+      getCwd={getCwd}
+      getWorkspaces={getWorkspaces}
+      getActiveWorkspaceId={getActiveWorkspaceId}
+      onSessionLoad={onSessionLoad}
+      onBeforeSwitch={onBeforeSwitch}
+    >
+      {children}
+    </SessionProvider>
   );
 }
 
 function AppWithTerminal() {
   return (
     <TerminalProvider>
-      <AppContent />
+      <SessionBridge>
+        <AppContent />
+      </SessionBridge>
     </TerminalProvider>
   );
 }

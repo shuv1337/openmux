@@ -1,10 +1,11 @@
 /**
- * StatusBar - bottom status bar showing workspaces and mode
+ * StatusBar - bottom status bar showing sessions, workspaces and mode
  */
 
 import { useTheme } from '../contexts/ThemeContext';
 import { useLayout } from '../contexts/LayoutContext';
 import { useKeyboardState } from '../contexts/KeyboardContext';
+import { useSessionState } from '../contexts/SessionContext';
 import type { KeyMode, WorkspaceId, LayoutMode } from '../core/types';
 
 interface StatusBarProps {
@@ -15,6 +16,14 @@ export function StatusBar({ width }: StatusBarProps) {
   const theme = useTheme();
   const { state, activeWorkspace, populatedWorkspaces } = useLayout();
   const { state: kbState } = useKeyboardState();
+  const sessionState = useSessionState();
+
+  // Truncate session name if too long
+  const sessionName = sessionState.activeSession?.name ?? 'default';
+  const maxSessionNameLen = 15;
+  const displaySessionName = sessionName.length > maxSessionNameLen
+    ? sessionName.slice(0, maxSessionNameLen - 1) + '…'
+    : sessionName;
 
   return (
     <box
@@ -26,11 +35,12 @@ export function StatusBar({ width }: StatusBarProps) {
       }}
       backgroundColor={theme.statusBar.backgroundColor}
     >
-      {/* Left section: app name and workspace tabs */}
+      {/* Left section: app name, session name and workspace tabs */}
       <box style={{ flexDirection: 'row', gap: 1 }}>
         <text fg={theme.statusBar.foregroundColor}>
           [openmux]
         </text>
+        <text fg="#00AAFF">[{displaySessionName}]</text>
         <WorkspaceTabs
           populatedWorkspaces={populatedWorkspaces}
           activeWorkspaceId={state.activeWorkspaceId}
@@ -40,6 +50,7 @@ export function StatusBar({ width }: StatusBarProps) {
       {/* Right section: Mode and layout mode */}
       <box style={{ flexDirection: 'row', gap: 1 }}>
         <ModeIndicator mode={kbState.mode} />
+        {sessionState.showSessionPicker && <text fg="#00AAFF">[SESSIONS]</text>}
         {activeWorkspace.zoomed && <text fg="#666666">[ZOOMED]</text>}
         <LayoutModeIndicator mode={activeWorkspace.layoutMode} />
       </box>
