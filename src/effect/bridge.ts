@@ -10,7 +10,18 @@ import { runEffect, runEffectIgnore } from "./runtime"
 import { Clipboard, Pty, SessionManager, SessionStorage } from "./services"
 import { PtyId, Cols, Rows, SessionId, makePtyId } from "./types"
 import type { SerializedSession, SessionMetadata } from "./models"
-import type { SessionMetadata as LegacySessionMetadata } from "../core/types"
+import {
+  SerializedSession as EffectSerializedSession,
+  SerializedWorkspace,
+  SerializedPaneData,
+  SessionMetadata as EffectSessionMetadata,
+} from "./models"
+import type {
+  SessionMetadata as LegacySessionMetadata,
+  Workspace,
+  WorkspaceId,
+  PaneData,
+} from "../core/types"
 
 // =============================================================================
 // Clipboard Bridge
@@ -364,8 +375,153 @@ export async function deleteSessionLegacy(id: string): Promise<void> {
   return deleteSession(id)
 }
 
-// These still use legacy implementations due to complex serialization
-export {
-  saveCurrentSession,
-  loadSessionData,
-} from "../core/session"
+// =============================================================================
+// Session Serialization Bridge (Effect implementations)
+// =============================================================================
+
+/**
+ * Deserialize a pane from Effect format to legacy format.
+ */
+function deserializePane(serialized: SerializedPaneData): PaneData {
+  return {
+    id: serialized.id,
+    title: serialized.title,
+    // ptyId is intentionally omitted - will be created on session load
+  }
+}
+
+/**
+ * Deserialize a workspace from Effect format to legacy format.
+ */
+function deserializeWorkspace(serialized: SerializedWorkspace): Workspace {
+  return {
+    id: serialized.id as WorkspaceId,
+    mainPane: serialized.mainPane ? deserializePane(serialized.mainPane) : null,
+    stackPanes: serialized.stackPanes.map(deserializePane),
+    focusedPaneId: serialized.focusedPaneId,
+    activeStackIndex: serialized.activeStackIndex,
+    layoutMode: serialized.layoutMode,
+    zoomed: serialized.zoomed,
+  }
+}
+
+/**
+ * Extract cwd map from Effect serialized session.
+ */
+function extractCwdMap(session: EffectSerializedSession): Map<string, string> {
+  const cwdMap = new Map<string, string>()
+  for (const ws of session.workspaces) {
+    if (ws.mainPane) {
+      cwdMap.set(ws.mainPane.id, ws.mainPane.cwd)
+    }
+    for (const pane of ws.stackPanes) {
+      cwdMap.set(pane.id, pane.cwd)
+    }
+  }
+  return cwdMap
+}
+
+/**
+ * Save the current session state using Effect service.
+ */
+export async function saveCurrentSession(
+  metadata: LegacySessionMetadata,
+  workspaces: Map<WorkspaceId, Workspace>,
+  activeWorkspaceId: WorkspaceId,
+  getCwd: (ptyId: string) => Promise<string>
+): Promise<void> {
+  await runEffect(
+    Effect.gen(function* () {
+      const manager = yield* SessionManager
+
+      // Convert legacy metadata to Effect metadata
+      const effectMetadata = EffectSessionMetadata.make({
+        id: SessionId.make(metadata.id),
+        name: metadata.name,
+        createdAt: metadata.createdAt,
+        lastSwitchedAt: metadata.lastSwitchedAt,
+        autoNamed: metadata.autoNamed,
+      })
+
+      // Convert Map<WorkspaceId, Workspace> to ReadonlyMap<number, WorkspaceState>
+      const workspaceState = new Map<number, {
+        mainPane: { id: string; ptyId?: string; title?: string } | null
+        stackPanes: Array<{ id: string; ptyId?: string; title?: string }>
+        focusedPaneId?: string
+        layoutMode: "vertical" | "horizontal" | "stacked"
+        activeStackIndex: number
+        zoomed: boolean
+      }>()
+
+      for (const [id, ws] of workspaces) {
+        workspaceState.set(id, {
+          mainPane: ws.mainPane ? {
+            id: ws.mainPane.id,
+            ptyId: ws.mainPane.ptyId,
+            title: ws.mainPane.title,
+          } : null,
+          stackPanes: ws.stackPanes.map(p => ({
+            id: p.id,
+            ptyId: p.ptyId,
+            title: p.title,
+          })),
+          focusedPaneId: ws.focusedPaneId ?? undefined,
+          layoutMode: ws.layoutMode,
+          activeStackIndex: ws.activeStackIndex,
+          zoomed: ws.zoomed,
+        })
+      }
+
+      yield* manager.quickSave(effectMetadata, workspaceState, activeWorkspaceId, getCwd)
+    })
+  )
+}
+
+/**
+ * Load a session from disk using Effect service.
+ * Returns the deserialized data and a CWD map for PTY creation.
+ */
+export async function loadSessionData(
+  sessionId: string
+): Promise<{
+  metadata: LegacySessionMetadata
+  workspaces: Map<WorkspaceId, Workspace>
+  activeWorkspaceId: WorkspaceId
+  cwdMap: Map<string, string>
+} | null> {
+  try {
+    return await runEffect(
+      Effect.gen(function* () {
+        const manager = yield* SessionManager
+        const session = yield* manager.loadSession(SessionId.make(sessionId))
+
+        // Convert Effect metadata to legacy metadata
+        const metadata: LegacySessionMetadata = {
+          id: session.metadata.id,
+          name: session.metadata.name,
+          createdAt: session.metadata.createdAt,
+          lastSwitchedAt: session.metadata.lastSwitchedAt,
+          autoNamed: session.metadata.autoNamed,
+        }
+
+        // Deserialize workspaces
+        const workspaces = new Map<WorkspaceId, Workspace>()
+        for (const ws of session.workspaces) {
+          workspaces.set(ws.id as WorkspaceId, deserializeWorkspace(ws))
+        }
+
+        // Extract CWD map
+        const cwdMap = extractCwdMap(session)
+
+        return {
+          metadata,
+          workspaces,
+          activeWorkspaceId: session.activeWorkspaceId as WorkspaceId,
+          cwdMap,
+        }
+      })
+    )
+  } catch {
+    return null
+  }
+}
