@@ -21,6 +21,7 @@ import type {
   Workspace,
   WorkspaceId,
   PaneData,
+  TerminalState,
 } from "../core/types"
 
 // =============================================================================
@@ -153,6 +154,115 @@ export async function destroyAllPtys(): Promise<void> {
       yield* pty.destroyAll()
     })
   )
+}
+
+/**
+ * Get terminal state for a PTY session.
+ */
+export async function getTerminalState(ptyId: string): Promise<TerminalState | null> {
+  try {
+    return await runEffect(
+      Effect.gen(function* () {
+        const pty = yield* Pty
+        return yield* pty.getTerminalState(PtyId.make(ptyId))
+      })
+    )
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Register an exit callback for a PTY session.
+ * Returns an unsubscribe function.
+ */
+export async function onPtyExit(
+  ptyId: string,
+  callback: (exitCode: number) => void
+): Promise<() => void> {
+  try {
+    return await runEffect(
+      Effect.gen(function* () {
+        const pty = yield* Pty
+        return yield* pty.onExit(PtyId.make(ptyId), callback)
+      })
+    )
+  } catch {
+    return () => {}
+  }
+}
+
+/**
+ * Set pane position for graphics passthrough.
+ */
+export async function setPanePosition(
+  ptyId: string,
+  x: number,
+  y: number
+): Promise<void> {
+  await runEffectIgnore(
+    Effect.gen(function* () {
+      const pty = yield* Pty
+      yield* pty.setPanePosition(PtyId.make(ptyId), x, y)
+    })
+  )
+}
+
+/**
+ * Get scroll state for a PTY session.
+ */
+export async function getScrollState(
+  ptyId: string
+): Promise<{ viewportOffset: number; scrollbackLength: number; isAtBottom: boolean } | null> {
+  try {
+    return await runEffect(
+      Effect.gen(function* () {
+        const pty = yield* Pty
+        return yield* pty.getScrollState(PtyId.make(ptyId))
+      })
+    )
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Set scroll offset for a PTY session.
+ */
+export async function setScrollOffset(ptyId: string, offset: number): Promise<void> {
+  await runEffectIgnore(
+    Effect.gen(function* () {
+      const pty = yield* Pty
+      yield* pty.setScrollOffset(PtyId.make(ptyId), offset)
+    })
+  )
+}
+
+/**
+ * Scroll terminal to bottom (live content).
+ */
+export async function scrollToBottom(ptyId: string): Promise<void> {
+  await setScrollOffset(ptyId, 0)
+}
+
+/**
+ * Subscribe to terminal state updates.
+ * Returns an unsubscribe function.
+ */
+export async function subscribeToPty(
+  ptyId: string,
+  callback: (state: TerminalState) => void
+): Promise<() => void> {
+  try {
+    return await runEffect(
+      Effect.gen(function* () {
+        const pty = yield* Pty
+        return yield* pty.subscribe(PtyId.make(ptyId), callback)
+      })
+    )
+  } catch {
+    return () => {}
+  }
 }
 
 // =============================================================================
