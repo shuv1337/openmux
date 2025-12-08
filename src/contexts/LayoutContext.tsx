@@ -66,6 +66,8 @@ interface LayoutState {
   activeWorkspaceId: WorkspaceId;
   viewport: Rectangle;
   config: BSPConfig;
+  /** Version counter that increments on save-worthy changes */
+  layoutVersion: number;
 }
 
 type LayoutAction =
@@ -231,7 +233,7 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
       }
 
       updated = recalculateLayout(updated, state.viewport, state.config);
-      return { ...state, workspaces: updateWorkspace(state, updated) };
+      return { ...state, workspaces: updateWorkspace(state, updated), layoutVersion: state.layoutVersion + 1 };
     }
 
     case 'CLOSE_PANE': {
@@ -287,13 +289,13 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
 
       if (updated.mainPane) {
         updated = recalculateLayout(updated, state.viewport, state.config);
-        return { ...state, workspaces: updateWorkspace(state, updated) };
+        return { ...state, workspaces: updateWorkspace(state, updated), layoutVersion: state.layoutVersion + 1 };
       }
 
       // Workspace is now empty - remove it
       const newWorkspaces = new Map(state.workspaces);
       newWorkspaces.delete(workspace.id);
-      return { ...state, workspaces: newWorkspaces };
+      return { ...state, workspaces: newWorkspaces, layoutVersion: state.layoutVersion + 1 };
     }
 
     case 'CLOSE_PANE_BY_ID': {
@@ -357,13 +359,13 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
 
       if (updated.mainPane) {
         updated = recalculateLayout(updated, state.viewport, state.config);
-        return { ...state, workspaces: updateWorkspace(state, updated) };
+        return { ...state, workspaces: updateWorkspace(state, updated), layoutVersion: state.layoutVersion + 1 };
       }
 
       // Workspace is now empty - remove it
       const newWorkspaces = new Map(state.workspaces);
       newWorkspaces.delete(workspace.id);
-      return { ...state, workspaces: newWorkspaces };
+      return { ...state, workspaces: newWorkspaces, layoutVersion: state.layoutVersion + 1 };
     }
 
     case 'SET_VIEWPORT': {
@@ -386,9 +388,10 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
           ...state,
           workspaces: updateWorkspace(state, newWorkspace),
           activeWorkspaceId: action.workspaceId,
+          layoutVersion: state.layoutVersion + 1,
         };
       }
-      return { ...state, activeWorkspaceId: action.workspaceId };
+      return { ...state, activeWorkspaceId: action.workspaceId, layoutVersion: state.layoutVersion + 1 };
     }
 
     case 'SET_LAYOUT_MODE': {
@@ -397,7 +400,7 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
       if (updated.mainPane) {
         updated = recalculateLayout(updated, state.viewport, state.config);
       }
-      return { ...state, workspaces: updateWorkspace(state, updated) };
+      return { ...state, workspaces: updateWorkspace(state, updated), layoutVersion: state.layoutVersion + 1 };
     }
 
     case 'SET_PANE_PTY': {
@@ -444,7 +447,7 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
       };
 
       updated = recalculateLayout(updated, state.viewport, state.config);
-      return { ...state, workspaces: updateWorkspace(state, updated) };
+      return { ...state, workspaces: updateWorkspace(state, updated), layoutVersion: state.layoutVersion + 1 };
     }
 
     case 'TOGGLE_ZOOM': {
@@ -457,7 +460,7 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
       };
 
       updated = recalculateLayout(updated, state.viewport, state.config);
-      return { ...state, workspaces: updateWorkspace(state, updated) };
+      return { ...state, workspaces: updateWorkspace(state, updated), layoutVersion: state.layoutVersion + 1 };
     }
 
     case 'LOAD_SESSION': {
@@ -499,6 +502,8 @@ interface LayoutContextValue {
   paneCount: number;
   panes: PaneData[];
   populatedWorkspaces: WorkspaceId[];
+  /** Version counter that increments on save-worthy layout changes */
+  layoutVersion: number;
 }
 
 const LayoutContext = createContext<LayoutContextValue | null>(null);
@@ -516,6 +521,7 @@ export function LayoutProvider({ config, children }: LayoutProviderProps) {
     activeWorkspaceId: 1,
     viewport: { x: 0, y: 0, width: 80, height: 24 },
     config: mergedConfig,
+    layoutVersion: 0,
   };
 
   const [state, dispatch] = useReducer(layoutReducer, initialState);
@@ -541,6 +547,7 @@ export function LayoutProvider({ config, children }: LayoutProviderProps) {
       paneCount: getWorkspacePaneCount(activeWorkspace),
       panes: getAllWorkspacePanes(activeWorkspace),
       populatedWorkspaces,
+      layoutVersion: state.layoutVersion,
     };
   }, [state]);
 

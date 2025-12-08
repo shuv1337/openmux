@@ -211,6 +211,8 @@ interface SessionProviderProps {
   onBeforeSwitch: (currentSessionId: string) => void;
   /** Callback to cleanup PTYs when a session is deleted */
   onDeleteSession: (sessionId: string) => void;
+  /** Layout version counter - triggers save when changed */
+  layoutVersion?: number;
 }
 
 export function SessionProvider({
@@ -221,6 +223,7 @@ export function SessionProvider({
   onSessionLoad,
   onBeforeSwitch,
   onDeleteSession,
+  layoutVersion,
 }: SessionProviderProps) {
   const initialState: SessionState = {
     sessions: [],
@@ -325,6 +328,33 @@ export function SessionProvider({
 
     return () => clearInterval(interval);
   }, [state.activeSession]);
+
+  // Track previous layoutVersion to detect changes
+  const prevLayoutVersionRef = useRef(layoutVersion);
+
+  // Immediate save when layoutVersion changes (pane/workspace changes)
+  useEffect(() => {
+    // Skip on initial render or if no active session
+    if (prevLayoutVersionRef.current === layoutVersion || !state.activeSession) {
+      prevLayoutVersionRef.current = layoutVersion;
+      return;
+    }
+
+    prevLayoutVersionRef.current = layoutVersion;
+
+    // Save immediately when layout changes
+    const workspaces = getWorkspacesRef.current();
+    const activeWorkspaceId = getActiveWorkspaceIdRef.current();
+
+    if (workspaces.size > 0) {
+      saveCurrentSession(
+        state.activeSession,
+        workspaces,
+        activeWorkspaceId,
+        getCwdRef.current
+      );
+    }
+  }, [layoutVersion, state.activeSession]);
 
   const createSession = useCallback(async (name?: string) => {
     // Save current session first

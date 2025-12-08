@@ -30,7 +30,7 @@ function AppContent() {
   // Track pending CWD for new panes (captured before NEW_PANE dispatch)
   const pendingCwdRef = useRef<string | null>(null);
 
-  // Session management
+  // Session management (for quit handler)
   const { saveSession } = useSession();
 
   // Create new pane handler that captures CWD first
@@ -39,9 +39,8 @@ function AppContent() {
     const cwd = await getFocusedCwd();
     pendingCwdRef.current = cwd;
     dispatch({ type: 'NEW_PANE' });
-    // Save session after pane creation (debounced by the save logic)
-    setTimeout(() => saveSession(), 500);
-  }, [dispatch, getFocusedCwd, saveSession]);
+    // Session save is triggered automatically via layoutVersion change
+  }, [dispatch, getFocusedCwd]);
 
   // Create paste handler for manual paste (Ctrl+V, prefix+p/])
   const handlePaste = useCallback(() => {
@@ -275,7 +274,7 @@ function AppContent() {
  * This component lives inside all contexts and provides callbacks to SessionContext
  */
 function SessionBridge({ children }: { children: React.ReactNode }) {
-  const { dispatch: layoutDispatch, state: layoutState } = useLayout();
+  const { dispatch: layoutDispatch, state: layoutState, layoutVersion } = useLayout();
   const { createPTY, destroyAllPTYs, suspendSession, resumeSession, cleanupSessionPtys, getSessionCwd, isInitialized } = useTerminal();
 
   // Refs for stable callbacks
@@ -370,6 +369,7 @@ function SessionBridge({ children }: { children: React.ReactNode }) {
       onSessionLoad={onSessionLoad}
       onBeforeSwitch={onBeforeSwitch}
       onDeleteSession={onDeleteSession}
+      layoutVersion={layoutVersion}
     >
       {children}
     </SessionProvider>
