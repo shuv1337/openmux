@@ -50,7 +50,7 @@ bun run build --install
 Download prebuilt binaries from [GitHub Releases](https://github.com/monotykamary/openmux/releases).
 
 Available platforms:
-- macOS (Apple Silicon / Intel)
+- macOS (Apple Silicon)
 - Linux (x64 / arm64)
 
 ## Usage
