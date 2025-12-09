@@ -2,7 +2,9 @@
 set -euo pipefail
 
 # openmux npm bin wrapper
-# Locates and executes the downloaded binary
+# Downloads binary on first run if missing, then executes
+
+REPO="monotykamary/openmux"
 
 # Find the package directory - check multiple possible locations
 find_package_dir() {
@@ -44,7 +46,89 @@ find_package_dir() {
     echo ""
 }
 
+get_version() {
+    local pkg_json="$1/package.json"
+    if [[ -f "$pkg_json" ]]; then
+        grep '"version"' "$pkg_json" | head -1 | sed 's/.*"version": *"\([^"]*\)".*/\1/'
+    else
+        echo ""
+    fi
+}
+
+get_platform() {
+    local os arch
+    os="$(uname -s)"
+    arch="$(uname -m)"
+
+    case "$os" in
+        Darwin) os="darwin" ;;
+        Linux) os="linux" ;;
+        *) echo ""; return ;;
+    esac
+
+    case "$arch" in
+        x86_64|amd64) arch="x64" ;;
+        arm64|aarch64) arch="arm64" ;;
+        *) echo ""; return ;;
+    esac
+
+    echo "${os}-${arch}"
+}
+
+download_binary() {
+    local package_dir="$1"
+    local dist_dir="$package_dir/dist"
+    local version="v$(get_version "$package_dir")"
+    local platform="$(get_platform)"
+
+    if [[ -z "$version" || "$version" == "v" ]]; then
+        echo "Error: Could not determine openmux version" >&2
+        return 1
+    fi
+
+    if [[ -z "$platform" ]]; then
+        echo "Error: Unsupported platform" >&2
+        return 1
+    fi
+
+    local url="https://github.com/$REPO/releases/download/$version/openmux-$version-$platform.tar.gz"
+
+    echo "Downloading openmux $version for $platform..."
+    echo "From: $url"
+
+    mkdir -p "$dist_dir"
+    local tmp_file="$dist_dir/download.tar.gz"
+
+    # Download
+    if command -v curl &>/dev/null; then
+        curl -fsSL "$url" -o "$tmp_file" || return 1
+    elif command -v wget &>/dev/null; then
+        wget -q "$url" -O "$tmp_file" || return 1
+    else
+        echo "Error: curl or wget required" >&2
+        return 1
+    fi
+
+    # Extract
+    echo "Extracting..."
+    tar -xzf "$tmp_file" -C "$dist_dir"
+    rm -f "$tmp_file"
+
+    # Make executable
+    chmod +x "$dist_dir/openmux-bin" 2>/dev/null || true
+    chmod +x "$dist_dir/openmux" 2>/dev/null || true
+
+    echo "Ready!"
+    echo ""
+}
+
 PACKAGE_DIR="$(find_package_dir)"
+
+if [[ -z "$PACKAGE_DIR" ]]; then
+    echo "Error: Could not find openmux package directory" >&2
+    exit 1
+fi
+
 DIST_DIR="$PACKAGE_DIR/dist"
 
 # Determine library extension based on OS
@@ -54,16 +138,9 @@ case "$(uname -s)" in
     *) echo "Unsupported OS" >&2; exit 1 ;;
 esac
 
-# Check if binary exists
-if [[ -z "$PACKAGE_DIR" || ! -x "$DIST_DIR/openmux-bin" ]]; then
-    echo "Error: openmux binary not found" >&2
-    echo "Package dir: ${PACKAGE_DIR:-not found}" >&2
-    echo "Expected binary at: $DIST_DIR/openmux-bin" >&2
-    echo "" >&2
-    echo "Try reinstalling: npm install -g openmux" >&2
-    echo "Or run postinstall manually:" >&2
-    echo "  node \"\$PACKAGE_DIR/scripts/postinstall.cjs\"" >&2
-    exit 1
+# Download binary if missing
+if [[ ! -x "$DIST_DIR/openmux-bin" ]]; then
+    download_binary "$PACKAGE_DIR" || exit 1
 fi
 
 # Set library path and execute
