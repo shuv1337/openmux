@@ -378,26 +378,49 @@ export class GhosttyEmulator {
   }
 
   /**
-   * Check if a codepoint is a zero-width character that should use default colors
+   * Check if a codepoint is a zero-width/invisible character that should use default colors
    * These are invisible modifiers that can carry stale color information
+   * Based on Unicode "Default_Ignorable_Code_Point" property
    */
   private isZeroWidthChar(codepoint: number): boolean {
-    // Zero-width space (U+200B)
-    if (codepoint === 0x200B) return true;
-    // Zero-width non-joiner (U+200C)
-    if (codepoint === 0x200C) return true;
-    // Zero-width joiner (U+200D)
-    if (codepoint === 0x200D) return true;
-    // Left-to-right mark (U+200E)
-    if (codepoint === 0x200E) return true;
-    // Right-to-left mark (U+200F)
-    if (codepoint === 0x200F) return true;
-    // Word joiner (U+2060)
-    if (codepoint === 0x2060) return true;
-    // Byte order mark / Zero-width no-break space (U+FEFF)
-    if (codepoint === 0xFEFF) return true;
+    // Soft hyphen (U+00AD) - invisible unless at line break
+    if (codepoint === 0x00AD) return true;
+    // Combining grapheme joiner (U+034F)
+    if (codepoint === 0x034F) return true;
+    // Arabic letter mark (U+061C)
+    if (codepoint === 0x061C) return true;
+    // Hangul jungseong/jongseong fillers (U+115F-U+1160)
+    if (codepoint >= 0x115F && codepoint <= 0x1160) return true;
+    // Khmer vowel inherent (U+17B4-U+17B5)
+    if (codepoint >= 0x17B4 && codepoint <= 0x17B5) return true;
+    // Mongolian free variation selectors and vowel separator (U+180B-U+180F)
+    if (codepoint >= 0x180B && codepoint <= 0x180F) return true;
+    // Zero-width and directional formatting (U+200B-U+200F)
+    if (codepoint >= 0x200B && codepoint <= 0x200F) return true;
+    // Line/paragraph separators (U+2028-U+2029)
+    if (codepoint >= 0x2028 && codepoint <= 0x2029) return true;
+    // Bidirectional formatting (U+202A-U+202E)
+    if (codepoint >= 0x202A && codepoint <= 0x202E) return true;
+    // Word joiner and invisible operators (U+2060-U+206F)
+    if (codepoint >= 0x2060 && codepoint <= 0x206F) return true;
+    // Hangul filler (U+3164)
+    if (codepoint === 0x3164) return true;
     // Variation selectors (U+FE00-U+FE0F)
     if (codepoint >= 0xFE00 && codepoint <= 0xFE0F) return true;
+    // Byte order mark / Zero-width no-break space (U+FEFF)
+    if (codepoint === 0xFEFF) return true;
+    // Halfwidth Hangul filler (U+FFA0)
+    if (codepoint === 0xFFA0) return true;
+    // Shorthand format controls (U+1BCA0-U+1BCA3)
+    if (codepoint >= 0x1BCA0 && codepoint <= 0x1BCA3) return true;
+    // Musical symbol formatting (U+1D173-U+1D17A)
+    if (codepoint >= 0x1D173 && codepoint <= 0x1D17A) return true;
+    // Language tag (U+E0001)
+    if (codepoint === 0xE0001) return true;
+    // Tag characters (U+E0020-U+E007F)
+    if (codepoint >= 0xE0020 && codepoint <= 0xE007F) return true;
+    // Variation selectors supplement (U+E0100-U+E01EF)
+    if (codepoint >= 0xE0100 && codepoint <= 0xE01EF) return true;
     return false;
   }
 
