@@ -5,31 +5,29 @@ set -euo pipefail
 # Usage: curl -fsSL https://raw.githubusercontent.com/monotykamary/openmux/main/scripts/install.sh | bash
 
 REPO="monotykamary/openmux"
-BINARY_NAME="openmux"
-INSTALL_DIR="${OPENMUX_INSTALL_DIR:-$HOME/.local/bin}"
-LIB_DIR="${OPENMUX_LIB_DIR:-$HOME/.local/lib/openmux}"
+OPENMUX_HOME="${OPENMUX_HOME:-$HOME/.openmux}"
+BIN_DIR="$OPENMUX_HOME/bin"
 
 # Colors for output
+BOLD='\033[1m'
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-info() {
-    printf "${BLUE}info${NC}: %s\n" "$1"
-}
-
-success() {
-    printf "${GREEN}success${NC}: %s\n" "$1"
-}
-
-warn() {
-    printf "${YELLOW}warn${NC}: %s\n" "$1"
+spinner() {
+    local pid=$1
+    local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local i=0
+    while kill -0 "$pid" 2>/dev/null; do
+        printf "\r  %s %s" "${spin:i++%${#spin}:1}" "$2"
+        sleep 0.1
+    done
+    printf "\r"
 }
 
 error() {
-    printf "${RED}error${NC}: %s\n" "$1" >&2
+    printf "  ${RED}✗${NC} %s\n" "$1" >&2
     exit 1
 }
 
@@ -52,25 +50,26 @@ detect_platform() {
     esac
 
     TARGET="${OS}-${ARCH}"
-    info "Detected platform: $TARGET"
+
+    # Library extension
+    case "$OS" in
+        darwin) LIB_EXT="dylib" ;;
+        linux) LIB_EXT="so" ;;
+    esac
 }
 
 get_latest_version() {
-    info "Fetching latest version..."
-
     if command -v curl &> /dev/null; then
-        VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+        VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
     elif command -v wget &> /dev/null; then
-        VERSION=$(wget -qO- "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+        VERSION=$(wget -qO- "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
     else
-        error "curl or wget is required to download openmux"
+        error "curl or wget is required"
     fi
 
     if [[ -z "$VERSION" ]]; then
-        error "Failed to fetch latest version. Check https://github.com/$REPO/releases"
+        error "Failed to fetch latest version"
     fi
-
-    info "Latest version: $VERSION"
 }
 
 download_and_extract() {
@@ -80,97 +79,88 @@ download_and_extract() {
     tmp_dir=$(mktemp -d)
     trap 'rm -rf "$tmp_dir"' EXIT
 
-    info "Downloading from $url"
+    mkdir -p "$BIN_DIR"
 
+    # Download with spinner
     if command -v curl &> /dev/null; then
-        curl -fsSL "$url" -o "$tmp_dir/openmux.tar.gz" || error "Download failed. Check if release exists for $TARGET"
+        curl -fsSL "$url" -o "$tmp_dir/openmux.tar.gz" 2>/dev/null &
     else
-        wget -q "$url" -O "$tmp_dir/openmux.tar.gz" || error "Download failed. Check if release exists for $TARGET"
+        wget -q "$url" -O "$tmp_dir/openmux.tar.gz" 2>/dev/null &
     fi
+    spinner $! "Downloading..."
+    wait $! || error "Download failed"
+    printf "  ${GREEN}✓${NC} Downloaded\n"
 
-    info "Extracting..."
-    tar -xzf "$tmp_dir/openmux.tar.gz" -C "$tmp_dir"
+    # Extract with spinner
+    tar -xzf "$tmp_dir/openmux.tar.gz" -C "$tmp_dir" &
+    spinner $! "Extracting..."
+    wait $!
+    printf "  ${GREEN}✓${NC} Extracted\n"
 
-    # Create directories
-    mkdir -p "$INSTALL_DIR"
-    mkdir -p "$LIB_DIR"
+    # Move files to ~/.openmux/bin/
+    mv "$tmp_dir/openmux-bin" "$BIN_DIR/"
+    mv "$tmp_dir/librust_pty.$LIB_EXT" "$BIN_DIR/"
+    chmod +x "$BIN_DIR/openmux-bin"
 
-    # Move files
-    mv "$tmp_dir/openmux-bin" "$LIB_DIR/"
-    chmod +x "$LIB_DIR/openmux-bin"
-
-    # Move native library
-    if [[ "$OS" == "darwin" ]]; then
-        mv "$tmp_dir/librust_pty.dylib" "$LIB_DIR/"
-        LIB_EXT="dylib"
-    else
-        mv "$tmp_dir/librust_pty.so" "$LIB_DIR/"
-        LIB_EXT="so"
-    fi
+    # Write version file
+    echo "${VERSION#v}" > "$BIN_DIR/.version"
 
     # Create wrapper script
-    cat > "$INSTALL_DIR/$BINARY_NAME" << WRAPPER
+    cat > "$BIN_DIR/openmux" << WRAPPER
 #!/usr/bin/env bash
-export BUN_PTY_LIB="\${BUN_PTY_LIB:-$LIB_DIR/librust_pty.$LIB_EXT}"
-exec "$LIB_DIR/openmux-bin" "\$@"
+export BUN_PTY_LIB="\${BUN_PTY_LIB:-$BIN_DIR/librust_pty.$LIB_EXT}"
+exec "$BIN_DIR/openmux-bin" "\$@"
 WRAPPER
-    chmod +x "$INSTALL_DIR/$BINARY_NAME"
+    chmod +x "$BIN_DIR/openmux"
 
-    success "Installed openmux to $INSTALL_DIR/$BINARY_NAME"
+    printf "  ${GREEN}✓${NC} Installed to $BIN_DIR\n"
 }
 
 check_path() {
-    if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-        warn "$INSTALL_DIR is not in your PATH"
-        echo ""
-        echo "Add it to your shell configuration:"
-        echo ""
+    if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
+        printf "\n"
+        printf "  ${YELLOW}!${NC} Add to your PATH:\n"
+        printf "\n"
 
         local shell_name
         shell_name=$(basename "$SHELL")
 
         case "$shell_name" in
             bash)
-                echo "  echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> ~/.bashrc"
-                echo "  source ~/.bashrc"
+                printf "    echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.bashrc\n"
+                printf "    source ~/.bashrc\n"
                 ;;
             zsh)
-                echo "  echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> ~/.zshrc"
-                echo "  source ~/.zshrc"
+                printf "    echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.zshrc\n"
+                printf "    source ~/.zshrc\n"
                 ;;
             fish)
-                echo "  fish_add_path $INSTALL_DIR"
+                printf "    fish_add_path $BIN_DIR\n"
                 ;;
             *)
-                echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
+                printf "    export PATH=\"$BIN_DIR:\$PATH\"\n"
                 ;;
         esac
-        echo ""
-    fi
-}
-
-verify_installation() {
-    if [[ -x "$INSTALL_DIR/$BINARY_NAME" ]]; then
-        success "openmux $VERSION installed successfully!"
-        echo ""
-        echo "Run 'openmux' to start the terminal multiplexer."
-    else
-        error "Installation verification failed"
     fi
 }
 
 main() {
-    echo ""
-    echo "  ┌─────────────────────────────────┐"
-    echo "  │     openmux installer           │"
-    echo "  └─────────────────────────────────┘"
-    echo ""
+    printf "\n"
+    printf "  ${BOLD}openmux${NC} installer\n"
+    printf "\n"
 
     detect_platform
     get_latest_version
+
+    printf "  Installing ${BOLD}openmux${NC} %s (%s)\n" "$VERSION" "$TARGET"
+    printf "\n"
+
     download_and_extract
     check_path
-    verify_installation
+
+    printf "\n"
+    printf "  ${GREEN}Done!${NC} Run 'openmux' to start.\n"
+    printf "\n"
 }
 
 main

@@ -1,43 +1,45 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# openmux npm bin wrapper
-# Downloads binary on first run if missing, then executes
+# openmux npm/bun bin wrapper
+# Downloads binary to ~/.openmux/bin/ on first run if missing
 
 REPO="monotykamary/openmux"
+OPENMUX_HOME="${OPENMUX_HOME:-$HOME/.openmux}"
+BIN_DIR="$OPENMUX_HOME/bin"
 
-# Find the package directory - check multiple possible locations
-find_package_dir() {
+# Find package.json to get version
+find_package_json() {
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-    # Check if we're in the package's bin directory (npm/yarn symlink)
+    # Check if we're in the package's bin directory
     if [[ -f "$(dirname "$script_dir")/package.json" ]]; then
-        echo "$(dirname "$script_dir")"
+        echo "$(dirname "$script_dir")/package.json"
         return
     fi
 
-    # Bun global: ~/.bun/install/global/node_modules/openmux
-    if [[ -d "$HOME/.bun/install/global/node_modules/openmux" ]]; then
-        echo "$HOME/.bun/install/global/node_modules/openmux"
+    # Bun global
+    if [[ -f "$HOME/.bun/install/global/node_modules/openmux/package.json" ]]; then
+        echo "$HOME/.bun/install/global/node_modules/openmux/package.json"
         return
     fi
 
-    # npm global (macOS/Linux)
+    # npm global
     local npm_prefix
     npm_prefix="$(npm prefix -g 2>/dev/null || echo "")"
-    if [[ -n "$npm_prefix" && -d "$npm_prefix/lib/node_modules/openmux" ]]; then
-        echo "$npm_prefix/lib/node_modules/openmux"
+    if [[ -n "$npm_prefix" && -f "$npm_prefix/lib/node_modules/openmux/package.json" ]]; then
+        echo "$npm_prefix/lib/node_modules/openmux/package.json"
         return
     fi
 
-    # Fallback: search common locations
+    # Fallback locations
     local locations=(
-        "/usr/local/lib/node_modules/openmux"
-        "/usr/lib/node_modules/openmux"
-        "$HOME/.npm-global/lib/node_modules/openmux"
+        "/usr/local/lib/node_modules/openmux/package.json"
+        "/usr/lib/node_modules/openmux/package.json"
+        "$HOME/.npm-global/lib/node_modules/openmux/package.json"
     )
     for loc in "${locations[@]}"; do
-        if [[ -d "$loc" ]]; then
+        if [[ -f "$loc" ]]; then
             echo "$loc"
             return
         fi
@@ -47,7 +49,7 @@ find_package_dir() {
 }
 
 get_version() {
-    local pkg_json="$1/package.json"
+    local pkg_json="$1"
     if [[ -f "$pkg_json" ]]; then
         grep '"version"' "$pkg_json" | head -1 | sed 's/.*"version": *"\([^"]*\)".*/\1/'
     else
@@ -87,30 +89,23 @@ spinner() {
 }
 
 download_binary() {
-    local package_dir="$1"
-    local dist_dir="$package_dir/dist"
-    local version="v$(get_version "$package_dir")"
+    local version="$1"
     local platform="$(get_platform)"
-
-    if [[ -z "$version" || "$version" == "v" ]]; then
-        echo "Error: Could not determine openmux version" >&2
-        return 1
-    fi
 
     if [[ -z "$platform" ]]; then
         echo "Error: Unsupported platform" >&2
         return 1
     fi
 
-    local url="https://github.com/$REPO/releases/download/$version/openmux-$version-$platform.tar.gz"
+    local url="https://github.com/$REPO/releases/download/v$version/openmux-v$version-$platform.tar.gz"
 
     printf "\n"
-    printf "  \033[1mopenmux\033[0m %s\n" "$version"
+    printf "  \033[1mopenmux\033[0m v%s\n" "$version"
     printf "  Setting up for first run...\n"
     printf "\n"
 
-    mkdir -p "$dist_dir"
-    local tmp_file="$dist_dir/download.tar.gz"
+    mkdir -p "$BIN_DIR"
+    local tmp_file="$BIN_DIR/download.tar.gz"
 
     # Download with spinner
     if command -v curl &>/dev/null; then
@@ -126,29 +121,22 @@ download_binary() {
     printf "  \033[32m✓\033[0m Downloaded\n"
 
     # Extract with spinner
-    tar -xzf "$tmp_file" -C "$dist_dir" &
+    tar -xzf "$tmp_file" -C "$BIN_DIR" &
     spinner $! "Extracting..."
     wait $!
     rm -f "$tmp_file"
     printf "  \033[32m✓\033[0m Extracted\n"
 
     # Make executable
-    chmod +x "$dist_dir/openmux-bin" 2>/dev/null || true
-    chmod +x "$dist_dir/openmux" 2>/dev/null || true
+    chmod +x "$BIN_DIR/openmux-bin" 2>/dev/null || true
+
+    # Write version file for upgrade detection
+    echo "$version" > "$BIN_DIR/.version"
 
     printf "\n"
     printf "  \033[32mReady!\033[0m Starting openmux...\n"
     printf "\n"
 }
-
-PACKAGE_DIR="$(find_package_dir)"
-
-if [[ -z "$PACKAGE_DIR" ]]; then
-    echo "Error: Could not find openmux package directory" >&2
-    exit 1
-fi
-
-DIST_DIR="$PACKAGE_DIR/dist"
 
 # Determine library extension based on OS
 case "$(uname -s)" in
@@ -157,11 +145,34 @@ case "$(uname -s)" in
     *) echo "Unsupported OS" >&2; exit 1 ;;
 esac
 
-# Download binary if missing
-if [[ ! -x "$DIST_DIR/openmux-bin" ]]; then
-    download_binary "$PACKAGE_DIR" || exit 1
+# Get package version
+PKG_JSON="$(find_package_json)"
+if [[ -z "$PKG_JSON" ]]; then
+    # Fallback: if binary exists, just run it
+    if [[ -x "$BIN_DIR/openmux-bin" ]]; then
+        export BUN_PTY_LIB="${BUN_PTY_LIB:-$BIN_DIR/librust_pty.$LIB_EXT}"
+        exec "$BIN_DIR/openmux-bin" "$@"
+    fi
+    echo "Error: Could not find openmux package" >&2
+    exit 1
+fi
+
+VERSION="$(get_version "$PKG_JSON")"
+if [[ -z "$VERSION" ]]; then
+    echo "Error: Could not determine openmux version" >&2
+    exit 1
+fi
+
+# Check if binary exists and matches version
+INSTALLED_VERSION=""
+if [[ -f "$BIN_DIR/.version" ]]; then
+    INSTALLED_VERSION="$(cat "$BIN_DIR/.version")"
+fi
+
+if [[ ! -x "$BIN_DIR/openmux-bin" ]] || [[ "$INSTALLED_VERSION" != "$VERSION" ]]; then
+    download_binary "$VERSION" || exit 1
 fi
 
 # Set library path and execute
-export BUN_PTY_LIB="${BUN_PTY_LIB:-$DIST_DIR/librust_pty.$LIB_EXT}"
-exec "$DIST_DIR/openmux-bin" "$@"
+export BUN_PTY_LIB="${BUN_PTY_LIB:-$BIN_DIR/librust_pty.$LIB_EXT}"
+exec "$BIN_DIR/openmux-bin" "$@"
