@@ -371,6 +371,33 @@ export class GhosttyEmulator {
   }
 
   /**
+   * Check if a codepoint is a CJK ideograph that requires width=2
+   * These should only be rendered if the cell has proper double-width (width=2)
+   * If they appear with width=1, it's likely corrupted cell data
+   */
+  private isCjkIdeograph(codepoint: number): boolean {
+    // CJK Unified Ideographs (U+4E00-U+9FFF)
+    if (codepoint >= 0x4E00 && codepoint <= 0x9FFF) return true;
+    // CJK Unified Ideographs Extension A (U+3400-U+4DBF)
+    if (codepoint >= 0x3400 && codepoint <= 0x4DBF) return true;
+    // CJK Unified Ideographs Extension B (U+20000-U+2A6DF)
+    if (codepoint >= 0x20000 && codepoint <= 0x2A6DF) return true;
+    // CJK Unified Ideographs Extension C (U+2A700-U+2B73F)
+    if (codepoint >= 0x2A700 && codepoint <= 0x2B73F) return true;
+    // CJK Unified Ideographs Extension D (U+2B740-U+2B81F)
+    if (codepoint >= 0x2B740 && codepoint <= 0x2B81F) return true;
+    // CJK Unified Ideographs Extension E (U+2B820-U+2CEAF)
+    if (codepoint >= 0x2B820 && codepoint <= 0x2CEAF) return true;
+    // CJK Unified Ideographs Extension F (U+2CEB0-U+2EBEF)
+    if (codepoint >= 0x2CEB0 && codepoint <= 0x2EBEF) return true;
+    // CJK Compatibility Ideographs (U+F900-U+FAFF)
+    if (codepoint >= 0xF900 && codepoint <= 0xFAFF) return true;
+    // CJK Compatibility Ideographs Supplement (U+2F800-U+2FA1F)
+    if (codepoint >= 0x2F800 && codepoint <= 0x2FA1F) return true;
+    return false;
+  }
+
+  /**
    * Check if a codepoint is a zero-width/invisible character that should use default colors
    * These are invisible modifiers that can carry stale color information
    * Based on Unicode "Default_Ignorable_Code_Point" property
@@ -460,6 +487,25 @@ export class GhosttyEmulator {
     // Check for INVISIBLE flag (CellFlags.INVISIBLE = 32)
     // Invisible cells should render as space but keep their colors
     const isInvisible = (cell.flags & 32) !== 0;
+
+    // CJK ideographs should always have width=2. If we see a CJK codepoint with
+    // width=1, it's likely corrupted cell data (e.g., from byte misalignment in
+    // fast-rendering demos). Filter these out to prevent random Chinese chars.
+    if (this.isCjkIdeograph(cell.codepoint) && cell.width !== 2) {
+      return {
+        char: ' ',
+        fg: { r: cell.fg_r, g: cell.fg_g, b: cell.fg_b },
+        bg: { r: cell.bg_r, g: cell.bg_g, b: cell.bg_b },
+        bold: false,
+        italic: false,
+        underline: false,
+        strikethrough: false,
+        inverse: false,
+        blink: false,
+        dim: false,
+        width: 1,
+      };
+    }
 
     // For other invalid codepoints (null, control chars, etc.), preserve the cell's
     // colors but replace the character with a space. This keeps htop-style colored
