@@ -256,11 +256,6 @@ export class Pty extends Context.Tag("@openmux/Pty")<
             session.emulator.write(textData)
           }
 
-          // Auto-scroll to bottom
-          if (session.scrollState.viewportOffset > 0) {
-            session.scrollState.viewportOffset = 0
-          }
-
           // Batch notifications
           if (!session.pendingNotify) {
             session.pendingNotify = true
