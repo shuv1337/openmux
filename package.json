@@ -9,7 +9,7 @@
   },
   "files": [
     "bin",
-    "dist"
+    "scripts/postinstall.cjs"
   ],
   "scripts": {
     "start": "bun run src/index.tsx",
