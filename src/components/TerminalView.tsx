@@ -81,11 +81,7 @@ export const TerminalView = memo(function TerminalView({
   const emulatorRef = useRef<GhosttyEmulator | null>(null);
   // Version counter to trigger re-renders when state changes
   const [version, setVersion] = useState(0);
-  // Track last rendered row versions for delta updates
-  const lastRowVersionsRef = useRef<number[]>([]);
-  // Track last cursor position to re-render cursor row when it moves
-  const lastCursorRef = useRef<{ x: number; y: number }>({ x: -1, y: -1 });
-
+  
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
     let mounted = true;
@@ -169,11 +165,6 @@ export const TerminalView = memo(function TerminalView({
     const fallbackBg = getCachedRGBA(fallbackBgColor.r, fallbackBgColor.g, fallbackBgColor.b);
     const fallbackFg = BLACK;
 
-    // Delta update: determine which rows need re-rendering
-    const lastVersions = lastRowVersionsRef.current;
-    const lastCursor = lastCursorRef.current;
-    const { x: cursorX, y: cursorY } = state.cursor;
-
     // Pre-fetch all rows we need for rendering (optimization: fetch once per row, not per cell)
     const emulator = viewportOffset > 0 ? emulatorRef.current : null;
     const rowCache: (TerminalCell[] | null)[] = new Array(rows);
@@ -204,17 +195,6 @@ export const TerminalView = memo(function TerminalView({
       const row = rowCache[y];
       // Calculate absolute Y for selection check (accounts for scrollback)
       const absoluteY = scrollbackLength - viewportOffset + y;
-
-      // Delta optimization: skip unchanged rows when not scrolled
-      // Skip if: row version unchanged, cursor not on this row (now or before), no selection
-      const rowVersion = state.rowVersions?.[y] ?? 0;
-      const lastVersion = lastVersions[y] ?? -1;
-      const cursorOnRow = (cursorY === y) || (lastCursor.y === y);
-      const hasSelection = isCellSelected(ptyId, 0, absoluteY); // Quick check for any selection on row
-
-      if (viewportOffset === 0 && lastVersion === rowVersion && !cursorOnRow && !hasSelection) {
-        continue; // Skip this row - nothing changed
-      }
 
       for (let x = 0; x < cols; x++) {
         const cell = row?.[x] ?? null;
@@ -308,10 +288,7 @@ export const TerminalView = memo(function TerminalView({
       }
     }
 
-    // Update refs for next delta comparison
-    lastRowVersionsRef.current = state.rowVersions ? [...state.rowVersions] : [];
-    lastCursorRef.current = { x: cursorX, y: cursorY };
-  }, [width, height, isFocused, offsetX, offsetY, ptyId, isCellSelected, selectionVersion]);
+    }, [width, height, isFocused, offsetX, offsetY, ptyId, isCellSelected, selectionVersion]);
 
   const terminalState = terminalStateRef.current;
 
