@@ -9,7 +9,9 @@
   },
   "files": [
     "bin",
-    "scripts/postinstall.cjs"
+    "scripts/postinstall.cjs",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "start": "bun run src/index.tsx",
