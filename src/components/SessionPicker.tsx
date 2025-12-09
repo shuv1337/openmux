@@ -195,7 +195,9 @@ export function SessionPicker({ width, height }: SessionPickerProps) {
 
   // Calculate overlay dimensions
   const overlayWidth = Math.min(60, width - 4);
-  const overlayHeight = Math.min(filteredSessions.length + 7, height - 4);
+  // Height: search(1) + separator(1) + sessions/empty(max 1) + separator(1) + footer(1) + border(2) + padding(2) = 9 minimum
+  const sessionRowCount = Math.max(1, filteredSessions.length); // At least 1 for "No sessions found"
+  const overlayHeight = Math.min(sessionRowCount + 7, height - 4);
   const overlayX = Math.floor((width - overlayWidth) / 2);
   const overlayY = Math.floor((height - overlayHeight) / 2);
 
