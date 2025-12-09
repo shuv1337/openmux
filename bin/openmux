@@ -4,8 +4,47 @@ set -euo pipefail
 # openmux npm bin wrapper
 # Locates and executes the downloaded binary
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PACKAGE_DIR="$(dirname "$SCRIPT_DIR")"
+# Find the package directory - check multiple possible locations
+find_package_dir() {
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+    # Check if we're in the package's bin directory (npm/yarn symlink)
+    if [[ -f "$(dirname "$script_dir")/package.json" ]]; then
+        echo "$(dirname "$script_dir")"
+        return
+    fi
+
+    # Bun global: ~/.bun/install/global/node_modules/openmux
+    if [[ -d "$HOME/.bun/install/global/node_modules/openmux" ]]; then
+        echo "$HOME/.bun/install/global/node_modules/openmux"
+        return
+    fi
+
+    # npm global (macOS/Linux)
+    local npm_prefix
+    npm_prefix="$(npm prefix -g 2>/dev/null || echo "")"
+    if [[ -n "$npm_prefix" && -d "$npm_prefix/lib/node_modules/openmux" ]]; then
+        echo "$npm_prefix/lib/node_modules/openmux"
+        return
+    fi
+
+    # Fallback: search common locations
+    local locations=(
+        "/usr/local/lib/node_modules/openmux"
+        "/usr/lib/node_modules/openmux"
+        "$HOME/.npm-global/lib/node_modules/openmux"
+    )
+    for loc in "${locations[@]}"; do
+        if [[ -d "$loc" ]]; then
+            echo "$loc"
+            return
+        fi
+    done
+
+    echo ""
+}
+
+PACKAGE_DIR="$(find_package_dir)"
 DIST_DIR="$PACKAGE_DIR/dist"
 
 # Determine library extension based on OS
@@ -16,9 +55,14 @@ case "$(uname -s)" in
 esac
 
 # Check if binary exists
-if [[ ! -x "$DIST_DIR/openmux-bin" ]]; then
-    echo "Error: openmux binary not found at $DIST_DIR/openmux-bin" >&2
-    echo "Run 'npm run build' or reinstall the package" >&2
+if [[ -z "$PACKAGE_DIR" || ! -x "$DIST_DIR/openmux-bin" ]]; then
+    echo "Error: openmux binary not found" >&2
+    echo "Package dir: ${PACKAGE_DIR:-not found}" >&2
+    echo "Expected binary at: $DIST_DIR/openmux-bin" >&2
+    echo "" >&2
+    echo "Try reinstalling: npm install -g openmux" >&2
+    echo "Or run postinstall manually:" >&2
+    echo "  node \"\$PACKAGE_DIR/scripts/postinstall.cjs\"" >&2
     exit 1
 fi
 
