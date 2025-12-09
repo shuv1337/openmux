@@ -37,6 +37,18 @@ const SCROLLBAR_THUMB = RGBA.fromInts(100, 100, 100);
 const SELECTION_BG = RGBA.fromInts(80, 120, 200);
 const SELECTION_FG = RGBA.fromInts(255, 255, 255);
 
+// RGBA cache to avoid per-cell allocations (pack RGB into single number as key)
+const rgbaCache = new Map<number, RGBA>();
+function getCachedRGBA(r: number, g: number, b: number): RGBA {
+  const key = (r << 16) | (g << 8) | b;
+  let cached = rgbaCache.get(key);
+  if (!cached) {
+    cached = RGBA.fromInts(r, g, b);
+    rgbaCache.set(key, cached);
+  }
+  return cached;
+}
+
 // Text attributes for buffer API
 const ATTR_BOLD = 1;
 const ATTR_ITALIC = 2;
@@ -69,6 +81,10 @@ export const TerminalView = memo(function TerminalView({
   const emulatorRef = useRef<GhosttyEmulator | null>(null);
   // Version counter to trigger re-renders when state changes
   const [version, setVersion] = useState(0);
+  // Track last rendered row versions for delta updates
+  const lastRowVersionsRef = useRef<number[]>([]);
+  // Track last cursor position to re-render cursor row when it moves
+  const lastCursorRef = useRef<{ x: number; y: number }>({ x: -1, y: -1 });
 
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
@@ -150,8 +166,13 @@ export const TerminalView = memo(function TerminalView({
     const cols = Math.min(state.cols, width);
     // Use top-left cell bg as fallback to paint unused area; default to black
     const fallbackBgColor = state.cells?.[0]?.[0]?.bg ?? { r: 0, g: 0, b: 0 };
-    const fallbackBg = RGBA.fromInts(fallbackBgColor.r, fallbackBgColor.g, fallbackBgColor.b);
+    const fallbackBg = getCachedRGBA(fallbackBgColor.r, fallbackBgColor.g, fallbackBgColor.b);
     const fallbackFg = BLACK;
+
+    // Delta update: determine which rows need re-rendering
+    const lastVersions = lastRowVersionsRef.current;
+    const lastCursor = lastCursorRef.current;
+    const { x: cursorX, y: cursorY } = state.cursor;
 
     // Pre-fetch all rows we need for rendering (optimization: fetch once per row, not per cell)
     const emulator = viewportOffset > 0 ? emulatorRef.current : null;
@@ -183,6 +204,17 @@ export const TerminalView = memo(function TerminalView({
       const row = rowCache[y];
       // Calculate absolute Y for selection check (accounts for scrollback)
       const absoluteY = scrollbackLength - viewportOffset + y;
+
+      // Delta optimization: skip unchanged rows when not scrolled
+      // Skip if: row version unchanged, cursor not on this row (now or before), no selection
+      const rowVersion = state.rowVersions?.[y] ?? 0;
+      const lastVersion = lastVersions[y] ?? -1;
+      const cursorOnRow = (cursorY === y) || (lastCursor.y === y);
+      const hasSelection = isCellSelected(ptyId, 0, absoluteY); // Quick check for any selection on row
+
+      if (viewportOffset === 0 && lastVersion === rowVersion && !cursorOnRow && !hasSelection) {
+        continue; // Skip this row - nothing changed
+      }
 
       for (let x = 0; x < cols; x++) {
         const cell = row?.[x] ?? null;
@@ -218,8 +250,8 @@ export const TerminalView = memo(function TerminalView({
           [fgB, bgB] = [bgB, fgB];
         }
 
-        let fg = RGBA.fromInts(fgR, fgG, fgB);
-        let bg = RGBA.fromInts(bgR, bgG, bgB);
+        let fg = getCachedRGBA(fgR, fgG, fgB);
+        let bg = getCachedRGBA(bgR, bgG, bgB);
 
         // Apply selection styling (takes priority over cursor)
         if (isSelected) {
@@ -275,6 +307,10 @@ export const TerminalView = memo(function TerminalView({
         );
       }
     }
+
+    // Update refs for next delta comparison
+    lastRowVersionsRef.current = state.rowVersions ? [...state.rowVersions] : [];
+    lastCursorRef.current = { x: cursorX, y: cursorY };
   }, [width, height, isFocused, offsetX, offsetY, ptyId, isCellSelected, selectionVersion]);
 
   const terminalState = terminalStateRef.current;

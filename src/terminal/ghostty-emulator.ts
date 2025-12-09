@@ -66,6 +66,8 @@ export class GhosttyEmulator {
   // Row version tracking for efficient React change detection
   private rowVersions: number[] = [];
   private globalVersion = 0;
+  // Cached empty cell to avoid repeated allocation
+  private cachedEmptyCell: TerminalCell | null = null;
 
   constructor(options: GhosttyEmulatorOptions = {}) {
     const { cols = 80, rows = 24, colors } = options;
@@ -489,13 +491,16 @@ export class GhosttyEmulator {
   }
 
   /**
-   * Create an empty cell using the terminal's color scheme
+   * Create an empty cell using the terminal's color scheme (cached)
    */
   private createEmptyCell(): TerminalCell {
+    if (this.cachedEmptyCell) {
+      return this.cachedEmptyCell;
+    }
     const fg = extractRgb(this.colors.foreground);
     const bg = extractRgb(this.colors.background);
 
-    return {
+    this.cachedEmptyCell = {
       char: ' ',
       fg,
       bg,
@@ -508,6 +513,7 @@ export class GhosttyEmulator {
       dim: false,
       width: 1,
     };
+    return this.cachedEmptyCell;
   }
 
   /**
