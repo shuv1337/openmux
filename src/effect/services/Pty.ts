@@ -7,6 +7,7 @@ import { spawn, type IPty } from "bun-pty"
 import type { TerminalState } from "../../core/types"
 import { GhosttyEmulator } from "../../terminal/ghostty-emulator"
 import { GraphicsPassthrough } from "../../terminal/graphics-passthrough"
+import { DsrPassthrough } from "../../terminal/dsr-passthrough"
 import { getCapabilityEnvironment } from "../../terminal/capabilities"
 import { getHostColors } from "../../terminal/terminal-colors"
 import { PtySpawnError, PtyNotFoundError, PtyCwdError } from "../errors"
@@ -23,6 +24,7 @@ interface InternalPtySession {
   pty: IPty
   emulator: GhosttyEmulator
   graphicsPassthrough: GraphicsPassthrough
+  dsrPassthrough: DsrPassthrough
   cols: number
   rows: number
   cwd: string
@@ -211,6 +213,9 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         // Create graphics passthrough
         const graphicsPassthrough = new GraphicsPassthrough()
 
+        // Create DSR passthrough for cursor position queries
+        const dsrPassthrough = new DsrPassthrough()
+
         // Get capability environment
         const capabilityEnv = getCapabilityEnvironment()
 
@@ -239,6 +244,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           pty,
           emulator,
           graphicsPassthrough,
+          dsrPassthrough,
           cols,
           rows,
           cwd,
@@ -249,12 +255,26 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           scrollState: { viewportOffset: 0 },
         }
 
+        // Set up DSR passthrough - writes responses back to PTY
+        dsrPassthrough.setPtyWriter((response: string) => {
+          pty.write(response)
+        })
+        dsrPassthrough.setCursorGetter(() => {
+          const cursor = emulator.getCursor()
+          return { x: cursor.x, y: cursor.y }
+        })
+
         // Pending data buffer for batched writes
         let pendingData = ''
 
         // Wire up PTY data handler - batch both writes AND notifications
         pty.onData((data: string) => {
-          const textData = session.graphicsPassthrough.process(data)
+          // First, handle DSR queries (cursor position, device status)
+          // This must happen before graphics passthrough to intercept queries
+          const afterDsr = session.dsrPassthrough.process(data)
+
+          // Then handle graphics passthrough (Kitty graphics, Sixel)
+          const textData = session.graphicsPassthrough.process(afterDsr)
           if (textData.length > 0) {
             pendingData += textData
           }
@@ -338,9 +358,10 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           }
           session.subscribers.clear()
 
-          // Kill PTY and dispose emulator
+          // Kill PTY and dispose emulator and DSR passthrough
           session.pty.kill()
           session.emulator.dispose()
+          session.dsrPassthrough.dispose()
 
           // Remove from map
           yield* Ref.update(sessionsRef, HashMap.remove(id))
