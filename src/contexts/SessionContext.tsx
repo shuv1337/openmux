@@ -88,9 +88,14 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
       return { ...state, summaries: action.summaries };
 
     case 'TOGGLE_SESSION_PICKER': {
-      // Alt+tab behavior: when opening, select the previous session (index 1)
-      // Sessions are sorted by lastSwitchedAt, so index 0 is current, index 1 is previous
-      const newSelectedIndex = !state.showSessionPicker && state.sessions.length > 1 ? 1 : 0;
+      // Alt+tab behavior: when opening, select the first session that is NOT the current one
+      // Sessions are sorted by lastSwitchedAt (most recent first), so we find the first different session
+      let newSelectedIndex = 0;
+      if (!state.showSessionPicker && state.sessions.length > 1) {
+        // Find the first session that is not the currently active one
+        const otherSessionIndex = state.sessions.findIndex(s => s.id !== state.activeSessionId);
+        newSelectedIndex = otherSessionIndex !== -1 ? otherSessionIndex : 0;
+      }
       return {
         ...state,
         showSessionPicker: !state.showSessionPicker,
@@ -293,6 +298,10 @@ export function SessionProvider({
         const session = sessions.find(s => s.id === activeId);
         if (session) {
           dispatch({ type: 'SET_ACTIVE_SESSION', id: activeId, session });
+
+          // Update lastSwitchedAt so this session is properly marked as most recent
+          await switchToSession(activeId);
+          await refreshSessions();
 
           // Load session data and notify parent
           const data = await loadSessionData(activeId);
