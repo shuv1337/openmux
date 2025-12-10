@@ -1,9 +1,9 @@
 /**
- * DSR (Device Status Report) and OSC Query Passthrough
+ * DSR (Device Status Report), DA (Device Attributes), and OSC Query Passthrough
  *
- * Intercepts DSR and OSC queries from PTY output and generates appropriate responses
+ * Intercepts DSR, DA, and OSC queries from PTY output and generates appropriate responses
  * that are written back to the PTY, allowing applications inside openmux panes
- * to query cursor position, terminal status, and colors.
+ * to query cursor position, terminal status, capabilities, and colors.
  *
  * The flow:
  * 1. Application (e.g., codex) writes ESC[6n to query cursor position
@@ -15,6 +15,8 @@
  * Supported queries:
  * - DSR 6 (ESC[6n): Cursor Position Report - responds with ESC[row;colR
  * - DSR 5 (ESC[5n): Device Status Report - responds with ESC[0n (OK)
+ * - DA1 (ESC[c or ESC[0c): Primary Device Attributes - responds with VT220 capabilities
+ * - DA2 (ESC[>c or ESC[>0c): Secondary Device Attributes - responds with VT500 type
  * - OSC 10 (ESC]10;?): Foreground color query - responds with ESC]10;rgb:rr/gg/bb
  * - OSC 11 (ESC]11;?): Background color query - responds with ESC]11;rgb:rr/gg/bb
  */
@@ -27,6 +29,12 @@ const ST = `${ESC}\\`;
 const DSR_CPR_QUERY = `${ESC}[6n`;  // Cursor Position Report query
 const DSR_STATUS_QUERY = `${ESC}[5n`;  // Device Status query
 
+// Device Attributes query patterns
+const DA1_QUERY = `${ESC}[c`;  // Primary Device Attributes (short form)
+const DA1_QUERY_FULL = `${ESC}[0c`;  // Primary Device Attributes (explicit)
+const DA2_QUERY = `${ESC}[>c`;  // Secondary Device Attributes (short form)
+const DA2_QUERY_FULL = `${ESC}[>0c`;  // Secondary Device Attributes (explicit)
+
 // OSC color query patterns - can end with BEL or ST
 // OSC 10;? = query foreground, OSC 11;? = query background
 const OSC_FG_QUERY_BEL = `${ESC}]10;?${BEL}`;
@@ -35,7 +43,7 @@ const OSC_BG_QUERY_BEL = `${ESC}]11;?${BEL}`;
 const OSC_BG_QUERY_ST = `${ESC}]11;?${ST}`;
 
 export interface DsrQuery {
-  type: 'cpr' | 'status' | 'osc-fg' | 'osc-bg';
+  type: 'cpr' | 'status' | 'da1' | 'da2' | 'osc-fg' | 'osc-bg';
   startIndex: number;
   endIndex: number;
 }
@@ -48,12 +56,14 @@ export interface DsrParseResult {
 }
 
 /**
- * Quick check if data might contain DSR or OSC queries
+ * Quick check if data might contain DSR, DA, or OSC queries
  */
 function mightContainQueries(data: string): boolean {
-  // Check for DSR queries (ESC[5n, ESC[6n)
-  if (data.includes(`${ESC}[`) && (data.includes('6n') || data.includes('5n'))) {
-    return true;
+  // Check for DSR queries (ESC[5n, ESC[6n) and DA queries (ESC[c, ESC[>c)
+  if (data.includes(`${ESC}[`)) {
+    if (data.includes('6n') || data.includes('5n') || data.includes('c')) {
+      return true;
+    }
   }
   // Check for OSC color queries (ESC]10;? or ESC]11;?)
   if (data.includes(`${ESC}]`) && data.includes(';?')) {
@@ -103,6 +113,64 @@ export function parseDsrQueries(data: string): DsrParseResult {
         endIndex: currentIndex + 4,
       });
       currentIndex += 4;
+      textStart = currentIndex;
+      continue;
+    }
+
+    // Check for DA2 (Secondary Device Attributes) - must check before DA1
+    // DA2: ESC[>c or ESC[>0c
+    if (data.startsWith(DA2_QUERY_FULL, currentIndex)) {
+      if (currentIndex > textStart) {
+        textSegments.push(data.slice(textStart, currentIndex));
+      }
+      queries.push({
+        type: 'da2',
+        startIndex: currentIndex,
+        endIndex: currentIndex + DA2_QUERY_FULL.length,
+      });
+      currentIndex += DA2_QUERY_FULL.length;
+      textStart = currentIndex;
+      continue;
+    }
+    if (data.startsWith(DA2_QUERY, currentIndex)) {
+      if (currentIndex > textStart) {
+        textSegments.push(data.slice(textStart, currentIndex));
+      }
+      queries.push({
+        type: 'da2',
+        startIndex: currentIndex,
+        endIndex: currentIndex + DA2_QUERY.length,
+      });
+      currentIndex += DA2_QUERY.length;
+      textStart = currentIndex;
+      continue;
+    }
+
+    // Check for DA1 (Primary Device Attributes)
+    // DA1: ESC[c or ESC[0c
+    if (data.startsWith(DA1_QUERY_FULL, currentIndex)) {
+      if (currentIndex > textStart) {
+        textSegments.push(data.slice(textStart, currentIndex));
+      }
+      queries.push({
+        type: 'da1',
+        startIndex: currentIndex,
+        endIndex: currentIndex + DA1_QUERY_FULL.length,
+      });
+      currentIndex += DA1_QUERY_FULL.length;
+      textStart = currentIndex;
+      continue;
+    }
+    if (data.startsWith(DA1_QUERY, currentIndex)) {
+      if (currentIndex > textStart) {
+        textSegments.push(data.slice(textStart, currentIndex));
+      }
+      queries.push({
+        type: 'da1',
+        startIndex: currentIndex,
+        endIndex: currentIndex + DA1_QUERY.length,
+      });
+      currentIndex += DA1_QUERY.length;
       textStart = currentIndex;
       continue;
     }
@@ -215,7 +283,30 @@ export function generateOscBgResponse(r: number, g: number, b: number): string {
 }
 
 /**
- * DSR and OSC Passthrough handler for a PTY session
+ * Generate a Primary Device Attributes (DA1) response
+ * Format: ESC[?62;1;4;22c - Reports VT220 with capabilities:
+ * - 62: VT220
+ * - 1: 132 columns
+ * - 4: Sixel graphics
+ * - 22: ANSI color
+ */
+export function generateDa1Response(): string {
+  return `${ESC}[?62;1;4;22c`;
+}
+
+/**
+ * Generate a Secondary Device Attributes (DA2) response
+ * Format: ESC[>Pp;Pv;Pc c
+ * - Pp = Terminal type (65 = VT500)
+ * - Pv = Firmware version (100)
+ * - Pc = ROM cartridge registration (0 = none)
+ */
+export function generateDa2Response(): string {
+  return `${ESC}[>65;100;0c`;
+}
+
+/**
+ * DSR, DA, and OSC Passthrough handler for a PTY session
  *
  * Intercepts DSR and OSC queries from PTY output, generates responses using
  * cursor position and colors from the emulator, and writes them back to the PTY.
@@ -289,6 +380,14 @@ export class DsrPassthrough {
       const g = (colors.foreground >> 8) & 0xFF;
       const b = colors.foreground & 0xFF;
       const response = generateOscFgResponse(r, g, b);
+      this.ptyWriter(response);
+    } else if (query.type === 'da1') {
+      // Primary Device Attributes - report VT220 capabilities
+      const response = generateDa1Response();
+      this.ptyWriter(response);
+    } else if (query.type === 'da2') {
+      // Secondary Device Attributes - report VT500 type
+      const response = generateDa2Response();
       this.ptyWriter(response);
     } else if (query.type === 'osc-bg') {
       // Get background color
