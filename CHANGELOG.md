@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.19](https://github.com/monotykamary/openmux/compare/v0.1.18...v0.1.19) (2025-12-10)
+
+
+### Bug Fixes
+
+* prevent diamond question marks by filtering ghostty-web garbage codepoints ([e358889](https://github.com/monotykamary/openmux/commit/e358889f004c75bcf7eccd2ef8d622eeca7003dd))
+
 ### [0.1.18](https://github.com/monotykamary/openmux/compare/v0.1.17...v0.1.18) (2025-12-10)
 
 
