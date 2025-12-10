@@ -26,16 +26,44 @@ import {
 /**
  * Quick check if data might contain terminal queries
  * This is a fast-path optimization to avoid expensive parsing on most data
+ *
+ * CRITICAL: Use specific multi-character patterns, NOT single characters!
+ * Single chars like 'n', 'c', 'q' match almost ANY terminal output and cause
+ * massive performance degradation as all text goes through expensive parsing.
  */
 export function mightContainQueries(data: string): boolean {
   // Check for CSI sequences (ESC[)
   if (data.includes(`${ESC}[`)) {
-    // DSR queries (5n, 6n), DA queries (c), XTVERSION (q), DECRQM ($p)
-    // XTWINOPS uses specific patterns 14t, 16t, 18t to avoid false positives
-    // Kitty keyboard query is exactly ESC[?u - check for the full pattern
-    if (data.includes('n') || data.includes('c') || data.includes('q') ||
-        data.includes('$p') || data.includes(`${ESC}[?u`) ||
-        data.includes('14t') || data.includes('16t') || data.includes('18t')) {
+    // DSR queries: ESC[5n (status), ESC[6n (cursor position)
+    // Use 2-char patterns '5n' and '6n' - NOT single 'n' which matches everything
+    if (data.includes('5n') || data.includes('6n')) {
+      return true;
+    }
+    // DA1 queries: ESC[c or ESC[0c - check for pattern ending in 'c' after [
+    // Must check specific patterns, not just 'c' which matches all text
+    if (data.includes(`${ESC}[c`) || data.includes(`${ESC}[0c`) ||
+        data.includes(`${ESC}[>c`) || data.includes(`${ESC}[>0c`) ||
+        data.includes(`${ESC}[=c`) || data.includes(`${ESC}[=0c`)) {
+      return true;
+    }
+    // XTVERSION: ESC[>q or ESC[>0q - check full patterns
+    if (data.includes(`${ESC}[>q`) || data.includes(`${ESC}[>0q`)) {
+      return true;
+    }
+    // DECRQM: ESC[?...$p - the $p suffix is specific enough
+    if (data.includes('$p')) {
+      return true;
+    }
+    // Kitty keyboard query: ESC[?u - must use full pattern
+    if (data.includes(`${ESC}[?u`)) {
+      return true;
+    }
+    // DECXCPR: ESC[?6n - extended cursor position report
+    if (data.includes(`${ESC}[?6n`)) {
+      return true;
+    }
+    // XTWINOPS: specific patterns 14t, 16t, 18t
+    if (data.includes('14t') || data.includes('16t') || data.includes('18t')) {
       return true;
     }
   }
