@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.17](https://github.com/monotykamary/openmux/compare/v0.1.16...v0.1.17) (2025-12-10)
+
+
+### Features
+
+* add comprehensive terminal query passthrough support ([b9dce64](https://github.com/monotykamary/openmux/commit/b9dce6492ecc04266f15f2ab1eb76cc03b6d525c))
+* add DA1/DA2 device attributes passthrough for faster app startup ([fc41711](https://github.com/monotykamary/openmux/commit/fc417116412fe992ee16e5c36f0ed62c6515e6ae))
+* add DECRQSS and OSC 52 clipboard query support ([a7642e5](https://github.com/monotykamary/openmux/commit/a7642e5c8f0aa3ab7778f0833a16bcef6c3a283f))
+* add DECRQSS, XTSMGRAPHICS, and OSC 52 clipboard query support ([7b0bb10](https://github.com/monotykamary/openmux/commit/7b0bb104c5624b437a741ee8d6c67ca89380253d))
+* add safe XTWINOPS, DECXCPR, and OSC color query support ([78e9029](https://github.com/monotykamary/openmux/commit/78e90299647027414b87efc69f07f25dd1cd1c64))
+* expand terminal query coverage for maximum compatibility ([2dfd743](https://github.com/monotykamary/openmux/commit/2dfd743a213ae5f84db865020b842a215c93b2c6))
+
+
+### Refactoring
+
+* reorganize dsr-passthrough into terminal-query-passthrough module ([4a46dd1](https://github.com/monotykamary/openmux/commit/4a46dd16ef588e0b128c3919cf007ed2bbfd3404))
+
 ### [0.1.16](https://github.com/monotykamary/openmux/compare/v0.1.15...v0.1.16) (2025-12-10)
 
 
