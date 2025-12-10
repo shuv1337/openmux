@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.15](https://github.com/monotykamary/openmux/compare/v0.1.14...v0.1.15) (2025-12-10)
+
+
+### Features
+
+* add Alt+Enter support for soft newline ([d9eab57](https://github.com/monotykamary/openmux/commit/d9eab577340c19e22d0fce0989a43915a83b5737))
+
 ### [0.1.14](https://github.com/monotykamary/openmux/compare/v0.1.13...v0.1.14) (2025-12-10)
 
 
