@@ -447,8 +447,13 @@ export class GhosttyEmulator {
    * Filters out null, replacement chars, surrogates, control chars, and invalid Unicode
    */
   private isValidCodepoint(codepoint: number): boolean {
-    // Null/zero codepoint
-    if (codepoint <= 0) return false;
+    // Type safety: must be a finite positive integer
+    if (typeof codepoint !== 'number' ||
+        !Number.isFinite(codepoint) ||
+        codepoint !== (codepoint | 0) ||  // Must be integer (32-bit)
+        codepoint <= 0) {
+      return false;
+    }
     // C0 control characters (0x01-0x1F) except space (0x20)
     // These are non-printable and shouldn't be rendered as glyphs
     if (codepoint < 0x20) return false;
@@ -669,13 +674,41 @@ export class GhosttyEmulator {
     // colors but replace the character with a space. This keeps htop-style colored
     // backgrounds working while filtering out unprintable glyphs.
     let char = ' ';
-    if (!isInvisible && this.isValidCodepoint(cell.codepoint)) {
-      try {
-        char = String.fromCodePoint(cell.codepoint);
-      } catch {
-        // Fallback to space if fromCodePoint fails
-        char = ' ';
+    const cp = cell.codepoint;
+    if (!isInvisible && typeof cp === 'number' && cp >= 0x20) {
+      if (cp <= 0x7E) {
+        // Printable ASCII
+        char = String.fromCharCode(cp);
+      } else if (cp >= 0xA0 && cp <= 0xD7FF) {
+        // Latin-1 Supplement through pre-surrogate BMP
+        char = String.fromCharCode(cp);
+      } else if (cp >= 0xE000 && cp <= 0xFFFD && cp !== 0xFFFD) {
+        // Private Use Area (nerd fonts) through end of BMP, excluding U+FFFD
+        char = String.fromCharCode(cp);
+      } else if (cp >= 0x10000 && cp <= 0xCFFFF) {
+        // Planes 1-12 (skip Plane 13 - unassigned, ghostty-web returns garbage here)
+        try {
+          char = String.fromCodePoint(cp);
+        } catch {
+          char = ' ';
+        }
+      } else if (cp >= 0xE0000 && cp <= 0xEFFFF) {
+        // Plane 14: SSP (tags, variation selectors supplement)
+        try {
+          char = String.fromCodePoint(cp);
+        } catch {
+          char = ' ';
+        }
+      } else if (cp >= 0xF0000 && cp <= 0xFFFFF) {
+        // Plane 15: PUA-A (Supplementary Private Use Area A - file icons)
+        try {
+          char = String.fromCodePoint(cp);
+        } catch {
+          char = ' ';
+        }
       }
+      // Implicitly skip: DEL (0x7F), C1 controls (0x80-0x9F), surrogates (0xD800-0xDFFF),
+      // replacement char (0xFFFD), non-characters, Plane 13 + Plane 16 (ghostty-web bug)
     }
 
     return {
