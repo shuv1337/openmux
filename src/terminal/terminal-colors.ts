@@ -85,8 +85,10 @@ async function queryOscColors(timeoutMs: number): Promise<{ foreground?: number;
     const onData = (chunk: Buffer) => {
       buffer += decoder.decode(chunk);
 
-      const fgMatch = buffer.match(/\x1b]10;([^\x07\x1b]+)\x07/);
-      const bgMatch = buffer.match(/\x1b]11;([^\x07\x1b]+)\x07/);
+      // Parse OSC 10/11 responses - allow BEL (\x07) or ST (\x1b\\) terminators
+      // Ghostty and other modern terminals may use either
+      const fgMatch = buffer.match(/\x1b]10;([^\x07\x1b]+)(?:\x07|\x1b\\)/);
+      const bgMatch = buffer.match(/\x1b]11;([^\x07\x1b]+)(?:\x07|\x1b\\)/);
 
       const fg = fgMatch ? parseOscColor(fgMatch[1]) ?? undefined : undefined;
       const bg = bgMatch ? parseOscColor(bgMatch[1]) ?? undefined : undefined;
@@ -228,7 +230,7 @@ export async function queryHostColors(_timeoutMs: number = 500): Promise<Termina
 
   // First, try OSC queries (best-effort, only if TTY + raw mode available)
   try {
-    const osc = await queryOscColors(Math.min(200, _timeoutMs));
+    const osc = await queryOscColors(_timeoutMs);
     if (osc && (osc.foreground !== undefined || osc.background !== undefined || osc.paletteOverrides)) {
       const base16: (number | undefined)[] = new Array(16).fill(undefined);
       if (osc.paletteOverrides) {
@@ -270,14 +272,14 @@ function detectColorsFromEnvironment(): TerminalColors {
       const bgIndex = parseInt(parts[parts.length - 1], 10);
 
       // Map ANSI color index to RGB
-      const defaultPalette = generate256Palette();
-      const fg = (fgIndex >= 0 && fgIndex < 256) ? defaultPalette[fgIndex] : 0xFFFFFF;
-      const bg = (bgIndex >= 0 && bgIndex < 256) ? defaultPalette[bgIndex] : 0x000000;
+      const palette = generate256Palette();
+      const fg = (fgIndex >= 0 && fgIndex < 256) ? palette[fgIndex] : 0xFFFFFF;
+      const bg = (bgIndex >= 0 && bgIndex < 256) ? palette[bgIndex] : 0x000000;
 
       return {
         foreground: fg,
         background: bg,
-        palette: defaultPalette,
+        palette,
         isDefault: false,
       };
     }

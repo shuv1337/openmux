@@ -263,6 +263,13 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           const cursor = emulator.getCursor()
           return { x: cursor.x, y: cursor.y }
         })
+        dsrPassthrough.setColorsGetter(() => {
+          const termColors = emulator.getColors()
+          return {
+            foreground: termColors.foreground,
+            background: termColors.background,
+          }
+        })
 
         // Pending data buffer for batched writes
         let pendingData = ''

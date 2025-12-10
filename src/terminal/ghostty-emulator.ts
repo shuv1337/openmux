@@ -76,23 +76,16 @@ export class GhosttyEmulator {
     this._rows = rows;
     this.colors = colors ?? getDefaultColors();
 
+    // Configure ghostty-web with colors
+    // Always pass the palette to ensure consistent 256-color rendering
+    // The xterm-256color palette is standardized, so even default colors should be passed
     const config = {
       scrollbackLimit: 10000,
-    } as {
-      scrollbackLimit: number;
-      bgColor?: number;
-      fgColor?: number;
-      palette?: number[];
+      bgColor: this.colors.background,
+      fgColor: this.colors.foreground,
+      palette: this.colors.palette,
     };
 
-    // Only override the palette when we have real host colors; otherwise let ghostty default
-    if (!this.colors.isDefault) {
-      config.bgColor = this.colors.background;
-      config.fgColor = this.colors.foreground;
-      config.palette = this.colors.palette;
-    }
-
-    // Configure ghostty-web with queried colors
     this.terminal = ghostty.createTerminal(cols, rows, config);
 
     // Initialize cached cells
@@ -133,14 +126,18 @@ export class GhosttyEmulator {
 
   /**
    * Write data to terminal (parses VT sequences)
+   * Note: Does NOT notify subscribers - the caller (Pty service) is responsible
+   * for calling getTerminalState() and notifying its own subscribers.
+   * This prevents double-notification which would clear dirty flags prematurely.
    */
   write(data: string | Uint8Array): void {
     this.terminal.write(data);
-    this.notifySubscribers();
   }
 
   /**
    * Resize terminal
+   * Note: Does NOT notify subscribers - the caller (Pty service) is responsible
+   * for notifying its own subscribers after resize.
    */
   resize(cols: number, rows: number): void {
     this._cols = cols;
@@ -152,7 +149,6 @@ export class GhosttyEmulator {
 
     // Force full refresh after resize
     this.updateAllCells();
-    this.notifySubscribers();
   }
 
   /**
@@ -162,15 +158,41 @@ export class GhosttyEmulator {
     for (let y = 0; y < this._rows; y++) {
       const line = this.terminal.getLine(y);
       const row = this.cachedCells[y] || [];
+      const lineLength = line ? Math.min(line.length, this._cols) : 0;
 
       if (line) {
-        for (let x = 0; x < Math.min(line.length, this._cols); x++) {
+        for (let x = 0; x < lineLength; x++) {
           row[x] = this.convertCell(line[x]);
         }
       }
-      // Fill remaining with empty cells
-      for (let x = (line?.length ?? 0); x < this._cols; x++) {
-        row[x] = this.createEmptyCell();
+
+      // Fill remaining cells with last cell's background color (terminal EOL behavior)
+      if (lineLength < this._cols) {
+        const lastCell = line && lineLength > 0 ? line[lineLength - 1] : null;
+        const fillBg = lastCell
+          ? { r: lastCell.bg_r, g: lastCell.bg_g, b: lastCell.bg_b }
+          : extractRgb(this.colors.background);
+        const fillFg = lastCell
+          ? { r: lastCell.fg_r, g: lastCell.fg_g, b: lastCell.fg_b }
+          : extractRgb(this.colors.foreground);
+
+        const fillCell: TerminalCell = {
+          char: ' ',
+          fg: fillFg,
+          bg: fillBg,
+          bold: false,
+          italic: false,
+          underline: false,
+          strikethrough: false,
+          inverse: false,
+          blink: false,
+          dim: false,
+          width: 1,
+        };
+
+        for (let x = lineLength; x < this._cols; x++) {
+          row[x] = fillCell;
+        }
       }
 
       this.cachedCells[y] = row;
@@ -273,18 +295,62 @@ export class GhosttyEmulator {
 
   /**
    * Get terminal state in our format
-   * Uses dirty line tracking for efficient updates
+   * Creates fresh cell arrays to ensure React detects changes properly
    */
   getTerminalState(): TerminalState {
     const cursor = this.getCursor();
 
-    // Update only dirty lines (major optimization)
-    this.updateDirtyCells();
+    // Build fresh cells array from terminal state
+    const cells: TerminalCell[][] = [];
+    for (let y = 0; y < this._rows; y++) {
+      const line = this.terminal.getLine(y);
+      const row: TerminalCell[] = [];
+      const lineLength = line ? Math.min(line.length, this._cols) : 0;
+
+      if (line) {
+        for (let x = 0; x < lineLength; x++) {
+          row.push(this.convertCell(line[x]));
+        }
+      }
+
+      // Fill remaining cells with last cell's background color
+      if (lineLength < this._cols) {
+        const lastCell = line && lineLength > 0 ? line[lineLength - 1] : null;
+        const fillBg = lastCell
+          ? this.safeRgb(lastCell.bg_r, lastCell.bg_g, lastCell.bg_b)
+          : extractRgb(this.colors.background);
+        const fillFg = lastCell
+          ? this.safeRgb(lastCell.fg_r, lastCell.fg_g, lastCell.fg_b)
+          : extractRgb(this.colors.foreground);
+
+        const fillCell: TerminalCell = {
+          char: ' ',
+          fg: fillFg,
+          bg: fillBg,
+          bold: false,
+          italic: false,
+          underline: false,
+          strikethrough: false,
+          inverse: false,
+          blink: false,
+          dim: false,
+          width: 1,
+        };
+
+        for (let x = lineLength; x < this._cols; x++) {
+          row.push(fillCell);
+        }
+      }
+
+      cells.push(row);
+    }
+
+    this.terminal.clearDirty();
 
     return {
       cols: this._cols,
       rows: this._rows,
-      cells: this.cachedCells,
+      cells,
       rowVersions: this.rowVersions,
       cursor: {
         x: cursor.x,
@@ -327,11 +393,35 @@ export class GhosttyEmulator {
           row[x] = this.convertCell(line[x]);
         }
 
-        // If the line is shorter than the viewport width, fill with empty cells
-        // Don't propagate lastCell's colors - let ghostty-web handle styling
-        const emptyCell = this.createEmptyCell();
-        for (let x = lineLength; x < this._cols; x++) {
-          row[x] = emptyCell;
+        // If the line is shorter than the viewport width, fill remaining cells
+        // with spaces that inherit the last cell's background color.
+        // This matches terminal behavior where background color extends to EOL.
+        if (lineLength < this._cols) {
+          const lastCell = lineLength > 0 ? line[lineLength - 1] : null;
+          const fillBg = lastCell
+            ? { r: lastCell.bg_r, g: lastCell.bg_g, b: lastCell.bg_b }
+            : extractRgb(this.colors.background);
+          const fillFg = lastCell
+            ? { r: lastCell.fg_r, g: lastCell.fg_g, b: lastCell.fg_b }
+            : extractRgb(this.colors.foreground);
+
+          const fillCell: TerminalCell = {
+            char: ' ',
+            fg: fillFg,
+            bg: fillBg,
+            bold: false,
+            italic: false,
+            underline: false,
+            strikethrough: false,
+            inverse: false,
+            blink: false,
+            dim: false,
+            width: 1,
+          };
+
+          for (let x = lineLength; x < this._cols; x++) {
+            row[x] = fillCell;
+          }
         }
         // Increment version for this row
         this.rowVersions[y]++;
@@ -470,16 +560,31 @@ export class GhosttyEmulator {
   }
 
   /**
+   * Safely extract RGB values from a GhosttyCell, ensuring they are valid numbers
+   */
+  private safeRgb(r: number, g: number, b: number): { r: number; g: number; b: number } {
+    return {
+      r: typeof r === 'number' && !Number.isNaN(r) ? r : 0,
+      g: typeof g === 'number' && !Number.isNaN(g) ? g : 0,
+      b: typeof b === 'number' && !Number.isNaN(b) ? b : 0,
+    };
+  }
+
+  /**
    * Convert a single GhosttyCell to TerminalCell
    */
   private convertCell(cell: GhosttyCell): TerminalCell {
+    // Safely extract colors with validation
+    const fg = this.safeRgb(cell.fg_r, cell.fg_g, cell.fg_b);
+    const bg = this.safeRgb(cell.bg_r, cell.bg_g, cell.bg_b);
+
     // Zero-width characters render as space but preserve background color
     // Only strip foreground to prevent invisible colored text
     if (this.isZeroWidthChar(cell.codepoint)) {
       return {
         char: ' ',
-        fg: { r: cell.bg_r, g: cell.bg_g, b: cell.bg_b }, // fg = bg (invisible)
-        bg: { r: cell.bg_r, g: cell.bg_g, b: cell.bg_b },
+        fg: bg, // fg = bg (invisible)
+        bg: bg,
         bold: false,
         italic: false,
         underline: false,
@@ -497,8 +602,8 @@ export class GhosttyEmulator {
     if (this.isSpaceLikeChar(cell.codepoint)) {
       return {
         char: ' ',
-        fg: { r: cell.fg_r, g: cell.fg_g, b: cell.fg_b },
-        bg: { r: cell.bg_r, g: cell.bg_g, b: cell.bg_b },
+        fg,
+        bg,
         bold: (cell.flags & CellFlags.BOLD) !== 0,
         italic: (cell.flags & CellFlags.ITALIC) !== 0,
         underline: (cell.flags & CellFlags.UNDERLINE) !== 0,
@@ -515,8 +620,8 @@ export class GhosttyEmulator {
     if (cell.width === 0) {
       return {
         char: ' ',
-        fg: { r: cell.fg_r, g: cell.fg_g, b: cell.fg_b },
-        bg: { r: cell.bg_r, g: cell.bg_g, b: cell.bg_b },
+        fg,
+        bg,
         bold: false,
         italic: false,
         underline: false,
@@ -538,8 +643,8 @@ export class GhosttyEmulator {
     if (this.isCjkIdeograph(cell.codepoint) && cell.width !== 2) {
       return {
         char: ' ',
-        fg: { r: cell.fg_r, g: cell.fg_g, b: cell.fg_b },
-        bg: { r: cell.bg_r, g: cell.bg_g, b: cell.bg_b },
+        fg,
+        bg,
         bold: false,
         italic: false,
         underline: false,
@@ -566,8 +671,8 @@ export class GhosttyEmulator {
 
     return {
       char,
-      fg: { r: cell.fg_r, g: cell.fg_g, b: cell.fg_b },
-      bg: { r: cell.bg_r, g: cell.bg_g, b: cell.bg_b },
+      fg,
+      bg,
       bold: (cell.flags & CellFlags.BOLD) !== 0,
       italic: (cell.flags & CellFlags.ITALIC) !== 0,
       underline: (cell.flags & CellFlags.UNDERLINE) !== 0,

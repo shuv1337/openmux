@@ -1,9 +1,9 @@
 /**
- * DSR (Device Status Report) Passthrough
+ * DSR (Device Status Report) and OSC Query Passthrough
  *
- * Intercepts DSR queries from PTY output and generates appropriate responses
+ * Intercepts DSR and OSC queries from PTY output and generates appropriate responses
  * that are written back to the PTY, allowing applications inside openmux panes
- * to query cursor position and terminal status.
+ * to query cursor position, terminal status, and colors.
  *
  * The flow:
  * 1. Application (e.g., codex) writes ESC[6n to query cursor position
@@ -15,16 +15,27 @@
  * Supported queries:
  * - DSR 6 (ESC[6n): Cursor Position Report - responds with ESC[row;colR
  * - DSR 5 (ESC[5n): Device Status Report - responds with ESC[0n (OK)
+ * - OSC 10 (ESC]10;?): Foreground color query - responds with ESC]10;rgb:rr/gg/bb
+ * - OSC 11 (ESC]11;?): Background color query - responds with ESC]11;rgb:rr/gg/bb
  */
 
 const ESC = '\x1b';
+const BEL = '\x07';
+const ST = `${ESC}\\`;
 
 // DSR query patterns
 const DSR_CPR_QUERY = `${ESC}[6n`;  // Cursor Position Report query
 const DSR_STATUS_QUERY = `${ESC}[5n`;  // Device Status query
 
+// OSC color query patterns - can end with BEL or ST
+// OSC 10;? = query foreground, OSC 11;? = query background
+const OSC_FG_QUERY_BEL = `${ESC}]10;?${BEL}`;
+const OSC_FG_QUERY_ST = `${ESC}]10;?${ST}`;
+const OSC_BG_QUERY_BEL = `${ESC}]11;?${BEL}`;
+const OSC_BG_QUERY_ST = `${ESC}]11;?${ST}`;
+
 export interface DsrQuery {
-  type: 'cpr' | 'status';
+  type: 'cpr' | 'status' | 'osc-fg' | 'osc-bg';
   startIndex: number;
   endIndex: number;
 }
@@ -37,20 +48,28 @@ export interface DsrParseResult {
 }
 
 /**
- * Quick check if data might contain DSR queries
+ * Quick check if data might contain DSR or OSC queries
  */
-function mightContainDsr(data: string): boolean {
-  return data.includes(`${ESC}[`) && (data.includes('6n') || data.includes('5n'));
+function mightContainQueries(data: string): boolean {
+  // Check for DSR queries (ESC[5n, ESC[6n)
+  if (data.includes(`${ESC}[`) && (data.includes('6n') || data.includes('5n'))) {
+    return true;
+  }
+  // Check for OSC color queries (ESC]10;? or ESC]11;?)
+  if (data.includes(`${ESC}]`) && data.includes(';?')) {
+    return true;
+  }
+  return false;
 }
 
 /**
- * Parse PTY output for DSR queries
+ * Parse PTY output for DSR and OSC queries
  */
 export function parseDsrQueries(data: string): DsrParseResult {
   const textSegments: string[] = [];
   const queries: DsrQuery[] = [];
 
-  if (!mightContainDsr(data)) {
+  if (!mightContainQueries(data)) {
     return { textSegments: [data], queries: [] };
   }
 
@@ -88,6 +107,62 @@ export function parseDsrQueries(data: string): DsrParseResult {
       continue;
     }
 
+    // Check for OSC foreground color query (ESC]10;? with BEL or ST terminator)
+    if (data.startsWith(OSC_FG_QUERY_BEL, currentIndex)) {
+      if (currentIndex > textStart) {
+        textSegments.push(data.slice(textStart, currentIndex));
+      }
+      queries.push({
+        type: 'osc-fg',
+        startIndex: currentIndex,
+        endIndex: currentIndex + OSC_FG_QUERY_BEL.length,
+      });
+      currentIndex += OSC_FG_QUERY_BEL.length;
+      textStart = currentIndex;
+      continue;
+    }
+    if (data.startsWith(OSC_FG_QUERY_ST, currentIndex)) {
+      if (currentIndex > textStart) {
+        textSegments.push(data.slice(textStart, currentIndex));
+      }
+      queries.push({
+        type: 'osc-fg',
+        startIndex: currentIndex,
+        endIndex: currentIndex + OSC_FG_QUERY_ST.length,
+      });
+      currentIndex += OSC_FG_QUERY_ST.length;
+      textStart = currentIndex;
+      continue;
+    }
+
+    // Check for OSC background color query (ESC]11;? with BEL or ST terminator)
+    if (data.startsWith(OSC_BG_QUERY_BEL, currentIndex)) {
+      if (currentIndex > textStart) {
+        textSegments.push(data.slice(textStart, currentIndex));
+      }
+      queries.push({
+        type: 'osc-bg',
+        startIndex: currentIndex,
+        endIndex: currentIndex + OSC_BG_QUERY_BEL.length,
+      });
+      currentIndex += OSC_BG_QUERY_BEL.length;
+      textStart = currentIndex;
+      continue;
+    }
+    if (data.startsWith(OSC_BG_QUERY_ST, currentIndex)) {
+      if (currentIndex > textStart) {
+        textSegments.push(data.slice(textStart, currentIndex));
+      }
+      queries.push({
+        type: 'osc-bg',
+        startIndex: currentIndex,
+        endIndex: currentIndex + OSC_BG_QUERY_ST.length,
+      });
+      currentIndex += OSC_BG_QUERY_ST.length;
+      textStart = currentIndex;
+      continue;
+    }
+
     currentIndex++;
   }
 
@@ -117,14 +192,38 @@ export function generateStatusOkResponse(): string {
 }
 
 /**
- * DSR Passthrough handler for a PTY session
+ * Generate an OSC foreground color response
+ * Format: ESC]10;rgb:rrrr/gggg/bbbb ESC\
+ * Note: Uses 16-bit color values (multiply 8-bit by 257 to get rrrr format)
+ */
+export function generateOscFgResponse(r: number, g: number, b: number): string {
+  const r16 = (r * 257).toString(16).padStart(4, '0');
+  const g16 = (g * 257).toString(16).padStart(4, '0');
+  const b16 = (b * 257).toString(16).padStart(4, '0');
+  return `${ESC}]10;rgb:${r16}/${g16}/${b16}${ST}`;
+}
+
+/**
+ * Generate an OSC background color response
+ * Format: ESC]11;rgb:rrrr/gggg/bbbb ESC\
+ */
+export function generateOscBgResponse(r: number, g: number, b: number): string {
+  const r16 = (r * 257).toString(16).padStart(4, '0');
+  const g16 = (g * 257).toString(16).padStart(4, '0');
+  const b16 = (b * 257).toString(16).padStart(4, '0');
+  return `${ESC}]11;rgb:${r16}/${g16}/${b16}${ST}`;
+}
+
+/**
+ * DSR and OSC Passthrough handler for a PTY session
  *
- * Intercepts DSR queries from PTY output, generates responses using
- * cursor position from the emulator, and writes them back to the PTY.
+ * Intercepts DSR and OSC queries from PTY output, generates responses using
+ * cursor position and colors from the emulator, and writes them back to the PTY.
  */
 export class DsrPassthrough {
   private ptyWriter: ((data: string) => void) | null = null;
   private cursorGetter: (() => { x: number; y: number }) | null = null;
+  private colorsGetter: (() => { foreground: number; background: number }) | null = null;
 
   constructor() {}
 
@@ -143,25 +242,33 @@ export class DsrPassthrough {
   }
 
   /**
-   * Process PTY data, intercepting DSR queries and generating responses
-   * Returns the data to send to the emulator (without DSR queries)
+   * Set the colors getter function (called to get terminal colors for OSC queries)
+   * Colors should be in 0xRRGGBB format
+   */
+  setColorsGetter(getter: () => { foreground: number; background: number }): void {
+    this.colorsGetter = getter;
+  }
+
+  /**
+   * Process PTY data, intercepting DSR and OSC queries and generating responses
+   * Returns the data to send to the emulator (without queries)
    */
   process(data: string): string {
     const result = parseDsrQueries(data);
 
-    // Handle DSR queries
+    // Handle queries
     if (result.queries.length > 0) {
       for (const query of result.queries) {
         this.handleQuery(query);
       }
     }
 
-    // Return text segments joined (without DSR queries)
+    // Return text segments joined (without queries)
     return result.textSegments.join('');
   }
 
   /**
-   * Handle a DSR query by generating and sending the appropriate response
+   * Handle a query by generating and sending the appropriate response
    */
   private handleQuery(query: DsrQuery): void {
     if (!this.ptyWriter) return;
@@ -175,6 +282,22 @@ export class DsrPassthrough {
       // Device is OK
       const response = generateStatusOkResponse();
       this.ptyWriter(response);
+    } else if (query.type === 'osc-fg') {
+      // Get foreground color
+      const colors = this.colorsGetter?.() ?? { foreground: 0xFFFFFF, background: 0x000000 };
+      const r = (colors.foreground >> 16) & 0xFF;
+      const g = (colors.foreground >> 8) & 0xFF;
+      const b = colors.foreground & 0xFF;
+      const response = generateOscFgResponse(r, g, b);
+      this.ptyWriter(response);
+    } else if (query.type === 'osc-bg') {
+      // Get background color
+      const colors = this.colorsGetter?.() ?? { foreground: 0xFFFFFF, background: 0x000000 };
+      const r = (colors.background >> 16) & 0xFF;
+      const g = (colors.background >> 8) & 0xFF;
+      const b = colors.background & 0xFF;
+      const response = generateOscBgResponse(r, g, b);
+      this.ptyWriter(response);
     }
   }
 
@@ -184,5 +307,6 @@ export class DsrPassthrough {
   dispose(): void {
     this.ptyWriter = null;
     this.cursorGetter = null;
+    this.colorsGetter = null;
   }
 }
