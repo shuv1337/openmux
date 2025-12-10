@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.18](https://github.com/monotykamary/openmux/compare/v0.1.17...v0.1.18) (2025-12-10)
+
+
+### Bug Fixes
+
+* use full ESC[?u pattern for Kitty keyboard query detection ([7cbc821](https://github.com/monotykamary/openmux/commit/7cbc821aee4678ba2216d87d023e6eaedc668dbc))
+* use kitty keyboard flag 1 instead of 8 to preserve shift behavior ([f0ffe2e](https://github.com/monotykamary/openmux/commit/f0ffe2e45c2ba21f2c2846bd4d449ecdea24e4e9))
+* use specific multi-char patterns in mightContainQueries fast-path ([25d60aa](https://github.com/monotykamary/openmux/commit/25d60aa5a6e4d37d632fc0e08df69d268875ffb5))
+
 ### [0.1.17](https://github.com/monotykamary/openmux/compare/v0.1.16...v0.1.17) (2025-12-10)
 
 
