@@ -294,6 +294,15 @@ export class GhosttyEmulator {
   }
 
   /**
+   * Get a DEC private mode state
+   * @param mode The mode number (e.g., 1 for DECCKM, 25 for DECTCEM, etc.)
+   * @returns true if set, false if reset
+   */
+  getMode(mode: number): boolean {
+    return this.terminal.getMode(mode, false);
+  }
+
+  /**
    * Get terminal state in our format
    * Creates fresh cell arrays to ensure React detects changes properly
    */

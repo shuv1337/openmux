@@ -270,6 +270,18 @@ export class Pty extends Context.Tag("@openmux/Pty")<
             background: termColors.background,
           }
         })
+        // Set mode getter to query DEC private modes from emulator
+        dsrPassthrough.setModeGetter((mode: number) => {
+          // Query the mode from ghostty emulator
+          // Returns true if set, false if reset
+          try {
+            return emulator.getMode(mode)
+          } catch {
+            return null
+          }
+        })
+        // Set terminal version for XTVERSION responses
+        dsrPassthrough.setTerminalVersion('0.1.16')
 
         // Pending data buffer for batched writes
         let pendingData = ''
