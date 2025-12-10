@@ -65,10 +65,10 @@
   "dependencies": {
     "@effect/cli": "^0.72.1",
     "@effect/platform": "^0.93.6",
-    "@opentui/core": "^0.1.57",
-    "@opentui/react": "^0.1.57",
+    "@opentui/core": "^0.1.60",
+    "@opentui/react": "^0.1.60",
     "bun-pty": "^0.4.2",
-    "effect": "^3.19.9",
+    "effect": "^3.19.11",
     "ghostty-web": "^0.3.0",
     "react": "^19.2.1"
   }
