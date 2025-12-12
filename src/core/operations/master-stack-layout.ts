@@ -134,10 +134,16 @@ function calculateStackPaneRectangles(
   if (stackPanes.length === 0) return [];
 
   if (layoutMode === 'stacked') {
-    // All panes take full stack area (only active one is visible)
+    // All panes take full stack area minus 1 row for tab bar (only active one is visible)
+    // Tab bar occupies the first row of stackArea, pane content starts at y+1
     return stackPanes.map((pane) => ({
       ...pane,
-      rectangle: { ...stackArea },
+      rectangle: {
+        x: stackArea.x,
+        y: stackArea.y + 1,
+        width: stackArea.width,
+        height: Math.max(1, stackArea.height - 1),
+      },
     }));
   }
 

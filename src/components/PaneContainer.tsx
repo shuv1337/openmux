@@ -240,12 +240,12 @@ function StackedPanesRenderer({
 
   return (
     <>
-      {/* Tab headers for stacked panes */}
+      {/* Tab headers for stacked panes (positioned above the pane rectangle) */}
       <box
         style={{
           position: 'absolute',
           left: rect.x,
-          top: rect.y,
+          top: rect.y - 1,
           width: rect.width,
           height: 1,
           flexDirection: 'row',
@@ -262,15 +262,15 @@ function StackedPanesRenderer({
         ))}
       </box>
 
-      {/* Active pane (offset by 1 for tab header) */}
+      {/* Active pane (rectangle already accounts for tab header via layout calculation) */}
       <Pane
         id={activePane.id}
         title={activePane.title}
         isFocused={focusedPaneId === activePane.id}
         x={rect.x}
-        y={rect.y + 1}
+        y={rect.y}
         width={rect.width}
-        height={Math.max(1, rect.height - 1)}
+        height={rect.height}
         ptyId={activePane.ptyId}
         onClick={handleClick}
         onMouseInput={handleMouseInput}
