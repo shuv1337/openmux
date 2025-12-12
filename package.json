@@ -1,6 +1,6 @@
 {
   "name": "openmux",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "description": "Terminal multiplexer with master-stack tiling layout",
   "module": "src/index.tsx",
   "type": "module",
@@ -64,12 +64,12 @@
   },
   "dependencies": {
     "@effect/cli": "^0.72.1",
-    "@effect/platform": "^0.93.6",
+    "@effect/platform": "^0.93.7",
     "@opentui/core": "^0.1.60",
     "@opentui/react": "^0.1.60",
     "bun-pty": "^0.4.2",
     "effect": "^3.19.11",
     "ghostty-web": "^0.3.0",
-    "react": "^19.2.1"
+    "react": "^19.2.3"
   }
 }

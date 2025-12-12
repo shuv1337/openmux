@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.22](https://github.com/monotykamary/openmux/compare/v0.1.21...v0.1.22) (2025-12-12)
+
+
+### Bug Fixes
+
+* correct text attribute values to match OpenTUI's TextAttributes ([c7a1b81](https://github.com/monotykamary/openmux/commit/c7a1b81151aaff5baac3c9ffe35f97b992461ebe))
+
 ### [0.1.21](https://github.com/monotykamary/openmux/compare/v0.1.20...v0.1.21) (2025-12-12)
 
 
