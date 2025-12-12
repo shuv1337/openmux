@@ -61,7 +61,7 @@ export function SearchOverlay({ width, height }: SearchOverlayProps) {
         <text fg="#444444">  </text>
         <text fg={matches.length > 0 ? '#88FF88' : '#888888'}>{matchDisplay}</text>
         <text fg="#444444">  </text>
-        <text fg="#666666">n/N:nav Esc:cancel</text>
+        <text fg="#666666">^n/^p:nav Esc:cancel</text>
       </box>
     </box>
   );

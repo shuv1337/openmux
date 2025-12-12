@@ -184,23 +184,35 @@ function isCellInMatch(
 }
 
 /**
- * Calculate viewport offset to show a specific line
+ * Height of search overlay (3 rows + 1 margin from bottom + 1 for status bar)
+ * This is used to avoid centering matches behind the search bar
+ */
+const SEARCH_OVERLAY_HEIGHT = 5;
+
+/**
+ * Calculate viewport offset to show a specific line centered in viewport
+ * Accounts for the search overlay at the bottom by centering in the visible area above it
+ *
+ * Coordinate system:
+ * - lineIndex: absolute line index (0 = oldest scrollback, scrollbackLength = first visible terminal line)
+ * - viewportOffset: how many lines scrolled back (0 = at bottom showing live terminal)
+ * - Screen row y shows absoluteY = scrollbackLength - viewportOffset + y
  */
 function calculateScrollOffset(
   lineIndex: number,
   scrollbackLength: number,
   terminalRows: number
 ): number {
-  // If line is in visible area (lineIndex >= scrollbackLength), show bottom
-  if (lineIndex >= scrollbackLength) {
-    return 0;
-  }
+  // Calculate effective viewport (excluding search overlay area)
+  const effectiveRows = terminalRows - SEARCH_OVERLAY_HEIGHT;
+  const centerPoint = Math.floor(effectiveRows / 2);
 
-  // Calculate offset to center the match in viewport
-  const halfViewport = Math.floor(terminalRows / 2);
-  const targetOffset = scrollbackLength - lineIndex - halfViewport;
+  // To show lineIndex at screen row centerPoint:
+  // lineIndex = scrollbackLength - viewportOffset + centerPoint
+  // viewportOffset = scrollbackLength - lineIndex + centerPoint
+  const targetOffset = scrollbackLength - lineIndex + centerPoint;
 
-  // Clamp to valid range
+  // Clamp to valid range [0, scrollbackLength]
   return Math.max(0, Math.min(targetOffset, scrollbackLength));
 }
 
@@ -272,20 +284,23 @@ export function SearchProvider({ children }: SearchProviderProps) {
     // Perform search
     const matches = performSearch(query, state.emulator, state.terminalState);
 
+    // Start at the most recent match (last in array = closest to bottom of terminal)
+    const initialIndex = matches.length > 0 ? matches.length - 1 : -1;
+
     // Update state
     const newState = {
       ...state,
       query,
       matches,
-      currentMatchIndex: matches.length > 0 ? 0 : -1,
+      currentMatchIndex: initialIndex,
     };
     updateSearchState(newState);
 
-    // Auto-scroll to first match
+    // Auto-scroll to the initial match (most recent)
     if (matches.length > 0) {
-      const firstMatch = matches[0];
+      const match = matches[initialIndex];
       const offset = calculateScrollOffset(
-        firstMatch.lineIndex,
+        match.lineIndex,
         state.scrollbackLength,
         state.terminalState.rows
       );

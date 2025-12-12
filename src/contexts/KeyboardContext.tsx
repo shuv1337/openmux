@@ -143,7 +143,7 @@ export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
 
     // Handle Alt keybindings (prefix-less actions) in normal mode
     if (kbState.mode === 'normal' && alt) {
-      return handleAltKey(key, layoutDispatch, activeWorkspace.layoutMode, onNewPane, onToggleSessionPicker);
+      return handleAltKey(key, kbDispatch, layoutDispatch, activeWorkspace.layoutMode, onNewPane, onToggleSessionPicker, onEnterSearch);
     }
 
     // Handle Ctrl+B to enter prefix mode (only in normal mode)
@@ -178,10 +178,12 @@ export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
  */
 function handleAltKey(
   key: string,
+  kbDispatch: Dispatch<KeyboardAction>,
   layoutDispatch: ReturnType<typeof useLayout>['dispatch'],
   currentLayoutMode: 'vertical' | 'horizontal' | 'stacked',
   onNewPane?: () => void,
-  onToggleSessionPicker?: () => void
+  onToggleSessionPicker?: () => void,
+  onEnterSearch?: () => void
 ): boolean {
   // Alt+hjkl for navigation
   const direction = keyToDirection(key);
@@ -240,6 +242,15 @@ function handleAltKey(
     case 's':
       onToggleSessionPicker?.();
       return true;
+
+    // Alt+f to open search
+    case 'f':
+      if (onEnterSearch) {
+        kbDispatch({ type: 'ENTER_SEARCH_MODE' });
+        onEnterSearch();
+        return true;
+      }
+      return false;
 
     default:
       return false;

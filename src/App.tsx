@@ -69,6 +69,9 @@ function AppContent() {
 
   // Search mode enter handler
   const handleEnterSearch = useCallback(async () => {
+    // Clear any existing selection so it doesn't hide search highlights
+    clearAllSelections();
+
     // Get the focused pane's PTY ID
     const focusedPaneId = activeWorkspace.focusedPaneId;
     if (!focusedPaneId) return;
@@ -84,7 +87,7 @@ function AppContent() {
     if (focusedPtyId) {
       await enterSearchMode(focusedPtyId);
     }
-  }, [activeWorkspace, enterSearchMode]);
+  }, [activeWorkspace, enterSearchMode, clearAllSelections]);
 
   // Handle bracketed paste from host terminal (Cmd+V sends this)
   useEffect(() => {
@@ -256,14 +259,14 @@ function AppContent() {
             return;
           }
 
-          if (key === 'n' && !event.shift && !event.ctrl && !event.option) {
-            // Next match
+          if (key === 'n' && event.ctrl && !event.shift && !event.option) {
+            // Next match (Ctrl+n)
             nextMatch();
             return;
           }
 
-          if ((key === 'n' && event.shift) || key === 'p') {
-            // Previous match (Shift+N or p)
+          if ((key === 'n' && event.ctrl && event.shift) || (key === 'p' && event.ctrl)) {
+            // Previous match (Ctrl+Shift+N or Ctrl+p)
             prevMatch();
             return;
           }

@@ -40,10 +40,10 @@ const SELECTION_BG = RGBA.fromInts(80, 120, 200);
 const SELECTION_FG = RGBA.fromInts(255, 255, 255);
 
 // Search highlight colors
-const SEARCH_MATCH_BG = RGBA.fromInts(180, 140, 0);    // Orange/gold for matches
-const SEARCH_MATCH_FG = RGBA.fromInts(0, 0, 0);        // Black text
-const SEARCH_CURRENT_BG = RGBA.fromInts(255, 200, 0);  // Bright yellow for current match
-const SEARCH_CURRENT_FG = RGBA.fromInts(0, 0, 0);      // Black text
+const SEARCH_MATCH_BG = RGBA.fromInts(100, 80, 60);    // Muted brown for other matches
+const SEARCH_MATCH_FG = RGBA.fromInts(200, 180, 160);  // Light tan text
+const SEARCH_CURRENT_BG = RGBA.fromInts(255, 50, 150); // Bright magenta/pink for current match
+const SEARCH_CURRENT_FG = RGBA.fromInts(255, 255, 255); // White text
 
 // RGBA cache to avoid per-cell allocations (pack RGB into single number as key)
 const rgbaCache = new Map<number, RGBA>();
