@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.28](https://github.com/monotykamary/openmux/compare/v0.1.27...v0.1.28) (2025-12-13)
+
+
+### Bug Fixes
+
+* **scroll:** eliminate momentum lag and async latency ([ada4967](https://github.com/monotykamary/openmux/commit/ada4967d27fd4b41a476061f5606268e92f28005))
+
 ### [0.1.27](https://github.com/monotykamary/openmux/compare/v0.1.26...v0.1.27) (2025-12-13)
 
 
