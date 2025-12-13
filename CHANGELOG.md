@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.30](https://github.com/monotykamary/openmux/compare/v0.1.29...v0.1.30) (2025-12-13)
+
+
+### Bug Fixes
+
+* **hints:** display correct keybindings in search mode ([3dbb61a](https://github.com/monotykamary/openmux/commit/3dbb61a78cc2b0d164e3c8f43ed9d300457786ce))
+
 ### [0.1.29](https://github.com/monotykamary/openmux/compare/v0.1.28...v0.1.29) (2025-12-13)
 
 
