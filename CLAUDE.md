@@ -11,6 +11,8 @@ bun dev               # Run with watch mode (--watch)
 bun run typecheck     # Type check without emitting
 bun run build         # Build standalone binary (./scripts/build.sh)
 bun run install:local # Build and install locally
+bun run test          # Run tests (vitest)
+bun run test:watch    # Run tests in watch mode
 ```
 
 ## Technology Stack
@@ -20,6 +22,7 @@ bun run install:local # Build and install locally
 - **bun-pty** - PTY support for shell process management
 - **ghostty-web** - WASM-based terminal emulator (VT parsing)
 - **React 19** - UI components via OpenTUI's React reconciler
+- **Effect** - Typed functional programming for services (gradual migration in src/effect/)
 
 ## Architecture Overview
 
@@ -38,11 +41,13 @@ PTY Data → PTYManager → GhosttyEmulator → TerminalContext → TerminalView
 ### Context Hierarchy (src/App.tsx)
 
 ```tsx
-ThemeProvider           // Styling/theming
-  └── LayoutProvider    // Workspace/pane state (reducer pattern)
-        └── KeyboardProvider  // Prefix mode, key state
-              └── TerminalProvider  // PTY lifecycle, terminal state
-                    └── SessionProvider  // Session persistence
+ThemeProvider              // Styling/theming
+  └── LayoutProvider       // Workspace/pane state (reducer pattern)
+        └── KeyboardProvider    // Prefix mode, key state
+              └── TerminalProvider   // PTY lifecycle, terminal state
+                    └── SelectionProvider  // Text selection state
+                          └── SearchProvider    // Terminal search
+                                └── SessionProvider  // Session persistence
 ```
 
 ### Key Modules
@@ -62,6 +67,14 @@ ThemeProvider           // Styling/theming
 - `LayoutContext.tsx` - Reducer-based workspace/pane management, handles NAVIGATE, NEW_PANE, CLOSE_PANE, etc.
 - `TerminalContext.tsx` - Manages PTY creation/destruction, subscribes to terminal state updates
 - `KeyboardContext.tsx` - Handles prefix mode (Ctrl+b) with 2s timeout, resize mode
+- `SelectionContext.tsx` - Text selection state and clipboard operations
+- `SearchContext.tsx` - Terminal search functionality with match navigation
+
+**Effect Module (src/effect/)** - Gradual migration to Effect-TS
+- `services/` - Effect services (Clipboard, FileSystem, Pty, SessionManager, SessionStorage)
+- `models.ts` - Domain models with Schema validation (Rectangle, PaneData, SerializedSession)
+- `runtime.ts` - App and test layer composition with ManagedRuntime
+- `bridge.ts` - Integration bridge for gradual adoption alongside React contexts
 
 ### Layout Modes
 
