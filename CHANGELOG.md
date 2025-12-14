@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.33](https://github.com/monotykamary/openmux/compare/v0.1.32...v0.1.33) (2025-12-14)
+
+
+### Build System
+
+* update build script and CI for zig-pty ([41a999c](https://github.com/monotykamary/openmux/commit/41a999c36a7b311f261d3c38645d9f6bcec96688))
+
 ### [0.1.32](https://github.com/monotykamary/openmux/compare/v0.1.31...v0.1.32) (2025-12-14)
 
 
