@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.38](https://github.com/monotykamary/openmux/compare/v0.1.37...v0.1.38) (2025-12-14)
+
+
+### Bug Fixes
+
+* **render:** implement sync mode passthrough to reduce flickering ([d6f53fa](https://github.com/monotykamary/openmux/commit/d6f53fa011827dde48015e88f877a463936f67a8))
+* **scroll:** maintain view position when background activity adds new lines ([b9e0d31](https://github.com/monotykamary/openmux/commit/b9e0d31bd3d804b43776713c0af076483d9c23bc))
+
+
+### Performance
+
+* add structural sharing and reduce object allocations ([1ce2eb7](https://github.com/monotykamary/openmux/commit/1ce2eb74f3ba3cc7d0ecd5eb8fe278910e8b0434))
+* **pty:** use queueMicrotask for tighter notification timing ([eb7bbe3](https://github.com/monotykamary/openmux/commit/eb7bbe33f97ae22055ec2725aff9cf73050e6352))
+* **render:** implement dirty delta architecture for terminal updates ([6bd558d](https://github.com/monotykamary/openmux/commit/6bd558d179bc00033ba752ad0a04a876923144de))
+* **render:** micro-optimize color handling in render loop ([842160e](https://github.com/monotykamary/openmux/commit/842160e08690ca596d474c283e0947ec2dfe3457))
+* **render:** skip selection/search checks when inactive ([8889943](https://github.com/monotykamary/openmux/commit/888994304879a6e53a79ad8a879c4be64bad1d4f))
+* **render:** use queueMicrotask for tighter frame timing ([c96bbf6](https://github.com/monotykamary/openmux/commit/c96bbf6ea5d3263227e787c39d4b39e475831341))
+
 ### [0.1.37](https://github.com/monotykamary/openmux/compare/v0.1.36...v0.1.37) (2025-12-14)
 
 
