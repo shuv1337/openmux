@@ -154,8 +154,9 @@ const Pty = struct {
         };
     }
 
-    fn startReader(self: *Pty) void {
-        self.reader_thread = std.Thread.spawn(.{}, readerLoop, .{self}) catch null;
+    fn startReader(self: *Pty) bool {
+        self.reader_thread = std.Thread.spawn(.{}, readerLoop, .{self}) catch return false;
+        return true;
     }
 
     fn readerLoop(self: *Pty) void {
@@ -437,7 +438,9 @@ fn spawnPty(
 
         // Change directory if specified
         if (cwd[0] != 0) {
-            _ = c.chdir(cwd);
+            if (c.chdir(cwd) == -1) {
+                c._exit(126); // Exit code 126: command cannot execute (permission/not found)
+            }
         }
 
         // Parse environment variables
@@ -498,6 +501,7 @@ fn spawnPty(
     const h = allocHandle() orelse {
         _ = c.close(master_fd);
         _ = c.kill(pid, c.SIGKILL);
+        _ = c.waitpid(pid, null, 0); // Reap zombie
         return ERROR;
     };
 
@@ -506,7 +510,13 @@ fn spawnPty(
 
     // Start the background reader thread
     if (getHandle(h)) |p| {
-        p.startReader();
+        if (!p.startReader()) {
+            // Thread spawn failed - clean up
+            removeHandle(h);
+            _ = c.kill(pid, c.SIGKILL);
+            _ = c.waitpid(pid, null, 0);
+            return ERROR;
+        }
     }
 
     return @intCast(h);
@@ -524,6 +534,10 @@ export fn bun_pty_spawn(
     rows: c_int,
 ) c_int {
     if (cols <= 0 or rows <= 0) {
+        return ERROR;
+    }
+    // Bounds check: winsize uses u16 for dimensions
+    if (cols > 65535 or rows > 65535) {
         return ERROR;
     }
     return spawnPty(cmd, cwd, env, @intCast(cols), @intCast(rows));
@@ -549,6 +563,10 @@ export fn bun_pty_write(handle: c_int, data: [*]const u8, len: c_int) c_int {
 
 export fn bun_pty_resize(handle: c_int, cols: c_int, rows: c_int) c_int {
     if (handle <= 0 or cols <= 0 or rows <= 0) {
+        return ERROR;
+    }
+    // Bounds check: winsize uses u16 for dimensions
+    if (cols > 65535 or rows > 65535) {
         return ERROR;
     }
 
@@ -600,7 +618,7 @@ test "basic pty spawn" {
     try std.testing.expect(handle > 0);
 
     // Wait a bit for output
-    std.time.sleep(100 * std.time.ns_per_ms);
+    std.Thread.sleep(100 * std.time.ns_per_ms);
 
     var buf: [1024]u8 = undefined;
     const n = bun_pty_read(handle, &buf, buf.len);
