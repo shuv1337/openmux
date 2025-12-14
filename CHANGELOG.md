@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.35](https://github.com/monotykamary/openmux/compare/v0.1.34...v0.1.35) (2025-12-14)
+
+
+### Bug Fixes
+
+* **pty:** prevent upper bound leak and improve error handling ([ae3fce1](https://github.com/monotykamary/openmux/commit/ae3fce1d0b3c070339a220117d703a265d12448c))
+
 ### [0.1.34](https://github.com/monotykamary/openmux/compare/v0.1.33...v0.1.34) (2025-12-14)
 
 
