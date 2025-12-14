@@ -7,6 +7,7 @@ import type { PaneData, LayoutMode } from '../core/types';
 import { useLayout } from '../contexts/LayoutContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTerminal } from '../contexts/TerminalContext';
+import { getFocusedPane, isMainPaneFocused } from '../core/workspace-utils';
 import { Pane } from './Pane';
 
 export function PaneContainer() {
@@ -45,14 +46,7 @@ export function PaneContainer() {
 
   // When zoomed, only render the focused pane
   if (activeWorkspace.zoomed) {
-    const focusedPaneId = activeWorkspace.focusedPaneId;
-    let focusedPane: PaneData | null = null;
-
-    if (activeWorkspace.mainPane.id === focusedPaneId) {
-      focusedPane = activeWorkspace.mainPane;
-    } else {
-      focusedPane = activeWorkspace.stackPanes.find(p => p.id === focusedPaneId) ?? null;
-    }
+    const focusedPane = getFocusedPane(activeWorkspace);
 
     if (focusedPane && focusedPane.rectangle) {
       return (
@@ -60,7 +54,7 @@ export function PaneContainer() {
           <PaneRenderer
             pane={focusedPane}
             isFocused={true}
-            isMain={focusedPane.id === activeWorkspace.mainPane.id}
+            isMain={isMainPaneFocused(activeWorkspace)}
             onFocus={handlePaneClick}
             onMouseInput={handleMouseInput}
           />

@@ -2,6 +2,7 @@
  * StatusBar - bottom status bar showing sessions, workspaces and mode
  */
 
+import { useMemo } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLayout } from '../contexts/LayoutContext';
 import { useKeyboardState } from '../contexts/KeyboardContext';
@@ -100,14 +101,18 @@ interface WorkspaceTabsProps {
 function WorkspaceTabs({ populatedWorkspaces, activeWorkspaceId }: WorkspaceTabsProps) {
   const theme = useTheme();
 
-  if (populatedWorkspaces.length === 0) {
+  // Memoize tabs string to avoid recomputation on unrelated re-renders
+  const tabs = useMemo(() => {
+    if (populatedWorkspaces.length === 0) return null;
+    return populatedWorkspaces.map((id) => {
+      const isActive = id === activeWorkspaceId;
+      return isActive ? `[${id}]` : ` ${id} `;
+    }).join('');
+  }, [populatedWorkspaces, activeWorkspaceId]);
+
+  if (!tabs) {
     return <text fg="#666666">No workspaces</text>;
   }
-
-  const tabs = populatedWorkspaces.map((id) => {
-    const isActive = id === activeWorkspaceId;
-    return isActive ? `[${id}]` : ` ${id} `;
-  }).join('');
 
   return (
     <text fg={theme.statusBar.activeTabColor}>

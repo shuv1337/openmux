@@ -94,18 +94,18 @@ const SearchContext = createContext<SearchContextValue | null>(null);
 
 /**
  * Extract text from a row of terminal cells
+ * Uses array join instead of string concatenation to avoid O(n) intermediate strings
  */
 function extractLineText(cells: TerminalCell[]): string {
-  let text = '';
+  const chars: string[] = [];
   for (let i = 0; i < cells.length; i++) {
-    const cell = cells[i];
-    text += cell.char;
+    chars.push(cells[i].char);
     // Skip placeholder for wide characters
-    if (cell.width === 2) {
+    if (cells[i].width === 2) {
       i++;
     }
   }
-  return text;
+  return chars.join('');
 }
 
 /**

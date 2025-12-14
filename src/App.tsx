@@ -23,6 +23,7 @@ import { SessionPicker } from './components/SessionPicker';
 import { SearchOverlay } from './components/SearchOverlay';
 import { inputHandler } from './terminal';
 import type { Workspace, WorkspaceId } from './core/types';
+import { getFocusedPtyId } from './core/workspace-utils';
 
 function AppContent() {
   const { width, height } = useTerminalDimensions();
@@ -77,18 +78,8 @@ function AppContent() {
     // Clear any existing selection so it doesn't hide search highlights
     clearAllSelections();
 
-    // Get the focused pane's PTY ID
-    const focusedPaneId = activeWorkspace.focusedPaneId;
-    if (!focusedPaneId) return;
-
-    let focusedPtyId: string | undefined;
-    if (activeWorkspace.mainPane?.id === focusedPaneId) {
-      focusedPtyId = activeWorkspace.mainPane.ptyId;
-    } else {
-      const stackPane = activeWorkspace.stackPanes.find(p => p.id === focusedPaneId);
-      focusedPtyId = stackPane?.ptyId;
-    }
-
+    // Get the focused pane's PTY ID using centralized utility
+    const focusedPtyId = getFocusedPtyId(activeWorkspace);
     if (focusedPtyId) {
       await enterSearchMode(focusedPtyId);
     }
@@ -98,18 +89,7 @@ function AppContent() {
   useEffect(() => {
     const handleBracketedPaste = (event: PasteEvent) => {
       // Write the pasted text directly to the focused pane's PTY
-      const focusedPaneId = activeWorkspace.focusedPaneId;
-      if (!focusedPaneId) return;
-
-      // Find the focused pane's PTY ID
-      let focusedPtyId: string | undefined;
-      if (activeWorkspace.mainPane?.id === focusedPaneId) {
-        focusedPtyId = activeWorkspace.mainPane.ptyId;
-      } else {
-        const stackPane = activeWorkspace.stackPanes.find(p => p.id === focusedPaneId);
-        focusedPtyId = stackPane?.ptyId;
-      }
-
+      const focusedPtyId = getFocusedPtyId(activeWorkspace);
       if (focusedPtyId) {
         writeToPTY(focusedPtyId, event.text);
       }

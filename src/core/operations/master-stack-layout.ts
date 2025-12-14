@@ -11,6 +11,27 @@ import type { Rectangle, Workspace, PaneData, LayoutMode } from '../types';
 import type { LayoutConfig } from '../config';
 
 /**
+ * Check if two rectangles are equal (structural equality)
+ * Used to avoid creating new pane objects when rectangle hasn't changed
+ */
+function rectanglesEqual(a: Rectangle | undefined, b: Rectangle | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
+/**
+ * Update pane rectangle only if it changed (structural sharing)
+ * Returns the same pane reference if rectangle is unchanged
+ */
+function updatePaneRectangle(pane: PaneData, newRect: Rectangle | undefined): PaneData {
+  if (rectanglesEqual(pane.rectangle, newRect)) {
+    return pane; // No change - reuse existing object
+  }
+  return { ...pane, rectangle: newRect ? { ...newRect } : undefined };
+}
+
+/**
  * Calculate rectangles for all panes in a workspace
  */
 export function calculateMasterStackLayout(
@@ -31,33 +52,30 @@ export function calculateMasterStackLayout(
     const focusedStackIndex = stackPanes.findIndex(p => p.id === focusedPaneId);
 
     if (focusedIsMain) {
-      return {
-        ...workspace,
-        mainPane: { ...mainPane, rectangle: { ...viewport } },
-        stackPanes: stackPanes.map(p => ({ ...p, rectangle: undefined })),
-      };
+      const updatedMain = updatePaneRectangle(mainPane, viewport);
+      const updatedStack = stackPanes.map(p => updatePaneRectangle(p, undefined));
+      // Only create new workspace if something changed
+      if (updatedMain === mainPane && updatedStack.every((p, i) => p === stackPanes[i])) {
+        return workspace;
+      }
+      return { ...workspace, mainPane: updatedMain, stackPanes: updatedStack };
     } else if (focusedStackIndex >= 0) {
-      return {
-        ...workspace,
-        mainPane: { ...mainPane, rectangle: undefined },
-        stackPanes: stackPanes.map((p, i) =>
-          i === focusedStackIndex
-            ? { ...p, rectangle: { ...viewport } }
-            : { ...p, rectangle: undefined }
-        ),
-      };
+      const updatedMain = updatePaneRectangle(mainPane, undefined);
+      const updatedStack = stackPanes.map((p, i) =>
+        updatePaneRectangle(p, i === focusedStackIndex ? viewport : undefined)
+      );
+      if (updatedMain === mainPane && updatedStack.every((p, i) => p === stackPanes[i])) {
+        return workspace;
+      }
+      return { ...workspace, mainPane: updatedMain, stackPanes: updatedStack };
     }
   }
 
   // Single pane - takes full viewport
   if (stackPanes.length === 0) {
-    return {
-      ...workspace,
-      mainPane: {
-        ...mainPane,
-        rectangle: { ...viewport },
-      },
-    };
+    const updatedMain = updatePaneRectangle(mainPane, viewport);
+    if (updatedMain === mainPane) return workspace;
+    return { ...workspace, mainPane: updatedMain };
   }
 
   // Multiple panes - split based on layout mode
@@ -105,7 +123,7 @@ export function calculateMasterStackLayout(
     };
   }
 
-  // Calculate stack pane rectangles
+  // Calculate stack pane rectangles with structural sharing
   const updatedStackPanes = calculateStackPaneRectangles(
     stackPanes,
     stackArea,
@@ -114,15 +132,24 @@ export function calculateMasterStackLayout(
     gap
   );
 
+  // Update main pane with structural sharing
+  const updatedMain = updatePaneRectangle(mainPane, mainRect);
+
+  // Only create new workspace if something changed
+  const stackChanged = updatedStackPanes.some((p, i) => p !== stackPanes[i]);
+  if (updatedMain === mainPane && !stackChanged) {
+    return workspace;
+  }
+
   return {
     ...workspace,
-    mainPane: { ...mainPane, rectangle: mainRect },
-    stackPanes: updatedStackPanes,
+    mainPane: updatedMain,
+    stackPanes: stackChanged ? updatedStackPanes : stackPanes,
   };
 }
 
 /**
- * Calculate rectangles for stack panes
+ * Calculate rectangles for stack panes (with structural sharing)
  */
 function calculateStackPaneRectangles(
   stackPanes: PaneData[],
@@ -131,20 +158,18 @@ function calculateStackPaneRectangles(
   activeStackIndex: number,
   gap: number
 ): PaneData[] {
-  if (stackPanes.length === 0) return [];
+  if (stackPanes.length === 0) return stackPanes;
 
   if (layoutMode === 'stacked') {
     // All panes take full stack area minus 1 row for tab bar (only active one is visible)
     // Tab bar occupies the first row of stackArea, pane content starts at y+1
-    return stackPanes.map((pane) => ({
-      ...pane,
-      rectangle: {
-        x: stackArea.x,
-        y: stackArea.y + 1,
-        width: stackArea.width,
-        height: Math.max(1, stackArea.height - 1),
-      },
-    }));
+    const stackedRect: Rectangle = {
+      x: stackArea.x,
+      y: stackArea.y + 1,
+      width: stackArea.width,
+      height: Math.max(1, stackArea.height - 1),
+    };
+    return stackPanes.map((pane) => updatePaneRectangle(pane, stackedRect));
   }
 
   if (layoutMode === 'vertical') {
@@ -160,15 +185,13 @@ function calculateStackPaneRectangles(
         ? stackArea.height - (paneHeight + gap) * index
         : paneHeight;
 
-      return {
-        ...pane,
-        rectangle: {
-          x: stackArea.x,
-          y: stackArea.y + (paneHeight + gap) * index,
-          width: stackArea.width,
-          height,
-        },
+      const rect: Rectangle = {
+        x: stackArea.x,
+        y: stackArea.y + (paneHeight + gap) * index,
+        width: stackArea.width,
+        height,
       };
+      return updatePaneRectangle(pane, rect);
     });
   }
 
@@ -184,15 +207,13 @@ function calculateStackPaneRectangles(
       ? stackArea.width - (paneWidth + gap) * index
       : paneWidth;
 
-    return {
-      ...pane,
-      rectangle: {
-        x: stackArea.x + (paneWidth + gap) * index,
-        y: stackArea.y,
-        width,
-        height: stackArea.height,
-      },
+    const rect: Rectangle = {
+      x: stackArea.x + (paneWidth + gap) * index,
+      y: stackArea.y,
+      width,
+      height: stackArea.height,
     };
+    return updatePaneRectangle(pane, rect);
   });
 }
 

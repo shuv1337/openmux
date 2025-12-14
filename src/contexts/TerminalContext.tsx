@@ -15,6 +15,7 @@ import React, {
 import { initGhostty, isGhosttyInitialized, detectHostCapabilities } from '../terminal';
 import type { TerminalState, TerminalScrollState } from '../core/types';
 import { clampScrollOffset, calculateScrollDelta, isAtBottom } from '../core/scroll-utils';
+import { getFocusedPtyId as getWorkspaceFocusedPtyId } from '../core/workspace-utils';
 import { useLayout } from './LayoutContext';
 import {
   createPtySession,
@@ -375,17 +376,9 @@ export function TerminalProvider({ children }: TerminalProviderProps) {
     return getPtyCwd(ptyId);
   }, []);
 
-  // Helper to get focused PTY ID
+  // Helper to get focused PTY ID (uses centralized utility)
   const getFocusedPtyId = useCallback((): string | undefined => {
-    const focusedPaneId = activeWorkspace.focusedPaneId;
-    if (!focusedPaneId) return undefined;
-
-    if (activeWorkspace.mainPane?.id === focusedPaneId) {
-      return activeWorkspace.mainPane.ptyId;
-    }
-
-    const stackPane = activeWorkspace.stackPanes.find(p => p.id === focusedPaneId);
-    return stackPane?.ptyId;
+    return getWorkspaceFocusedPtyId(activeWorkspace);
   }, [activeWorkspace]);
 
   // Write to the focused pane's PTY
