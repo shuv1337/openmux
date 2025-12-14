@@ -1,0 +1,26 @@
+{
+  "name": "zig-pty",
+  "version": "0.1.0",
+  "description": "Pure Zig PTY implementation for Bun - minimal and high-performance",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build:zig": "zig build -Doptimize=ReleaseFast",
+    "build:ts": "bun build ./src/index.ts --outdir ./dist --target bun",
+    "build": "bun run build:zig && bun run build:ts",
+    "test": "bun test",
+    "clean": "rm -rf ./dist ./zig-out ./.zig-cache"
+  },
+  "files": [
+    "dist/**/*",
+    "zig-out/lib/*.dylib",
+    "zig-out/lib/*.so",
+    "zig-out/lib/*.dll",
+    "README.md"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

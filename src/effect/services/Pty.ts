@@ -1,9 +1,9 @@
 /**
  * PTY service for managing terminal pseudo-terminal sessions.
- * Wraps bun-pty with ghostty-web VT parsing.
+ * Wraps zig-pty with ghostty-web VT parsing.
  */
 import { Context, Effect, Layer, Stream, Queue, Ref, HashMap, Option } from "effect"
-import { spawn, type IPty } from "bun-pty"
+import { spawn, type IPty } from "../../../zig-pty/src/index"
 import type { TerminalState } from "../../core/types"
 import { GhosttyEmulator } from "../../terminal/ghostty-emulator"
 import { GraphicsPassthrough } from "../../terminal/graphics-passthrough"
