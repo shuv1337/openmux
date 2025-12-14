@@ -2,6 +2,11 @@
 //!
 //! A minimal, high-performance pseudoterminal library.
 //! Uses direct POSIX calls - no external dependencies.
+//!
+//! Architecture:
+//! - Background reader thread does blocking reads for natural data coalescing
+//! - Ring buffer allows lock-free producer/consumer pattern
+//! - JS polls the ring buffer, getting complete chunks
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -12,6 +17,7 @@ const c = @cImport({
     @cInclude("errno.h");
     @cInclude("string.h");
     @cInclude("signal.h");
+    @cInclude("poll.h");
     @cInclude("sys/wait.h");
     @cInclude("sys/ioctl.h");
     if (builtin.os.tag == .macos) {
@@ -46,102 +52,204 @@ const ERROR: c_int = -1;
 const CHILD_EXITED: c_int = -2;
 
 const MAX_HANDLES: usize = 256;
+const RING_BUFFER_SIZE: usize = 256 * 1024; // 256KB ring buffer
 
 // ============================================================================
-// PTY Handle
+// Ring Buffer - Lock-free single producer single consumer
+// ============================================================================
+
+const RingBuffer = struct {
+    data: [RING_BUFFER_SIZE]u8,
+    write_pos: std.atomic.Value(usize),
+    read_pos: std.atomic.Value(usize),
+
+    fn init() RingBuffer {
+        return .{
+            .data = undefined,
+            .write_pos = std.atomic.Value(usize).init(0),
+            .read_pos = std.atomic.Value(usize).init(0),
+        };
+    }
+
+    // Producer: write data to buffer, returns amount written
+    fn write(self: *RingBuffer, src: []const u8) usize {
+        const w = self.write_pos.load(.acquire);
+        const r = self.read_pos.load(.acquire);
+
+        // Available space (leave 1 byte to distinguish full from empty)
+        const space = if (w >= r)
+            RING_BUFFER_SIZE - 1 - (w - r)
+        else
+            r - w - 1;
+
+        const to_write = @min(src.len, space);
+        if (to_write == 0) return 0;
+
+        // Write data, handling wrap-around
+        const first_chunk = @min(to_write, RING_BUFFER_SIZE - w);
+        @memcpy(self.data[w..][0..first_chunk], src[0..first_chunk]);
+
+        if (to_write > first_chunk) {
+            const second_chunk = to_write - first_chunk;
+            @memcpy(self.data[0..second_chunk], src[first_chunk..][0..second_chunk]);
+        }
+
+        self.write_pos.store((w + to_write) % RING_BUFFER_SIZE, .release);
+        return to_write;
+    }
+
+    // Consumer: read data from buffer into dst, returns amount read
+    fn read(self: *RingBuffer, dst: []u8) usize {
+        const w = self.write_pos.load(.acquire);
+        const r = self.read_pos.load(.acquire);
+
+        // Available data
+        const data_available = if (w >= r) w - r else RING_BUFFER_SIZE - r + w;
+
+        const to_read = @min(dst.len, data_available);
+        if (to_read == 0) return 0;
+
+        // Read data, handling wrap-around
+        const first_chunk = @min(to_read, RING_BUFFER_SIZE - r);
+        @memcpy(dst[0..first_chunk], self.data[r..][0..first_chunk]);
+
+        if (to_read > first_chunk) {
+            const second_chunk = to_read - first_chunk;
+            @memcpy(dst[first_chunk..][0..second_chunk], self.data[0..second_chunk]);
+        }
+
+        self.read_pos.store((r + to_read) % RING_BUFFER_SIZE, .release);
+        return to_read;
+    }
+
+    fn available(self: *RingBuffer) usize {
+        const w = self.write_pos.load(.acquire);
+        const r = self.read_pos.load(.acquire);
+        return if (w >= r) w - r else RING_BUFFER_SIZE - r + w;
+    }
+};
+
+// ============================================================================
+// PTY Handle with Background Reader
 // ============================================================================
 
 const Pty = struct {
     master_fd: c_int,
     pid: c_int,
-    exited: bool,
-    exit_code: c_int,
+    exited: std.atomic.Value(bool),
+    exit_code: std.atomic.Value(c_int),
+    stopping: std.atomic.Value(bool),
+    ring: RingBuffer,
+    reader_thread: ?std.Thread,
 
     fn init(master_fd: c_int, pid: c_int) Pty {
         return .{
             .master_fd = master_fd,
             .pid = pid,
-            .exited = false,
-            .exit_code = -1,
+            .exited = std.atomic.Value(bool).init(false),
+            .exit_code = std.atomic.Value(c_int).init(-1),
+            .stopping = std.atomic.Value(bool).init(false),
+            .ring = RingBuffer.init(),
+            .reader_thread = null,
         };
     }
 
-    fn deinit(self: *Pty) void {
-        if (self.master_fd >= 0) {
-            _ = c.close(self.master_fd);
-            self.master_fd = -1;
+    fn startReader(self: *Pty) void {
+        self.reader_thread = std.Thread.spawn(.{}, readerLoop, .{self}) catch null;
+    }
+
+    fn readerLoop(self: *Pty) void {
+        var buf: [32768]u8 = undefined; // 32KB read buffer
+
+        while (!self.stopping.load(.acquire)) {
+            // Use poll to wait for data with timeout (allows checking stopping flag)
+            var pfd = [_]c.pollfd{.{
+                .fd = self.master_fd,
+                .events = c.POLLIN,
+                .revents = 0,
+            }};
+
+            const poll_result = c.poll(&pfd, 1, 100); // 100ms timeout
+
+            if (poll_result < 0) {
+                const err = std.c._errno().*;
+                if (err == c.EINTR) continue;
+                break; // Error
+            }
+
+            if (poll_result == 0) {
+                // Timeout - check if child exited
+                self.checkChild();
+                if (self.exited.load(.acquire)) break;
+                continue;
+            }
+
+            // Data available - read it (blocking read, will get all available)
+            const n = c.read(self.master_fd, &buf, buf.len);
+
+            if (n > 0) {
+                // Write to ring buffer
+                var written: usize = 0;
+                while (written < @as(usize, @intCast(n))) {
+                    const w = self.ring.write(buf[written..@intCast(n)]);
+                    if (w == 0) {
+                        // Buffer full - wait a tiny bit for consumer
+                        std.Thread.sleep(100 * std.time.ns_per_us); // 100µs
+                    } else {
+                        written += w;
+                    }
+                }
+            } else if (n == 0) {
+                // EOF
+                self.checkChild();
+                break;
+            } else {
+                // Error
+                const err = std.c._errno().*;
+                if (err == c.EINTR) continue;
+                if (err == c.EAGAIN or err == c.EWOULDBLOCK) continue;
+                break;
+            }
         }
+
+        // Final child check
+        self.checkChild();
     }
 
     fn checkChild(self: *Pty) void {
-        if (self.exited) return;
+        if (self.exited.load(.acquire)) return;
 
         var status: c_int = 0;
         const result = c.waitpid(self.pid, &status, c.WNOHANG);
 
         if (result == self.pid) {
-            self.exited = true;
             if (c.WIFEXITED(status)) {
-                self.exit_code = c.WEXITSTATUS(status);
+                self.exit_code.store(c.WEXITSTATUS(status), .release);
             } else if (c.WIFSIGNALED(status)) {
-                self.exit_code = 128 + c.WTERMSIG(status);
+                self.exit_code.store(128 + c.WTERMSIG(status), .release);
             }
+            self.exited.store(true, .release);
         } else if (result == -1) {
-            // Process doesn't exist anymore
-            self.exited = true;
-            self.exit_code = -1;
+            self.exit_code.store(-1, .release);
+            self.exited.store(true, .release);
         }
     }
 
     fn readAvailable(self: *Pty, buf: [*]u8, len: usize) c_int {
-        self.checkChild();
+        // Read from ring buffer (filled by background thread)
+        const n = self.ring.read(buf[0..len]);
 
-        if (self.exited and self.master_fd < 0) {
-            return CHILD_EXITED;
-        }
-
-        // Drain all available data
-        var total: usize = 0;
-
-        while (total < len) {
-            const remaining = len - total;
-            const n = c.read(self.master_fd, buf + total, remaining);
-
-            if (n > 0) {
-                total += @intCast(n);
-                // Continue draining
-            } else if (n == 0) {
-                // EOF
-                break;
-            } else {
-                // n < 0, check errno
-                const err = std.c._errno().*;
-                if (err == c.EAGAIN or err == c.EWOULDBLOCK) {
-                    // No more data available
-                    break;
-                } else if (err == c.EINTR) {
-                    continue;
-                } else {
-                    // Real error
-                    if (total > 0) break;
-                    return ERROR;
-                }
-            }
-        }
-
-        if (total > 0) {
-            return @intCast(total);
-        } else if (self.exited) {
+        if (n > 0) {
+            return @intCast(n);
+        } else if (self.exited.load(.acquire) and self.ring.available() == 0) {
             return CHILD_EXITED;
         } else {
             return 0;
         }
     }
 
-    fn write(self: *Pty, data: [*]const u8, len: usize) c_int {
-        self.checkChild();
-
-        if (self.exited) {
+    fn writeData(self: *Pty, data: [*]const u8, len: usize) c_int {
+        if (self.exited.load(.acquire)) {
             return CHILD_EXITED;
         }
 
@@ -152,11 +260,8 @@ const Pty = struct {
                 written += @intCast(n);
             } else if (n == -1) {
                 const err = std.c._errno().*;
-                if (err == c.EINTR) {
-                    continue;
-                } else {
-                    return ERROR;
-                }
+                if (err == c.EINTR) continue;
+                return ERROR;
             } else {
                 break;
             }
@@ -185,6 +290,22 @@ const Pty = struct {
             _ = c.kill(self.pid, c.SIGTERM);
         }
         return SUCCESS;
+    }
+
+    fn deinit(self: *Pty) void {
+        // Signal thread to stop
+        self.stopping.store(true, .release);
+
+        // Wait for reader thread
+        if (self.reader_thread) |thread| {
+            thread.join();
+        }
+
+        // Close fd
+        if (self.master_fd >= 0) {
+            _ = c.close(self.master_fd);
+            self.master_fd = -1;
+        }
     }
 };
 
@@ -380,7 +501,14 @@ fn spawnPty(
         return ERROR;
     };
 
-    setHandle(h, Pty.init(master_fd, pid));
+    const pty = Pty.init(master_fd, pid);
+    setHandle(h, pty);
+
+    // Start the background reader thread
+    if (getHandle(h)) |p| {
+        p.startReader();
+    }
+
     return @intCast(h);
 }
 
@@ -416,7 +544,7 @@ export fn bun_pty_write(handle: c_int, data: [*]const u8, len: c_int) c_int {
     }
 
     const pty = getHandle(@intCast(handle)) orelse return ERROR;
-    return pty.write(data, @intCast(len));
+    return pty.writeData(data, @intCast(len));
 }
 
 export fn bun_pty_resize(handle: c_int, cols: c_int, rows: c_int) c_int {
@@ -453,7 +581,7 @@ export fn bun_pty_get_exit_code(handle: c_int) c_int {
 
     const pty = getHandle(@intCast(handle)) orelse return ERROR;
     pty.checkChild();
-    return pty.exit_code;
+    return pty.exit_code.load(.acquire);
 }
 
 export fn bun_pty_close(handle: c_int) void {

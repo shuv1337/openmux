@@ -262,31 +262,33 @@ export class Terminal implements IPty {
     this._readLoop = true;
     const buf = Buffer.alloc(65536); // 64KB buffer
 
+    // The Zig side has a background thread that reads from the PTY and fills
+    // a ring buffer. This naturally coalesces data because blocking reads
+    // wait for data to be available. We just need to drain the ring buffer.
+
     while (this._readLoop && !this._closing) {
       const n = lib.symbols.bun_pty_read(this.handle, ptr(buf), buf.length);
+
       if (n > 0) {
-        // Use streaming TextDecoder to handle incomplete UTF-8 sequences
+        // Got data from ring buffer - decode and emit
         const data = this._decoder.decode(buf.subarray(0, n), { stream: true });
         if (data.length > 0) {
           this._onData.fire(data);
         }
-        // Yield to let event loop process UI updates
-        await new Promise((r) => setImmediate(r));
+        // Yield briefly to let UI render
+        await Bun.sleep(0);
       } else if (n === -2) {
-        // Child exited - flush remaining buffered data
+        // Child exited - flush decoder and fire exit
         const remaining = this._decoder.decode();
-        if (remaining.length > 0) {
-          this._onData.fire(remaining);
-        }
-        const exitCode = lib.symbols.bun_pty_get_exit_code(this.handle);
-        this._onExit.fire({ exitCode });
-        break;
+        if (remaining.length > 0) this._onData.fire(remaining);
+        this._onExit.fire({ exitCode: lib.symbols.bun_pty_get_exit_code(this.handle) });
+        return;
       } else if (n < 0) {
         // Error
-        break;
+        return;
       } else {
-        // No data - yield before retry
-        await new Promise((r) => setImmediate(r));
+        // No data in ring buffer - sleep briefly before polling again
+        await Bun.sleep(1);
       }
     }
   }

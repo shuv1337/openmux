@@ -89,11 +89,27 @@ export const TerminalView = memo(function TerminalView({
   const emulatorRef = useRef<GhosttyEmulator | null>(null);
   // Version counter to trigger re-renders when state changes
   const [version, setVersion] = useState(0);
+  // Frame batching: coalesce multiple updates into single render per event loop tick
+  const renderRequestedRef = useRef(false);
 
   useEffect(() => {
     let unsubscribeState: (() => void) | null = null;
     let unsubscribeScroll: (() => void) | null = null;
     let mounted = true;
+
+    // Batched render request - coalesces multiple updates into one render
+    const requestRender = () => {
+      if (!renderRequestedRef.current && mounted) {
+        renderRequestedRef.current = true;
+        // Use setImmediate to batch all updates within the same event loop tick
+        setImmediate(() => {
+          if (mounted) {
+            renderRequestedRef.current = false;
+            setVersion(v => v + 1);
+          }
+        });
+      }
+    };
 
     // Initialize async resources
     const init = async () => {
@@ -110,18 +126,18 @@ export const TerminalView = memo(function TerminalView({
       // Subscribe to terminal state updates
       unsubscribeState = await subscribeToPty(ptyId, (state) => {
         terminalStateRef.current = state;
-        // Increment version to trigger re-render
-        setVersion(v => v + 1);
+        // Request batched render instead of immediate re-render
+        requestRender();
       });
 
       // Subscribe to scroll changes - just trigger re-render, scroll state comes from context cache
       unsubscribeScroll = await subscribeToScroll(ptyId, () => {
-        // Increment version to trigger re-render (scroll state read from context cache in render)
-        setVersion(v => v + 1);
+        // Request batched render (scroll state read from context cache in render)
+        requestRender();
       });
 
       // Trigger initial render
-      setVersion(v => v + 1);
+      requestRender();
     };
 
     init();
