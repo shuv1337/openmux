@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.37](https://github.com/monotykamary/openmux/compare/v0.1.36...v0.1.37) (2025-12-14)
+
+
+### Features
+
+* **console:** integrate OpenTUI debug console ([f919a8b](https://github.com/monotykamary/openmux/commit/f919a8bf7610573c0d57dc266eadb20838ead71e))
+
 ### [0.1.36](https://github.com/monotykamary/openmux/compare/v0.1.35...v0.1.36) (2025-12-14)
 
 
