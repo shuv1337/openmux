@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.34](https://github.com/monotykamary/openmux/compare/v0.1.33...v0.1.34) (2025-12-14)
+
+
+### Bug Fixes
+
+* **pty:** improve library path resolution for compiled binaries ([1e84490](https://github.com/monotykamary/openmux/commit/1e84490246ffe3b5b15ac9b18c33b2a5811fc4d7))
+
 ### [0.1.33](https://github.com/monotykamary/openmux/compare/v0.1.32...v0.1.33) (2025-12-14)
 
 
