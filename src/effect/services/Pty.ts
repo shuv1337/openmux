@@ -8,6 +8,7 @@ import type { TerminalState, UnifiedTerminalUpdate, TerminalScrollState } from "
 import { GhosttyEmulator } from "../../terminal/ghostty-emulator"
 import { GraphicsPassthrough } from "../../terminal/graphics-passthrough"
 import { TerminalQueryPassthrough } from "../../terminal/terminal-query-passthrough"
+import { createSyncModeParser, type SyncModeParser } from "../../terminal/sync-mode-parser"
 import { getCapabilityEnvironment } from "../../terminal/capabilities"
 import { getHostColors } from "../../terminal/terminal-colors"
 import { PtySpawnError, PtyNotFoundError, PtyCwdError } from "../errors"
@@ -369,19 +370,16 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         // Pending data buffer for batched writes
         let pendingData = ''
 
-        // Wire up PTY data handler - batch both writes AND notifications
-        pty.onData((data: string) => {
-          // First, handle terminal queries (cursor position, device attributes, colors, etc.)
-          // This must happen before graphics passthrough to intercept queries
-          const afterQueries = session.queryPassthrough.process(data)
+        // Sync mode parser for DEC Mode 2026 (synchronized output)
+        // Buffers content between sync start/end for atomic frame rendering
+        const syncParser = createSyncModeParser()
 
-          // Then handle graphics passthrough (Kitty graphics, Sixel)
-          const textData = session.graphicsPassthrough.process(afterQueries)
-          if (textData.length > 0) {
-            pendingData += textData
-          }
+        // Timeout to prevent infinite buffering if sync mode is never closed
+        let syncTimeout: ReturnType<typeof setTimeout> | null = null
+        const SYNC_TIMEOUT_MS = 100 // Safety flush after 100ms
 
-          // Batch writes and notifications together
+        // Helper to schedule notification (extracted for reuse)
+        const scheduleNotify = () => {
           if (!session.pendingNotify) {
             session.pendingNotify = true
             setImmediate(() => {
@@ -406,6 +404,51 @@ export class Pty extends Context.Tag("@openmux/Pty")<
               notifySubscribers(session)
               session.pendingNotify = false
             })
+          }
+        }
+
+        // Wire up PTY data handler - batch both writes AND notifications
+        pty.onData((data: string) => {
+          // First, handle terminal queries (cursor position, device attributes, colors, etc.)
+          // This must happen before graphics passthrough to intercept queries
+          const afterQueries = session.queryPassthrough.process(data)
+
+          // Then handle graphics passthrough (Kitty graphics, Sixel)
+          const textData = session.graphicsPassthrough.process(afterQueries)
+
+          // Process through sync mode parser to respect frame boundaries
+          // This buffers content between CSI ? 2026 h and CSI ? 2026 l
+          const { readySegments, isBuffering } = syncParser.process(textData)
+
+          // Handle sync buffering timeout (safety valve)
+          if (isBuffering) {
+            if (!syncTimeout) {
+              syncTimeout = setTimeout(() => {
+                // Safety flush - sync mode took too long (app may have crashed)
+                const flushed = syncParser.flush()
+                if (flushed.length > 0) {
+                  pendingData += flushed
+                  scheduleNotify()
+                }
+                syncTimeout = null
+              }, SYNC_TIMEOUT_MS)
+            }
+          } else if (syncTimeout) {
+            clearTimeout(syncTimeout)
+            syncTimeout = null
+          }
+
+          // Add ready segments to pending data
+          for (const segment of readySegments) {
+            if (segment.length > 0) {
+              pendingData += segment
+            }
+          }
+
+          // Only schedule notification if we have data and aren't buffering
+          // When buffering, we wait for the complete frame before notifying
+          if (!isBuffering && pendingData.length > 0) {
+            scheduleNotify()
           }
         })
 
