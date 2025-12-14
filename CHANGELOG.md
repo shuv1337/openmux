@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.36](https://github.com/monotykamary/openmux/compare/v0.1.35...v0.1.36) (2025-12-14)
+
+
+### Performance
+
+* **pty:** replace busy-wait with condition variable for backpressure ([a4baf4d](https://github.com/monotykamary/openmux/commit/a4baf4de7c0bd65da6386fb8f3fdf5359b0afba1))
+
 ### [0.1.35](https://github.com/monotykamary/openmux/compare/v0.1.34...v0.1.35) (2025-12-14)
 
 
