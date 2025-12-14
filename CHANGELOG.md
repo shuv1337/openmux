@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.32](https://github.com/monotykamary/openmux/compare/v0.1.31...v0.1.32) (2025-12-14)
+
+
+### Features
+
+* **pty:** replace bun-pty with pure Zig implementation ([5f79f9a](https://github.com/monotykamary/openmux/commit/5f79f9a517d4c5c097366154b7767535268514ac))
+
+
+### Bug Fixes
+
+* **pty:** prevent screen tearing with background reader and frame batching ([7c14a02](https://github.com/monotykamary/openmux/commit/7c14a02459e142c0fa395b3642d9bbd0d426b5ea))
+
 ### [0.1.31](https://github.com/monotykamary/openmux/compare/v0.1.30...v0.1.31) (2025-12-14)
 
 
