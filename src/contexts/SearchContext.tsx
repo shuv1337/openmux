@@ -15,207 +15,23 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import type { TerminalCell, TerminalState } from '../core/types';
 import { getEmulator, getTerminalState, getScrollState } from '../effect/bridge';
-import type { GhosttyEmulator } from '../terminal/ghostty-emulator';
 import { useTerminal } from './TerminalContext';
 
-// =============================================================================
-// Types
-// =============================================================================
-
-/**
- * A single search match in the terminal
- */
-interface SearchMatch {
-  /** Absolute line index (0 = oldest scrollback line) */
-  lineIndex: number;
-  /** Starting column of match */
-  startCol: number;
-  /** Ending column of match (exclusive) */
-  endCol: number;
-}
-
-/**
- * Search state
- */
-interface SearchState {
-  /** Current search query */
-  query: string;
-  /** All matches found */
-  matches: SearchMatch[];
-  /** Index of currently highlighted match (-1 if no matches) */
-  currentMatchIndex: number;
-  /** The ptyId being searched */
-  ptyId: string;
-  /** Cached emulator for scrollback access */
-  emulator: GhosttyEmulator | null;
-  /** Cached terminal state */
-  terminalState: TerminalState | null;
-  /** Total scrollback length at search time */
-  scrollbackLength: number;
-  /** Original scroll offset before search started (to restore on cancel) */
-  originalScrollOffset: number;
-}
-
-/**
- * Search context value
- */
-interface SearchContextValue {
-  /** Current search state (null if not searching) */
-  searchState: SearchState | null;
-  /** Enter search mode for a pane */
-  enterSearchMode: (ptyId: string) => Promise<void>;
-  /** Exit search mode */
-  exitSearchMode: (restorePosition?: boolean) => void;
-  /** Update search query (triggers re-search) */
-  setSearchQuery: (query: string) => void;
-  /** Navigate to next match */
-  nextMatch: () => void;
-  /** Navigate to previous match */
-  prevMatch: () => void;
-  /** Check if a cell is any search match */
-  isSearchMatch: (ptyId: string, x: number, absoluteY: number) => boolean;
-  /** Check if a cell is the current match */
-  isCurrentMatch: (ptyId: string, x: number, absoluteY: number) => boolean;
-  /** Version counter for triggering re-renders */
-  searchVersion: number;
-}
+// Import extracted search utilities
+import type { SearchState, SearchContextValue } from './search/types';
+import {
+  performSearch,
+  isCellInMatch,
+  calculateScrollOffset,
+  buildMatchLookup,
+} from './search/helpers';
 
 // =============================================================================
 // Context
 // =============================================================================
 
 const SearchContext = createContext<SearchContextValue | null>(null);
-
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-/**
- * Extract text from a row of terminal cells
- * Uses array join instead of string concatenation to avoid O(n) intermediate strings
- */
-function extractLineText(cells: TerminalCell[]): string {
-  const chars: string[] = [];
-  for (let i = 0; i < cells.length; i++) {
-    chars.push(cells[i].char);
-    // Skip placeholder for wide characters
-    if (cells[i].width === 2) {
-      i++;
-    }
-  }
-  return chars.join('');
-}
-
-/**
- * Perform case-insensitive search across scrollback and visible terminal
- */
-function performSearch(
-  query: string,
-  emulator: GhosttyEmulator,
-  terminalState: TerminalState
-): SearchMatch[] {
-  if (!query) return [];
-
-  const matches: SearchMatch[] = [];
-  const lowerQuery = query.toLowerCase();
-  const scrollbackLength = emulator.getScrollbackLength();
-
-  // Search scrollback lines (oldest to newest)
-  for (let offset = 0; offset < scrollbackLength; offset++) {
-    const cells = emulator.getScrollbackLine(offset);
-    if (!cells) continue;
-
-    const lineText = extractLineText(cells).toLowerCase();
-    let searchPos = 0;
-
-    while (true) {
-      const matchStart = lineText.indexOf(lowerQuery, searchPos);
-      if (matchStart === -1) break;
-
-      matches.push({
-        lineIndex: offset,
-        startCol: matchStart,
-        endCol: matchStart + query.length,
-      });
-
-      searchPos = matchStart + 1; // Find overlapping matches
-    }
-  }
-
-  // Search visible terminal lines
-  for (let row = 0; row < terminalState.rows; row++) {
-    const cells = terminalState.cells[row];
-    if (!cells) continue;
-
-    const lineText = extractLineText(cells).toLowerCase();
-    let searchPos = 0;
-
-    while (true) {
-      const matchStart = lineText.indexOf(lowerQuery, searchPos);
-      if (matchStart === -1) break;
-
-      matches.push({
-        lineIndex: scrollbackLength + row,
-        startCol: matchStart,
-        endCol: matchStart + query.length,
-      });
-
-      searchPos = matchStart + 1;
-    }
-  }
-
-  return matches;
-}
-
-/**
- * Check if a cell at (x, absoluteY) is within a match
- */
-function isCellInMatch(
-  x: number,
-  absoluteY: number,
-  match: SearchMatch
-): boolean {
-  return (
-    absoluteY === match.lineIndex &&
-    x >= match.startCol &&
-    x < match.endCol
-  );
-}
-
-/**
- * Height of search overlay (3 rows + 1 margin from bottom + 1 for status bar)
- * This is used to avoid centering matches behind the search bar
- */
-const SEARCH_OVERLAY_HEIGHT = 5;
-
-/**
- * Calculate viewport offset to show a specific line centered in viewport
- * Accounts for the search overlay at the bottom by centering in the visible area above it
- *
- * Coordinate system:
- * - lineIndex: absolute line index (0 = oldest scrollback, scrollbackLength = first visible terminal line)
- * - viewportOffset: how many lines scrolled back (0 = at bottom showing live terminal)
- * - Screen row y shows absoluteY = scrollbackLength - viewportOffset + y
- */
-function calculateScrollOffset(
-  lineIndex: number,
-  scrollbackLength: number,
-  terminalRows: number
-): number {
-  // Calculate effective viewport (excluding search overlay area)
-  const effectiveRows = terminalRows - SEARCH_OVERLAY_HEIGHT;
-  const centerPoint = Math.floor(effectiveRows / 2);
-
-  // To show lineIndex at screen row centerPoint:
-  // lineIndex = scrollbackLength - viewportOffset + centerPoint
-  // viewportOffset = scrollbackLength - lineIndex + centerPoint
-  const targetOffset = scrollbackLength - lineIndex + centerPoint;
-
-  // Clamp to valid range [0, scrollbackLength]
-  return Math.max(0, Math.min(targetOffset, scrollbackLength));
-}
 
 // =============================================================================
 // Provider
@@ -255,15 +71,10 @@ export function SearchProvider({ children }: SearchProviderProps) {
     setSearchState(newState);
     setSearchVersion((v) => v + 1);
 
-    // Rebuild spatial index for fast lookup
-    matchLookupRef.current.clear();
-    if (newState?.matches) {
-      for (const match of newState.matches) {
-        const existing = matchLookupRef.current.get(match.lineIndex) ?? [];
-        existing.push({ startCol: match.startCol, endCol: match.endCol });
-        matchLookupRef.current.set(match.lineIndex, existing);
-      }
-    }
+    // Rebuild spatial index for fast lookup using extracted helper
+    matchLookupRef.current = newState?.matches
+      ? buildMatchLookup(newState.matches)
+      : new Map();
   }, []);
 
   // Enter search mode

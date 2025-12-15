@@ -54,9 +54,10 @@ export class FileSystem extends Context.Tag("@openmux/FileSystem")<
     ): Effect.Effect<A, SessionStorageError> =>
       Effect.gen(function* () {
         const file = Bun.file(path)
-        const fileExists = yield* Effect.promise(() => file.exists()).pipe(
-          Effect.catchAll(() => Effect.succeed(false))
-        )
+        const fileExists = yield* Effect.tryPromise({
+          try: () => file.exists(),
+          catch: () => false,
+        }).pipe(Effect.merge)
 
         if (!fileExists) {
           return yield* SessionStorageError.make({
@@ -105,9 +106,10 @@ export class FileSystem extends Context.Tag("@openmux/FileSystem")<
       })
 
     const exists = (path: string): Effect.Effect<boolean> =>
-      Effect.promise(() => Bun.file(path).exists()).pipe(
-        Effect.catchAll(() => Effect.succeed(false))
-      )
+      Effect.tryPromise({
+        try: () => Bun.file(path).exists(),
+        catch: () => false,
+      }).pipe(Effect.merge)
 
     const ensureDir = (path: string): Effect.Effect<void, SessionStorageError> =>
       Effect.tryPromise({

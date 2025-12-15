@@ -279,7 +279,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         // instead of relying on SIGWINCH. This is used by Neovim and other
         // applications that prefer escape sequence-based resize detection.
         // Format: CSI 48 ; height ; width ; pixelHeight ; pixelWidth t
-        try {
+        yield* Effect.try(() => {
           const inBandResizeEnabled = session.emulator.getMode(2048)
           if (inBandResizeEnabled) {
             // Estimate cell size (typical terminal font is ~8x16 pixels)
@@ -290,9 +290,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
             const resizeNotification = `\x1b[48;${rows};${cols};${pixelHeight};${pixelWidth}t`
             session.pty.write(resizeNotification)
           }
-        } catch {
-          // Mode query may fail on some emulator configurations, ignore
-        }
+        }).pipe(Effect.ignore)
 
         notifySubscribers(session)
       })

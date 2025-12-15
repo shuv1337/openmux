@@ -22,41 +22,39 @@ export class Clipboard extends Context.Tag("@openmux/Clipboard")<
     const platform = process.platform
 
     const write = (text: string): Effect.Effect<void, ClipboardError> =>
-      Effect.gen(function* () {
-        yield* Effect.tryPromise({
-          try: async () => {
-            if (platform === "darwin") {
-              const proc = Bun.spawn(["pbcopy"], { stdin: "pipe" })
+      Effect.tryPromise({
+        try: async () => {
+          if (platform === "darwin") {
+            const proc = Bun.spawn(["pbcopy"], { stdin: "pipe" })
+            proc.stdin.write(text)
+            proc.stdin.end()
+            await proc.exited
+          } else if (platform === "linux") {
+            // Try xclip first, fall back to xsel
+            try {
+              const proc = Bun.spawn(["xclip", "-selection", "clipboard"], {
+                stdin: "pipe",
+              })
               proc.stdin.write(text)
               proc.stdin.end()
               await proc.exited
-            } else if (platform === "linux") {
-              // Try xclip first, fall back to xsel
-              try {
-                const proc = Bun.spawn(["xclip", "-selection", "clipboard"], {
-                  stdin: "pipe",
-                })
-                proc.stdin.write(text)
-                proc.stdin.end()
-                await proc.exited
-              } catch {
-                const proc = Bun.spawn(["xsel", "--clipboard", "--input"], {
-                  stdin: "pipe",
-                })
-                proc.stdin.write(text)
-                proc.stdin.end()
-                await proc.exited
-              }
-            } else if (platform === "win32") {
-              const proc = Bun.spawn(["clip"], { stdin: "pipe" })
+            } catch {
+              const proc = Bun.spawn(["xsel", "--clipboard", "--input"], {
+                stdin: "pipe",
+              })
               proc.stdin.write(text)
               proc.stdin.end()
               await proc.exited
             }
-          },
-          catch: (error) =>
-            ClipboardError.make({ operation: "write", cause: error }),
-        })
+          } else if (platform === "win32") {
+            const proc = Bun.spawn(["clip"], { stdin: "pipe" })
+            proc.stdin.write(text)
+            proc.stdin.end()
+            await proc.exited
+          }
+        },
+        catch: (error) =>
+          ClipboardError.make({ operation: "write", cause: error }),
       }).pipe(
         Effect.timeout("5 seconds"),
         Effect.catchTag("TimeoutException", () =>
@@ -68,29 +66,27 @@ export class Clipboard extends Context.Tag("@openmux/Clipboard")<
       )
 
     const read = (): Effect.Effect<string, ClipboardError> =>
-      Effect.gen(function* () {
-        return yield* Effect.tryPromise({
-          try: async () => {
-            if (platform === "darwin") {
-              const result = await Bun.$`pbpaste`.quiet()
+      Effect.tryPromise({
+        try: async () => {
+          if (platform === "darwin") {
+            const result = await Bun.$`pbpaste`.quiet()
+            return result.text()
+          } else if (platform === "linux") {
+            try {
+              const result = await Bun.$`xclip -selection clipboard -o`.quiet()
               return result.text()
-            } else if (platform === "linux") {
-              try {
-                const result = await Bun.$`xclip -selection clipboard -o`.quiet()
-                return result.text()
-              } catch {
-                const result = await Bun.$`xsel --clipboard --output`.quiet()
-                return result.text()
-              }
-            } else if (platform === "win32") {
-              const result = await Bun.$`powershell -command "Get-Clipboard"`.quiet()
+            } catch {
+              const result = await Bun.$`xsel --clipboard --output`.quiet()
               return result.text()
             }
-            return ""
-          },
-          catch: (error) =>
-            ClipboardError.make({ operation: "read", cause: error }),
-        })
+          } else if (platform === "win32") {
+            const result = await Bun.$`powershell -command "Get-Clipboard"`.quiet()
+            return result.text()
+          }
+          return ""
+        },
+        catch: (error) =>
+          ClipboardError.make({ operation: "read", cause: error }),
       }).pipe(
         Effect.timeout("5 seconds"),
         Effect.catchTag("TimeoutException", () =>
