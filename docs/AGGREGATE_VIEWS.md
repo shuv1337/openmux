@@ -1,10 +1,69 @@
 # Aggregate Views Architecture
 
-> Virtual workspaces that aggregate terminals across sessions, similar to [tmuxwatch](https://github.com/steipete/tmuxwatch).
+> Browse and filter terminals across all workspaces in a unified view.
 
-## Problem Statement
+## Current Implementation
 
-Currently, openmux organizes terminals hierarchically:
+The aggregate view is a fullscreen overlay that provides a simple, efficient way to browse PTYs:
+
+### Features
+
+- **Card-style PTY list** - Shows directory name, foreground process, and git branch
+- **Interactive terminal preview** - Full terminal rendering with keyboard and mouse support
+- **Simple text filtering** - Filter PTYs by typing (matches process, cwd, git branch)
+- **Direct buffer rendering** - 60fps performance using the same approach as normal panes
+
+### Usage
+
+1. Press `Alt+a` or `Ctrl+b a` to open the aggregate view
+2. Navigate the PTY list with `j/k` or arrow keys
+3. Type to filter by process name, directory, or git branch
+4. Press `Enter` or `Tab` to enter interactive mode (control the terminal)
+5. Press `Prefix+Esc` (Ctrl+b then Esc) to return to list mode
+6. Press `Esc` to close the aggregate view
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     AggregateView.tsx                       │
+│  ┌─────────────────┐  ┌──────────────────────────────────┐  │
+│  │  PTY List       │  │  InteractivePreview              │  │
+│  │  (PtyCard)      │  │  (direct buffer rendering)       │  │
+│  │                 │  │                                  │  │
+│  │  > proj (node)  │  │  Terminal content at 60fps       │  │
+│  │    main         │  │  with full input support         │  │
+│  │                 │  │                                  │  │
+│  │    proj (zsh)   │  │                                  │  │
+│  │    main         │  │                                  │  │
+│  └─────────────────┘  └──────────────────────────────────┘  │
+│  Filter: node_              Prefix+Esc: back to list        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Key Components
+
+- **AggregateViewContext** - React context with reducer for state management
+- **AggregateView** - Main overlay component with two-pane layout
+- **InteractivePreview** - Terminal renderer using `renderAfter` for performance
+- **listAllPtysWithMetadata()** - Bridge function to query PTY service
+
+### Design Decisions
+
+1. **Simple filtering over complex queries** - Text search is intuitive and covers most use cases
+2. **On-demand refresh** - PTY list is fetched when view opens, not streamed in real-time
+3. **Prefix+Esc for exit** - Allows terminal programs to use plain Esc without conflict
+4. **Defunct PTY filtering** - Automatically excludes dead/zombie processes from the list
+
+---
+
+## Future Possibilities
+
+The sections below describe potential enhancements that could be built on top of the current foundation.
+
+## Original Problem Statement
+
+openmux organizes terminals hierarchically:
 
 ```
 Session → Workspaces (1-9) → Panes (main + stack)
@@ -16,7 +75,7 @@ Users can only view terminals within the **active session and workspace**. There
 - Monitor multiple long-running processes in one view
 - Create ad-hoc groupings independent of session structure
 
-## Solution: Aggregate View Layer
+## Advanced: Real-time Aggregate View Layer
 
 A **virtual workspace** that queries terminals across all sessions based on filters:
 

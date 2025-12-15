@@ -18,6 +18,7 @@ A terminal multiplexer with master-stack layout (Zellij-style), built with:
 - 9 workspaces with isolated pane layouts
 - Session persistence and management
 - Pane zoom (fullscreen focused pane)
+- Aggregate view for browsing/filtering PTYs across workspaces
 - Kitty Graphics and Sixel protocol support
 - Mouse tracking (click to focus, tabbed pane switching)
 - Scrollback support with mouse wheel and scrollbar
@@ -78,6 +79,7 @@ bun dev        # Run with watch mode
 - `Alt+x` - Close pane
 - `Alt+z` - Toggle zoom (fullscreen focused pane)
 - `Alt+s` - Open session picker
+- `Alt+a` - Open aggregate view (browse all PTYs)
 - `Ctrl+b` - Enter prefix mode
 
 ### Mouse
@@ -97,6 +99,7 @@ bun dev        # Run with watch mode
 - `x` - Close current pane
 - `z` - Toggle zoom
 - `s` - Open session picker
+- `a` - Open aggregate view
 - `]` - Paste from clipboard
 - `r` - Enter resize mode
 - `?` - Toggle keyboard hints
@@ -120,6 +123,13 @@ Each workspace has a layout mode that determines how panes are arranged:
 
 ### Sessions
 Sessions persist your workspace layouts and pane working directories. Sessions are auto-saved to `~/.config/openmux/sessions/` and can be switched via the session picker (`Alt+s` or `Ctrl+b s`).
+
+### Aggregate View
+A fullscreen overlay (`Alt+a` or `Ctrl+b a`) that lets you browse all PTYs across all workspaces in one place. Features:
+- **Card-style PTY list** showing directory, process name, and git branch
+- **Interactive terminal preview** with full input support (keyboard + mouse)
+- **Filter by typing** to search by process name, directory, or git branch
+- Navigate with `j/k` or arrow keys, `Enter` to interact, `Prefix+Esc` to return to list
 
 ## Project Structure
 
@@ -145,7 +155,8 @@ src/
 │   ├── TerminalView.tsx            # Terminal rendering with buffer API
 │   ├── StatusBar.tsx               # Bottom status bar
 │   ├── KeyboardHints.tsx           # Keyboard shortcuts overlay
-│   └── SessionPicker.tsx           # Session selection modal
+│   ├── SessionPicker.tsx           # Session selection modal
+│   └── AggregateView.tsx           # PTY browser overlay
 │
 ├── contexts/                       # React contexts for state
 │   ├── index.ts                    # Context exports
@@ -153,7 +164,8 @@ src/
 │   ├── TerminalContext.tsx         # PTY management and lifecycle
 │   ├── KeyboardContext.tsx         # Prefix mode and key state
 │   ├── SessionContext.tsx          # Session management and persistence
-│   └── ThemeContext.tsx            # Theme/styling configuration
+│   ├── ThemeContext.tsx            # Theme/styling configuration
+│   └── AggregateViewContext.tsx    # Aggregate view state management
 │
 ├── terminal/                       # PTY and terminal emulation
 │   ├── index.ts                    # Terminal exports
@@ -188,6 +200,7 @@ Current status:
 - [x] Mouse support
 - [x] Graphics protocol passthrough (Kitty/Sixel)
 - [x] Scrollback support
+- [x] Aggregate view (PTY browser)
 - [ ] Session restore on startup
 - [ ] Configurable keybindings
 

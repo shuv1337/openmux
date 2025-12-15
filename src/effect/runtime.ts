@@ -4,7 +4,7 @@
  */
 import { Effect, Layer, ManagedRuntime, Runtime } from "effect"
 import { AppConfig, ThemeConfig } from "./Config"
-import { Clipboard, FileSystem, Pty, SessionStorage, SessionManager, AggregateQuery } from "./services"
+import { Clipboard, FileSystem, Pty, SessionStorage, SessionManager } from "./services"
 
 // =============================================================================
 // Layer Composition
@@ -32,19 +32,13 @@ const SessionManagerLayer = SessionManager.layer.pipe(
   Layer.provide(Layer.merge(SessionLayer, PtyLayer))
 )
 
-/** Aggregate query layer (depends on Pty) */
-const AggregateQueryLayer = AggregateQuery.layer.pipe(
-  Layer.provide(PtyLayer)
-)
-
 /** Full application layer */
 export const AppLayer = Layer.mergeAll(
   ConfigLayer,
   IoLayer,
   PtyLayer,
   SessionLayer,
-  SessionManagerLayer,
-  AggregateQueryLayer
+  SessionManagerLayer
 )
 
 /** Test layer composition */
@@ -61,15 +55,12 @@ const TestSessionLayer = SessionStorage.testLayer
 
 const TestSessionManagerLayer = SessionManager.testLayer
 
-const TestAggregateQueryLayer = AggregateQuery.testLayer
-
 export const TestAppLayer = Layer.mergeAll(
   TestConfigLayer,
   TestIoLayer,
   TestPtyLayer,
   TestSessionLayer,
-  TestSessionManagerLayer,
-  TestAggregateQueryLayer
+  TestSessionManagerLayer
 )
 
 // =============================================================================
@@ -85,7 +76,6 @@ export type AppServices =
   | Pty
   | SessionStorage
   | SessionManager
-  | AggregateQuery
 
 // =============================================================================
 // Managed Runtime

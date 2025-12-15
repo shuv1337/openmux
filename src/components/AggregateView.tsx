@@ -333,7 +333,7 @@ export function AggregateView({ width, height }: AggregateViewProps) {
     enterPreviewMode,
     exitPreviewMode,
   } = useAggregateView();
-  const { state: kbState, dispatch: kbDispatch } = useKeyboardState();
+  const { dispatch: kbDispatch } = useKeyboardState();
   const theme = useTheme();
 
   const {
@@ -463,12 +463,9 @@ export function AggregateView({ width, height }: AggregateViewProps) {
     [
       showAggregateView,
       filterQuery,
-      matchedPtys,
-      selectedIndex,
       selectedPtyId,
       previewMode,
       prefixActive,
-      kbState.mode,
       closeAggregateView,
       setFilterQuery,
       navigateUp,

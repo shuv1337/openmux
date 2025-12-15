@@ -12,8 +12,7 @@ import {
   type ReactNode,
   type Dispatch,
 } from 'react';
-import { listAllPtysWithMetadata, parseAggregateSearchQuery } from '../effect/bridge';
-import type { FilterExpression } from '../effect/models';
+import { listAllPtysWithMetadata } from '../effect/bridge';
 
 // =============================================================================
 // State Types
@@ -32,8 +31,6 @@ interface AggregateViewState {
   showAggregateView: boolean;
   /** Current filter query text */
   filterQuery: string;
-  /** Parsed filter expression from query */
-  filter: FilterExpression | null;
   /** All PTYs from all sessions */
   allPtys: PtyInfo[];
   /** PTYs matching the current filter */
@@ -51,7 +48,6 @@ interface AggregateViewState {
 const initialState: AggregateViewState = {
   showAggregateView: false,
   filterQuery: '',
-  filter: null,
   allPtys: [],
   matchedPtys: [],
   selectedIndex: 0,
@@ -107,7 +103,6 @@ function aggregateViewReducer(
         ...state,
         showAggregateView: true,
         filterQuery: '',
-        filter: null,
         selectedIndex: 0,
         matchedPtys: state.allPtys,
         selectedPtyId: state.allPtys[0]?.ptyId ?? null,
@@ -118,18 +113,15 @@ function aggregateViewReducer(
         ...state,
         showAggregateView: false,
         filterQuery: '',
-        filter: null,
         selectedIndex: 0,
         previewMode: false,
       };
 
     case 'SET_FILTER_QUERY': {
-      const filter = parseAggregateSearchQuery(action.query);
       const matchedPtys = filterPtys(state.allPtys, action.query);
       return {
         ...state,
         filterQuery: action.query,
-        filter,
         matchedPtys,
         selectedIndex: 0,
         selectedPtyId: matchedPtys[0]?.ptyId ?? null,

@@ -7,10 +7,10 @@
  */
 import { Effect } from "effect"
 import { runEffect, runEffectIgnore } from "./runtime"
-import { Clipboard, Pty, SessionManager, SessionStorage, AggregateQuery, type PaneInfo, parseSearchQuery } from "./services"
+import { Clipboard, Pty, SessionManager, SessionStorage } from "./services"
 import { PtyId, Cols, Rows, SessionId, makePtyId } from "./types"
 import { getHostColors, extractRgb } from "../terminal/terminal-colors"
-import type { SerializedSession, SessionMetadata, FilterExpression, AggregatedPty } from "./models"
+import type { SerializedSession, SessionMetadata } from "./models"
 import {
   SerializedSession as EffectSerializedSession,
   SerializedWorkspace,
@@ -722,33 +722,9 @@ export async function loadSessionData(
 }
 
 // =============================================================================
-// Aggregate Query Bridge
+// Aggregate View Bridge
 // =============================================================================
 
-/**
- * Query PTYs matching a filter expression.
- * Pane info must be provided from the React layer.
- */
-export async function queryAggregatedPtys(
-  panes: readonly PaneInfo[],
-  filter: FilterExpression | null
-): Promise<AggregatedPty[]> {
-  try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const aggregateQuery = yield* AggregateQuery
-        return yield* aggregateQuery.query(panes, filter)
-      })
-    )
-  } catch {
-    return []
-  }
-}
-
-/**
- * List all active PTYs across all sessions with their metadata.
- * This bypasses pane info and queries the PTY service directly.
- */
 /** Check if a process is still alive */
 async function isProcessAlive(pid: number): Promise<boolean> {
   try {
@@ -818,24 +794,6 @@ export async function listAllPtysWithMetadata(): Promise<Array<{
     return []
   }
 }
-
-/**
- * Parse a simple search query string into a FilterExpression.
- * Returns null for empty queries.
- */
-export function parseAggregateSearchQuery(query: string): FilterExpression | null {
-  return parseSearchQuery(query)
-}
-
-/**
- * Re-export PaneInfo type for external use.
- */
-export type { PaneInfo } from "./services"
-
-/**
- * Re-export FilterExpression and AggregatedPty types for external use.
- */
-export type { FilterExpression, AggregatedPty } from "./models"
 
 // =============================================================================
 // Terminal Color Bridge

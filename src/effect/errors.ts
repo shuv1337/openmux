@@ -111,15 +111,3 @@ export class TerminalNotFoundError extends Schema.TaggedError<TerminalNotFoundEr
   }
 ) {}
 
-// =============================================================================
-// Aggregate Query Errors
-// =============================================================================
-
-/** Aggregate query operation failed */
-export class AggregateQueryError extends Schema.TaggedError<AggregateQueryError>()(
-  "AggregateQueryError",
-  {
-    message: Schema.String,
-    cause: Schema.optional(Schema.Defect),
-  }
-) {}
