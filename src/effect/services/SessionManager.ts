@@ -430,7 +430,7 @@ export class SessionManager extends Context.Tag("@openmux/SessionManager")<
     })
   )
 
-  /** Test layer */
+  /** Test layer - in-memory session storage for testing */
   static readonly testLayer = Layer.effect(
     SessionManager,
     Effect.gen(function* () {
@@ -563,34 +563,43 @@ export class SessionManager extends Context.Tag("@openmux/SessionManager")<
         }
       )
 
-      const updateAutoName = Effect.fn("SessionManager.updateAutoName")(
-        function* (_id: SessionId, _cwd: string) {
-          // No-op in test
-        }
-      )
+      const updateAutoName = (
+        _id: SessionId,
+        _cwd: string
+      ): Effect.Effect<void, SessionStorageError | SessionNotFoundError> =>
+        Effect.void
 
-      const getSessionSummary = Effect.fn("SessionManager.getSessionSummary")(
-        function* (id: SessionId) {
+      const getSessionSummary = (
+        id: SessionId
+      ): Effect.Effect<{ workspaceCount: number; paneCount: number } | null, SessionStorageError | SessionNotFoundError> =>
+        Effect.gen(function* () {
           const sessions = yield* Ref.get(sessionsRef)
           const session = sessions.get(id)
           if (!session) return null
           return { workspaceCount: session.workspaces.length, paneCount: 0 }
-        }
-      )
-
-      const serializeWorkspaces = Effect.fn(
-        "SessionManager.serializeWorkspaces"
-      )(function* (metadata: SessionMetadata) {
-        return SerializedSession.make({
-          metadata,
-          workspaces: [],
-          activeWorkspaceId: WorkspaceId.make(1),
         })
-      })
 
-      const quickSave = Effect.fn("SessionManager.quickSave")(function* () {
-        // No-op in test
-      })
+      const serializeWorkspaces = (
+        metadata: SessionMetadata,
+        _workspaces: ReadonlyMap<number, WorkspaceState>,
+        _activeWorkspaceId: number,
+        _getCwd: (ptyId: string) => Promise<string>
+      ): Effect.Effect<SerializedSession, never> =>
+        Effect.succeed(
+          SerializedSession.make({
+            metadata,
+            workspaces: [],
+            activeWorkspaceId: WorkspaceId.make(1),
+          })
+        )
+
+      const quickSave = (
+        _metadata: SessionMetadata,
+        _workspaces: ReadonlyMap<number, WorkspaceState>,
+        _activeWorkspaceId: number,
+        _getCwd: (ptyId: string) => Promise<string>
+      ): Effect.Effect<void, SessionStorageError> =>
+        Effect.void
 
       return SessionManager.of({
         createSession,
@@ -603,10 +612,10 @@ export class SessionManager extends Context.Tag("@openmux/SessionManager")<
         setActiveSessionId,
         switchToSession,
         getSessionMetadata,
-        updateAutoName: updateAutoName as any,
-        getSessionSummary: getSessionSummary as any,
-        serializeWorkspaces: serializeWorkspaces as any,
-        quickSave: quickSave as any,
+        updateAutoName,
+        getSessionSummary,
+        serializeWorkspaces,
+        quickSave,
       })
     })
   )

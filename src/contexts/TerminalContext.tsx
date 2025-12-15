@@ -14,7 +14,7 @@ import React, {
 } from 'react';
 import { initGhostty, isGhosttyInitialized, detectHostCapabilities } from '../terminal';
 import type { TerminalState, TerminalScrollState } from '../core/types';
-import { clampScrollOffset, calculateScrollDelta, isAtBottom } from '../core/scroll-utils';
+import { createSessionHandlers, createScrollHandlers } from './terminal';
 import { getFocusedPtyId as getWorkspaceFocusedPtyId } from '../core/workspace-utils';
 import { useLayout } from './LayoutContext';
 import {
@@ -24,11 +24,7 @@ import {
   destroyPty,
   destroyAllPtys,
   getPtyCwd,
-  getTerminalState,
   setPanePosition,
-  getScrollState,
-  setScrollOffset,
-  scrollToBottom,
   readFromClipboard,
 } from '../effect/bridge';
 import {
@@ -117,6 +113,9 @@ export function TerminalProvider({ children }: TerminalProviderProps) {
 
   // Track unsubscribe functions for cleanup
   const unsubscribeFns = useRef<Map<string, () => void>>(new Map());
+
+  // Create scroll handlers (extracted for reduced file size)
+  const scrollHandlers = createScrollHandlers(ptyCaches);
 
   // Initialize ghostty and detect host terminal capabilities on mount
   useEffect(() => {
@@ -381,75 +380,8 @@ export function TerminalProvider({ children }: TerminalProviderProps) {
     return terminalState?.alternateScreen ?? false;
   }, []);
 
-  // Get scroll state for a PTY (sync - uses cache only for performance)
-  // Cache is kept fresh by: optimistic updates in scrollTerminal/setScrollOffset,
-  // and PTY subscription updates when terminal state changes
-  const handleGetScrollState = useCallback((ptyId: string): TerminalScrollState | undefined => {
-    return ptyCaches.current.scrollStates.get(ptyId);
-  }, []);
-
-  // Scroll terminal by delta lines
-  const scrollTerminal = useCallback((ptyId: string, delta: number): void => {
-    const cached = ptyCaches.current.scrollStates.get(ptyId);
-    if (cached) {
-      // Use utility for clamped scroll calculation
-      const clampedOffset = calculateScrollDelta(cached.viewportOffset, delta, cached.scrollbackLength);
-      setScrollOffset(ptyId, clampedOffset);
-      // Update cache optimistically with clamped value
-      ptyCaches.current.scrollStates.set(ptyId, {
-        ...cached,
-        viewportOffset: clampedOffset,
-        isAtBottom: isAtBottom(clampedOffset),
-      });
-    } else {
-      // Fallback: fetch state and then scroll (handles edge cases where cache isn't populated)
-      getScrollState(ptyId).then((state) => {
-        if (state) {
-          // Use utility for clamped scroll calculation
-          const clampedOffset = calculateScrollDelta(state.viewportOffset, delta, state.scrollbackLength);
-          setScrollOffset(ptyId, clampedOffset);
-          // Populate cache with clamped value
-          ptyCaches.current.scrollStates.set(ptyId, {
-            viewportOffset: clampedOffset,
-            scrollbackLength: state.scrollbackLength,
-            isAtBottom: isAtBottom(clampedOffset),
-          });
-        }
-      });
-    }
-  }, []);
-
-  // Set absolute scroll offset
-  const handleSetScrollOffset = useCallback((ptyId: string, offset: number): void => {
-    const cached = ptyCaches.current.scrollStates.get(ptyId);
-    // Use utility for clamping to valid range
-    const clampedOffset = cached
-      ? clampScrollOffset(offset, cached.scrollbackLength)
-      : Math.max(0, offset);
-    setScrollOffset(ptyId, clampedOffset);
-    // Update cache optimistically with clamped value
-    if (cached) {
-      ptyCaches.current.scrollStates.set(ptyId, {
-        ...cached,
-        viewportOffset: clampedOffset,
-        isAtBottom: isAtBottom(clampedOffset),
-      });
-    }
-  }, []);
-
-  // Scroll terminal to bottom
-  const handleScrollToBottom = useCallback((ptyId: string): void => {
-    scrollToBottom(ptyId);
-    // Update cache optimistically
-    const cached = ptyCaches.current.scrollStates.get(ptyId);
-    if (cached) {
-      ptyCaches.current.scrollStates.set(ptyId, {
-        ...cached,
-        viewportOffset: 0,
-        isAtBottom: true,
-      });
-    }
-  }, []);
+  // Scroll handlers are extracted to terminal/scroll-handlers.ts for reduced file size
+  // The handlers are created above using createScrollHandlers(ptyCaches)
 
   // Get cached emulator synchronously (for selection text extraction)
   const getEmulatorSync = useCallback((ptyId: string): GhosttyEmulator | null => {
@@ -520,10 +452,10 @@ export function TerminalProvider({ children }: TerminalProviderProps) {
     getFocusedCursorKeyMode,
     isMouseTrackingEnabled: handleIsMouseTrackingEnabled,
     isAlternateScreen: handleIsAlternateScreen,
-    getScrollState: handleGetScrollState,
-    scrollTerminal,
-    setScrollOffset: handleSetScrollOffset,
-    scrollToBottom: handleScrollToBottom,
+    getScrollState: scrollHandlers.handleGetScrollState,
+    scrollTerminal: scrollHandlers.scrollTerminal,
+    setScrollOffset: scrollHandlers.handleSetScrollOffset,
+    scrollToBottom: scrollHandlers.handleScrollToBottom,
     getEmulatorSync,
     getTerminalStateSync,
     isInitialized,

@@ -3,7 +3,7 @@
  * Note: Full PTY integration tests require bun runtime due to zig-pty.
  */
 import { Effect, Context, Layer } from "effect"
-import { describe, expect, it } from "@effect/vitest"
+import { describe, expect, layer, it as vitestIt } from "@effect/vitest"
 import { Cols, Rows, makePtyId, PtyId } from "../../../src/effect/types"
 import { PtySession } from "../../../src/effect/models"
 
@@ -47,108 +47,110 @@ class MockPty extends Context.Tag("@openmux/MockPty")<
 
 describe("Pty", () => {
   describe("testLayer behavior", () => {
-    it.effect("creates a PTY session", () =>
-      Effect.gen(function* () {
-        const pty = yield* MockPty
+    layer(MockPty.testLayer)((it) => {
+      it.effect("creates a PTY session", () =>
+        Effect.gen(function* () {
+          const pty = yield* MockPty
 
-        const ptyId = yield* pty.create({
-          cols: Cols.make(80),
-          rows: Rows.make(24),
+          const ptyId = yield* pty.create({
+            cols: Cols.make(80),
+            rows: Rows.make(24),
+          })
+
+          expect(ptyId).toBeDefined()
+          expect(typeof ptyId).toBe("string")
+          expect(ptyId).toContain("pty-")
         })
+      )
 
-        expect(ptyId).toBeDefined()
-        expect(typeof ptyId).toBe("string")
-        expect(ptyId).toContain("pty-")
-      }).pipe(Effect.provide(MockPty.testLayer))
-    )
+      it.effect("gets session info", () =>
+        Effect.gen(function* () {
+          const pty = yield* MockPty
 
-    it.effect("gets session info", () =>
-      Effect.gen(function* () {
-        const pty = yield* MockPty
+          const ptyId = yield* pty.create({
+            cols: Cols.make(80),
+            rows: Rows.make(24),
+          })
 
-        const ptyId = yield* pty.create({
-          cols: Cols.make(80),
-          rows: Rows.make(24),
+          const session = yield* pty.getSession(ptyId)
+
+          expect(session.pid).toBe(12345)
+          expect(session.cols).toBe(80)
+          expect(session.rows).toBe(24)
+          expect(session.cwd).toBe("/test/cwd")
+          expect(session.shell).toBe("/bin/bash")
         })
+      )
 
-        const session = yield* pty.getSession(ptyId)
+      it.effect("gets CWD", () =>
+        Effect.gen(function* () {
+          const pty = yield* MockPty
 
-        expect(session.pid).toBe(12345)
-        expect(session.cols).toBe(80)
-        expect(session.rows).toBe(24)
-        expect(session.cwd).toBe("/test/cwd")
-        expect(session.shell).toBe("/bin/bash")
-      }).pipe(Effect.provide(MockPty.testLayer))
-    )
+          const ptyId = yield* pty.create({
+            cols: Cols.make(80),
+            rows: Rows.make(24),
+          })
 
-    it.effect("gets CWD", () =>
-      Effect.gen(function* () {
-        const pty = yield* MockPty
+          const cwd = yield* pty.getCwd(ptyId)
 
-        const ptyId = yield* pty.create({
-          cols: Cols.make(80),
-          rows: Rows.make(24),
+          expect(cwd).toBe("/test/cwd")
         })
+      )
 
-        const cwd = yield* pty.getCwd(ptyId)
+      it.effect("writes to PTY without error", () =>
+        Effect.gen(function* () {
+          const pty = yield* MockPty
 
-        expect(cwd).toBe("/test/cwd")
-      }).pipe(Effect.provide(MockPty.testLayer))
-    )
+          const ptyId = yield* pty.create({
+            cols: Cols.make(80),
+            rows: Rows.make(24),
+          })
 
-    it.effect("writes to PTY without error", () =>
-      Effect.gen(function* () {
-        const pty = yield* MockPty
-
-        const ptyId = yield* pty.create({
-          cols: Cols.make(80),
-          rows: Rows.make(24),
+          yield* pty.write(ptyId, "echo hello")
         })
+      )
 
-        yield* pty.write(ptyId, "echo hello")
-      }).pipe(Effect.provide(MockPty.testLayer))
-    )
+      it.effect("resizes PTY without error", () =>
+        Effect.gen(function* () {
+          const pty = yield* MockPty
 
-    it.effect("resizes PTY without error", () =>
-      Effect.gen(function* () {
-        const pty = yield* MockPty
+          const ptyId = yield* pty.create({
+            cols: Cols.make(80),
+            rows: Rows.make(24),
+          })
 
-        const ptyId = yield* pty.create({
-          cols: Cols.make(80),
-          rows: Rows.make(24),
+          yield* pty.resize(ptyId, Cols.make(120), Rows.make(40))
         })
+      )
 
-        yield* pty.resize(ptyId, Cols.make(120), Rows.make(40))
-      }).pipe(Effect.provide(MockPty.testLayer))
-    )
+      it.effect("destroys PTY session", () =>
+        Effect.gen(function* () {
+          const pty = yield* MockPty
 
-    it.effect("destroys PTY session", () =>
-      Effect.gen(function* () {
-        const pty = yield* MockPty
+          const ptyId = yield* pty.create({
+            cols: Cols.make(80),
+            rows: Rows.make(24),
+          })
 
-        const ptyId = yield* pty.create({
-          cols: Cols.make(80),
-          rows: Rows.make(24),
+          yield* pty.destroy(ptyId)
         })
+      )
 
-        yield* pty.destroy(ptyId)
-      }).pipe(Effect.provide(MockPty.testLayer))
-    )
+      it.effect("destroys all PTY sessions", () =>
+        Effect.gen(function* () {
+          const pty = yield* MockPty
 
-    it.effect("destroys all PTY sessions", () =>
-      Effect.gen(function* () {
-        const pty = yield* MockPty
+          yield* pty.create({ cols: Cols.make(80), rows: Rows.make(24) })
+          yield* pty.create({ cols: Cols.make(100), rows: Rows.make(30) })
 
-        yield* pty.create({ cols: Cols.make(80), rows: Rows.make(24) })
-        yield* pty.create({ cols: Cols.make(100), rows: Rows.make(30) })
-
-        yield* pty.destroyAll()
-      }).pipe(Effect.provide(MockPty.testLayer))
-    )
+          yield* pty.destroyAll()
+        })
+      )
+    })
   })
 
   describe("PtySession model", () => {
-    it("creates valid PtySession", () => {
+    vitestIt("creates valid PtySession", () => {
       const session = PtySession.make({
         id: PtyId.make("test-pty-1"),
         pid: 9999,
@@ -168,7 +170,7 @@ describe("Pty", () => {
   })
 
   describe("makePtyId", () => {
-    it("generates unique IDs", () => {
+    vitestIt("generates unique IDs", () => {
       const id1 = makePtyId()
       const id2 = makePtyId()
       const id3 = makePtyId()
@@ -178,7 +180,7 @@ describe("Pty", () => {
       expect(id1).not.toBe(id3)
     })
 
-    it("generates IDs with correct prefix", () => {
+    vitestIt("generates IDs with correct prefix", () => {
       const id = makePtyId()
       expect(id.startsWith("pty-")).toBe(true)
     })

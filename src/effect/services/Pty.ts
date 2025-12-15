@@ -20,6 +20,8 @@ import { AppConfig } from "../Config"
 import type { InternalPtySession } from "./pty/types"
 import { getForegroundProcess, getGitBranch, getProcessCwd } from "./pty/helpers"
 import { getCurrentScrollState, notifySubscribers, notifyScrollSubscribers } from "./pty/notification"
+import { createDataHandler } from "./pty/data-handler"
+import { setupQueryPassthrough } from "./pty/query-setup"
 
 // =============================================================================
 // PTY Service
@@ -212,173 +214,26 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           scrollState: { viewportOffset: 0 },
         }
 
-        // Set up query passthrough - writes responses back to PTY
-        queryPassthrough.setPtyWriter((response: string) => {
-          pty.write(response)
-        })
-        queryPassthrough.setCursorGetter(() => {
-          const cursor = emulator.getCursor()
-          return { x: cursor.x, y: cursor.y }
-        })
-        queryPassthrough.setColorsGetter(() => {
-          const termColors = emulator.getColors()
-          return {
-            foreground: termColors.foreground,
-            background: termColors.background,
-          }
-        })
-        // Set mode getter to query DEC private modes from emulator
-        queryPassthrough.setModeGetter((mode: number) => {
-          // Query the mode from ghostty emulator
-          // Returns true if set, false if reset
-          try {
-            return emulator.getMode(mode)
-          } catch {
-            return null
-          }
-        })
-        // Set terminal version for XTVERSION responses
-        queryPassthrough.setTerminalVersion('0.1.16')
-        // Set size getter for XTWINOPS queries
-        queryPassthrough.setSizeGetter(() => {
-          // Estimate cell size (typical terminal font is ~8x16 pixels)
-          const cellWidth = 8;
-          const cellHeight = 16;
-          return {
-            cols: session.cols,
-            rows: session.rows,
-            pixelWidth: session.cols * cellWidth,
-            pixelHeight: session.rows * cellHeight,
-            cellWidth,
-            cellHeight,
-          }
+        // Set up query passthrough using extracted helper
+        setupQueryPassthrough({
+          queryPassthrough,
+          emulator,
+          pty,
+          getSessionDimensions: () => ({ cols: session.cols, rows: session.rows }),
         })
 
-        // Pending data buffer for batched writes
-        let pendingData = ''
-
-        // Sync mode parser for DEC Mode 2026 (synchronized output)
-        // Buffers content between sync start/end for atomic frame rendering
+        // Create sync mode parser for DEC Mode 2026 (synchronized output)
         const syncParser = createSyncModeParser()
 
-        // Timeout to prevent infinite buffering if sync mode is never closed
-        let syncTimeout: ReturnType<typeof setTimeout> | null = null
-        const SYNC_TIMEOUT_MS = 100 // Safety flush after 100ms
-
-        // Track DECSET 2048 state for initial notification (in-band resize mode)
-        // When mode 2048 is enabled, apps like Neovim expect CSI 48 notifications
-        // instead of relying on SIGWINCH signals for resize detection
-        let lastInBandResizeMode = false
-        // Track if pending data might contain DECSET 2048 enable sequence
-        let pendingMightEnable2048 = false
-
-        // Helper to schedule notification (extracted for reuse)
-        // Uses queueMicrotask for tighter timing - runs before next event loop tick
-        const scheduleNotify = () => {
-          if (!session.pendingNotify) {
-            session.pendingNotify = true
-            queueMicrotask(() => {
-              // Capture whether we need to check for DECSET 2048 mode transition
-              const checkFor2048 = pendingMightEnable2048
-              pendingMightEnable2048 = false
-
-              // Write all pending data at once
-              if (pendingData.length > 0) {
-                // Capture scrollback length before write to detect new lines
-                const scrollbackBefore = session.emulator.getScrollbackLength()
-
-                session.emulator.write(pendingData)
-                pendingData = ''
-
-                // If user is scrolled back, adjust offset to maintain view position
-                // when new lines are added to scrollback (prevents content from shifting up)
-                if (session.scrollState.viewportOffset > 0) {
-                  const scrollbackAfter = session.emulator.getScrollbackLength()
-                  const scrollbackDelta = scrollbackAfter - scrollbackBefore
-                  if (scrollbackDelta > 0) {
-                    session.scrollState.viewportOffset += scrollbackDelta
-                  }
-                }
-              }
-
-              // Check for DECSET 2048 mode transition AFTER data is written to emulator
-              // Per the spec, when mode 2048 is enabled, we must immediately send
-              // a report of the current terminal size (CSI 48 notification)
-              if (checkFor2048) {
-                try {
-                  const currentInBandMode = session.emulator.getMode(2048)
-                  if (currentInBandMode && !lastInBandResizeMode) {
-                    // Mode just got enabled - send initial size notification
-                    const cellWidth = 8
-                    const cellHeight = 16
-                    const pixelWidth = session.cols * cellWidth
-                    const pixelHeight = session.rows * cellHeight
-                    const resizeNotification = `\x1b[48;${session.rows};${session.cols};${pixelHeight};${pixelWidth}t`
-                    pty.write(resizeNotification)
-                  }
-                  lastInBandResizeMode = currentInBandMode
-                } catch {
-                  // Mode query may fail, ignore
-                }
-              }
-
-              notifySubscribers(session)
-              session.pendingNotify = false
-            })
-          }
-        }
-
-        // Wire up PTY data handler - batch both writes AND notifications
-        pty.onData((data: string) => {
-          // Check if this data contains DECSET 2048 (CSI ? 2048 h) - in-band resize enable
-          // We need to detect mode transitions to send the initial size report
-          const decset2048Pattern = /\x1b\[\?2048h/
-          if (decset2048Pattern.test(data)) {
-            pendingMightEnable2048 = true
-          }
-
-          // First, handle terminal queries (cursor position, device attributes, colors, etc.)
-          // This must happen before graphics passthrough to intercept queries
-          const afterQueries = session.queryPassthrough.process(data)
-
-          // Then handle graphics passthrough (Kitty graphics, Sixel)
-          const textData = session.graphicsPassthrough.process(afterQueries)
-
-          // Process through sync mode parser to respect frame boundaries
-          // This buffers content between CSI ? 2026 h and CSI ? 2026 l
-          const { readySegments, isBuffering } = syncParser.process(textData)
-
-          // Handle sync buffering timeout (safety valve)
-          if (isBuffering) {
-            if (!syncTimeout) {
-              syncTimeout = setTimeout(() => {
-                // Safety flush - sync mode took too long (app may have crashed)
-                const flushed = syncParser.flush()
-                if (flushed.length > 0) {
-                  pendingData += flushed
-                  scheduleNotify()
-                }
-                syncTimeout = null
-              }, SYNC_TIMEOUT_MS)
-            }
-          } else if (syncTimeout) {
-            clearTimeout(syncTimeout)
-            syncTimeout = null
-          }
-
-          // Add ready segments to pending data
-          for (const segment of readySegments) {
-            if (segment.length > 0) {
-              pendingData += segment
-            }
-          }
-
-          // Only schedule notification if we have data and aren't buffering
-          // When buffering, we wait for the complete frame before notifying
-          if (!isBuffering && pendingData.length > 0) {
-            scheduleNotify()
-          }
+        // Set up data handler using extracted helper
+        const { handleData } = createDataHandler({
+          session,
+          pty,
+          syncParser,
         })
+
+        // Wire up PTY data handler
+        pty.onData(handleData)
 
         // Wire up exit handler
         pty.onExit(({ exitCode }) => {

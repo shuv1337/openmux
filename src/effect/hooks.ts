@@ -2,7 +2,7 @@
  * React hooks for Effect integration.
  */
 import { useEffect, useState, useCallback, useRef } from "react"
-import { Effect, Exit } from "effect"
+import { Effect, Exit, Fiber } from "effect"
 import { AppRuntime, type AppServices } from "./runtime"
 
 // =============================================================================
@@ -201,9 +201,19 @@ export function useEffectOnMount<A, E>(
   effect: Effect.Effect<A, E, AppServices>
 ): void {
   useEffect(() => {
-    AppRuntime.runPromise(effect).catch((error) => {
-      console.error("Mount effect failed:", error)
-    })
+    // Fork the effect to get a fiber we can interrupt
+    const fiber = AppRuntime.runFork(
+      effect.pipe(
+        Effect.catchAll((error) =>
+          Effect.sync(() => console.error("Mount effect failed:", error))
+        )
+      )
+    )
+
+    // Return cleanup that interrupts the fiber
+    return () => {
+      AppRuntime.runFork(Fiber.interrupt(fiber))
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 }
@@ -229,9 +239,14 @@ export function useEffectOnUnmount<A, E>(
 
   useEffect(() => {
     return () => {
-      AppRuntime.runPromise(effectRef.current).catch((error) => {
-        console.error("Unmount effect failed:", error)
-      })
+      // Fire and forget the unmount effect - no need to wait for completion
+      AppRuntime.runFork(
+        effectRef.current.pipe(
+          Effect.catchAll((error) =>
+            Effect.sync(() => console.error("Unmount effect failed:", error))
+          )
+        )
+      )
     }
   }, [])
 }

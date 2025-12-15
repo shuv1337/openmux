@@ -22,6 +22,7 @@
     "prepare": "effect-language-service patch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check:circular": "bunx madge --circular --extensions ts,tsx src/",
     "release": "standard-version",
     "release:minor": "standard-version --release-as minor",
     "release:major": "standard-version --release-as major",

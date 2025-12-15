@@ -12,19 +12,16 @@ import { PtyId } from "../../types"
  * Uses platform-specific commands to determine the active process
  */
 export const getForegroundProcess = (shellPid: number): Effect.Effect<string | undefined> =>
-  Effect.tryPromise({
-    try: async () => {
-      const platform = process.platform
+  Effect.tryPromise(async () => {
+    const platform = process.platform
 
-      if (platform === "darwin") {
-        return await getDarwinForegroundProcess(shellPid)
-      } else if (platform === "linux") {
-        return await getLinuxForegroundProcess(shellPid)
-      }
+    if (platform === "darwin") {
+      return await getDarwinForegroundProcess(shellPid)
+    } else if (platform === "linux") {
+      return await getLinuxForegroundProcess(shellPid)
+    }
 
-      return undefined
-    },
-    catch: () => undefined as string | undefined,
+    return undefined
   }).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
 
 /**
@@ -93,19 +90,16 @@ async function getLinuxForegroundProcess(shellPid: number): Promise<string | und
  * Get the git branch for a directory
  */
 export const getGitBranch = (cwd: string): Effect.Effect<string | undefined> =>
-  Effect.tryPromise({
-    try: async () => {
-      const proc = Bun.spawn(
-        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-        { stdout: "pipe", stderr: "pipe", cwd }
-      )
-      const output = await new Response(proc.stdout).text()
-      const exitCode = await proc.exited
-      if (exitCode !== 0) return undefined
-      const branch = output.trim()
-      return branch || undefined
-    },
-    catch: () => undefined as string | undefined,
+  Effect.tryPromise(async () => {
+    const proc = Bun.spawn(
+      ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+      { stdout: "pipe", stderr: "pipe", cwd }
+    )
+    const output = await new Response(proc.stdout).text()
+    const exitCode = await proc.exited
+    if (exitCode !== 0) return undefined
+    const branch = output.trim()
+    return branch || undefined
   }).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
 
 /**

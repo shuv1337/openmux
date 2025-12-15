@@ -141,7 +141,7 @@ export const runEffectIgnore = <A, E>(
   AppRuntime.runPromise(
     effect.pipe(
       Effect.catchAll((error) =>
-        Effect.logError("Effect failed", error).pipe(Effect.as(undefined as unknown as A))
+        Effect.logError("Effect failed", error).pipe(Effect.asVoid)
       ),
       Effect.asVoid
     )

@@ -3,7 +3,7 @@
  * Replaces globalThis keyboard handler registration for overlays
  */
 
-import { Context, Effect, Layer, Ref } from "effect"
+import { Context, Effect, Layer } from "effect"
 
 // =============================================================================
 // Types
@@ -80,81 +80,62 @@ export class KeyboardRouter extends Context.Tag("@openmux/KeyboardRouter")<
     ) => Effect.Effect<boolean>
   }
 >() {
-  static readonly layer = Layer.effect(
-    KeyboardRouter,
-    Effect.gen(function* () {
-      // Store handlers by overlay type
-      const handlersRef = yield* Ref.make<Map<OverlayType, KeyHandler>>(new Map())
+  static readonly layer = Layer.sync(KeyboardRouter, () => {
+    // Use a plain Map for simple state - avoids Effect.runSync in callbacks
+    const handlers = new Map<OverlayType, KeyHandler>()
 
-      const registerHandler = Effect.fn("KeyboardRouter.registerHandler")(
-        function* (overlay: OverlayType, handler: KeyHandler) {
-          yield* Ref.update(handlersRef, (map) => {
-            const newMap = new Map(map)
-            newMap.set(overlay, handler)
-            return newMap
-          })
+    const registerHandler = (
+      overlay: OverlayType,
+      handler: KeyHandler
+    ): Effect.Effect<() => void> =>
+      Effect.sync(() => {
+        handlers.set(overlay, handler)
 
-          // Return unsubscribe function
-          return () => {
-            Effect.runSync(
-              Ref.update(handlersRef, (map) => {
-                const newMap = new Map(map)
-                newMap.delete(overlay)
-                return newMap
-              })
-            )
-          }
+        // Return plain unsubscribe function - no Effect needed
+        return () => {
+          handlers.delete(overlay)
         }
-      )
+      })
 
-      const routeKey = Effect.fn("KeyboardRouter.routeKey")(
-        function* (event: KeyEvent) {
-          const handlers = yield* Ref.get(handlersRef)
+    const routeKey = (
+      event: KeyEvent
+    ): Effect.Effect<{ handled: boolean; overlay: OverlayType | null }> =>
+      Effect.sync(() => {
+        // Sort overlays by priority (highest first)
+        const sortedOverlays = (Array.from(handlers.keys()) as OverlayType[])
+          .sort((a, b) => OVERLAY_PRIORITY[b] - OVERLAY_PRIORITY[a])
 
-          // Sort overlays by priority (highest first)
-          const sortedOverlays = (Array.from(handlers.keys()) as OverlayType[])
-            .sort((a, b) => OVERLAY_PRIORITY[b] - OVERLAY_PRIORITY[a])
-
-          // Try each handler in priority order
-          for (const overlay of sortedOverlays) {
-            const handler = handlers.get(overlay)
-            if (handler) {
-              const handled = handler(event)
-              if (handled) {
-                return { handled: true, overlay }
-              }
+        // Try each handler in priority order
+        for (const overlay of sortedOverlays) {
+          const handler = handlers.get(overlay)
+          if (handler) {
+            const handled = handler(event)
+            if (handled) {
+              return { handled: true, overlay }
             }
           }
-
-          return { handled: false, overlay: null }
         }
-      )
 
-      const getActiveOverlay = Effect.fn("KeyboardRouter.getActiveOverlay")(
-        function* () {
-          const handlers = yield* Ref.get(handlersRef)
-
-          // Return highest priority overlay with a handler
-          const sortedOverlays = (Array.from(handlers.keys()) as OverlayType[])
-            .sort((a, b) => OVERLAY_PRIORITY[b] - OVERLAY_PRIORITY[a])
-
-          return sortedOverlays[0] ?? null
-        }
-      )
-
-      const hasHandler = Effect.fn("KeyboardRouter.hasHandler")(
-        function* (overlay: OverlayType) {
-          const handlers = yield* Ref.get(handlersRef)
-          return handlers.has(overlay)
-        }
-      )
-
-      return KeyboardRouter.of({
-        registerHandler,
-        routeKey,
-        getActiveOverlay,
-        hasHandler,
+        return { handled: false, overlay: null }
       })
+
+    const getActiveOverlay = (): Effect.Effect<OverlayType | null> =>
+      Effect.sync(() => {
+        // Return highest priority overlay with a handler
+        const sortedOverlays = (Array.from(handlers.keys()) as OverlayType[])
+          .sort((a, b) => OVERLAY_PRIORITY[b] - OVERLAY_PRIORITY[a])
+
+        return sortedOverlays[0] ?? null
+      })
+
+    const hasHandler = (overlay: OverlayType): Effect.Effect<boolean> =>
+      Effect.sync(() => handlers.has(overlay))
+
+    return KeyboardRouter.of({
+      registerHandler,
+      routeKey,
+      getActiveOverlay,
+      hasHandler,
     })
-  )
+  })
 }
