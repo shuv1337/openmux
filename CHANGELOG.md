@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.41](https://github.com/monotykamary/openmux/compare/v0.1.40...v0.1.41) (2025-12-15)
+
+
+### Features
+
+* **aggregate:** add jump-to-PTY with cross-session support ([7f8fd1c](https://github.com/monotykamary/openmux/commit/7f8fd1c04c035b9a91a168b12f2e986de32edaaa))
+
+
+### Bug Fixes
+
+* prevent WASM out-of-bounds error on disposed emulator ([9ef63ac](https://github.com/monotykamary/openmux/commit/9ef63ac579e18296835df15839f53b9902026e8b))
+
+
+### Refactoring
+
+* add Effect lint CLI and fix best practices warnings ([543d055](https://github.com/monotykamary/openmux/commit/543d055664f0d11421c8e9688a6b77057ab97dcc))
+* **core:** decompose large files into Effect modules ([a58ddc9](https://github.com/monotykamary/openmux/commit/a58ddc9b9e7d63e2a7d37d71be07c08dc8266a08))
+* **effect:** fix Effect best practices and extract modules ([956f408](https://github.com/monotykamary/openmux/commit/956f408c3c658dd0828efdc2e34cfd599568cd41))
+
+
+### Tests
+
+* **search:** add tests for extracted search helpers ([09d5cff](https://github.com/monotykamary/openmux/commit/09d5cff12c67ccff518147aca633ae72a306df0d))
+
 ### [0.1.40](https://github.com/monotykamary/openmux/compare/v0.1.39...v0.1.40) (2025-12-15)
 
 
