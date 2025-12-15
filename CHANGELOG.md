@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.39](https://github.com/monotykamary/openmux/compare/v0.1.38...v0.1.39) (2025-12-15)
+
+
+### Bug Fixes
+
+* **pty:** support DECSET 2048 in-band resize notifications for Neovim ([a55e2dc](https://github.com/monotykamary/openmux/commit/a55e2dc459ba881bc4a589d9829129b89a9fa24f))
+
+
+### Documentation
+
+* update references from bun-pty to zig-pty ([3611cdd](https://github.com/monotykamary/openmux/commit/3611cdd714b0c1982119151fe82885cb62f949b8))
+
 ### [0.1.38](https://github.com/monotykamary/openmux/compare/v0.1.37...v0.1.38) (2025-12-14)
 
 
