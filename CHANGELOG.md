@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.40](https://github.com/monotykamary/openmux/compare/v0.1.39...v0.1.40) (2025-12-15)
+
+
+### Features
+
+* **aggregate:** add aggregate view for browsing PTYs across workspaces ([fd310f8](https://github.com/monotykamary/openmux/commit/fd310f8d2d680361678456a119c531adb1f8d3d2))
+* **ui:** add confirmation dialog for close pane and exit actions ([8452e88](https://github.com/monotykamary/openmux/commit/8452e88aa39baa5ecc85a8cb65a92c88617d2abf))
+
+
+### Refactoring
+
+* **aggregate:** simplify aggregate view, remove unused Effect service ([381f98e](https://github.com/monotykamary/openmux/commit/381f98e8b32f1c87e61de012261246384c3316fc))
+
+
+### Documentation
+
+* **hints:** add keyboard hints for aggregate view feature ([c9b9ec2](https://github.com/monotykamary/openmux/commit/c9b9ec2c0527aeaa12895053ccd80ed5052c0c2f))
+
 ### [0.1.39](https://github.com/monotykamary/openmux/compare/v0.1.38...v0.1.39) (2025-12-15)
 
 
