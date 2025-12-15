@@ -45,6 +45,90 @@ interface InternalPtySession {
 // Helper Functions
 // =============================================================================
 
+/** Get the foreground process name for a PTY's shell */
+const getForegroundProcess = (shellPid: number): Effect.Effect<string | undefined> =>
+  Effect.tryPromise({
+    try: async () => {
+      const platform = process.platform
+
+      if (platform === "darwin") {
+        // On macOS, get the foreground process group and find its name
+        // First, get child processes of the shell
+        const pgrepProc = Bun.spawn(
+          ["pgrep", "-P", String(shellPid)],
+          { stdout: "pipe", stderr: "pipe" }
+        )
+        const pgrepOutput = await new Response(pgrepProc.stdout).text()
+        await pgrepProc.exited
+
+        const childPids = pgrepOutput.trim().split("\n").filter(Boolean)
+        if (childPids.length === 0) {
+          // No child processes, return the shell name
+          const psProc = Bun.spawn(
+            ["ps", "-o", "comm=", "-p", String(shellPid)],
+            { stdout: "pipe", stderr: "pipe" }
+          )
+          const name = (await new Response(psProc.stdout).text()).trim()
+          await psProc.exited
+          // Get just the basename
+          return name.split("/").pop() || undefined
+        }
+
+        // Get the most recent child's name (likely the foreground process)
+        const lastPid = childPids[childPids.length - 1]
+        const psProc = Bun.spawn(
+          ["ps", "-o", "comm=", "-p", lastPid],
+          { stdout: "pipe", stderr: "pipe" }
+        )
+        const name = (await new Response(psProc.stdout).text()).trim()
+        await psProc.exited
+        // Get just the basename
+        return name.split("/").pop() || undefined
+      } else if (platform === "linux") {
+        // On Linux, get the foreground process using /proc
+        const statProc = Bun.spawn(
+          ["cat", `/proc/${shellPid}/stat`],
+          { stdout: "pipe", stderr: "pipe" }
+        )
+        const statOutput = await new Response(statProc.stdout).text()
+        await statProc.exited
+
+        // Parse the stat file to get the process group ID
+        const parts = statOutput.split(" ")
+        const pgrp = parts[4] // Process group ID
+
+        // Find the process leading the group
+        const psProc = Bun.spawn(
+          ["ps", "-o", "comm=", "--pid", pgrp],
+          { stdout: "pipe", stderr: "pipe" }
+        )
+        const name = (await new Response(psProc.stdout).text()).trim()
+        await psProc.exited
+        return name.split("/").pop() || undefined
+      }
+
+      return undefined
+    },
+    catch: () => undefined as string | undefined,
+  }).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
+
+/** Get the git branch for a directory */
+const getGitBranch = (cwd: string): Effect.Effect<string | undefined> =>
+  Effect.tryPromise({
+    try: async () => {
+      const proc = Bun.spawn(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        { stdout: "pipe", stderr: "pipe", cwd }
+      )
+      const output = await new Response(proc.stdout).text()
+      const exitCode = await proc.exited
+      if (exitCode !== 0) return undefined
+      const branch = output.trim()
+      return branch || undefined
+    },
+    catch: () => undefined as string | undefined,
+  }).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
+
 /** Get the current working directory of a process by PID */
 const getProcessCwd = (pid: number): Effect.Effect<string, PtyCwdError> =>
   Effect.tryPromise({
@@ -176,6 +260,15 @@ export class Pty extends Context.Tag("@openmux/Pty")<
 
     /** Destroy all sessions */
     readonly destroyAll: () => Effect.Effect<void>
+
+    /** List all active PTY IDs */
+    readonly listAll: () => Effect.Effect<PtyId[]>
+
+    /** Get foreground process name for a PTY */
+    readonly getForegroundProcess: (id: PtyId) => Effect.Effect<string | undefined, PtyNotFoundError>
+
+    /** Get git branch for a PTY's current directory */
+    readonly getGitBranch: (id: PtyId) => Effect.Effect<string | undefined, PtyNotFoundError | PtyCwdError>
   }
 >() {
   /** Production layer */
@@ -731,6 +824,31 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         }
       })
 
+      const listAll = Effect.fn("Pty.listAll")(function* () {
+        const sessions = yield* Ref.get(sessionsRef)
+        return Array.from(HashMap.keys(sessions))
+      })
+
+      const getForegroundProcessFn = Effect.fn("Pty.getForegroundProcess")(function* (
+        id: PtyId
+      ) {
+        const session = yield* getSessionOrFail(id)
+        if (session.pty.pid === undefined) {
+          return undefined
+        }
+        return yield* getForegroundProcess(session.pty.pid)
+      })
+
+      const getGitBranchFn = Effect.fn("Pty.getGitBranch")(function* (id: PtyId) {
+        const session = yield* getSessionOrFail(id)
+        if (session.pty.pid === undefined) {
+          return undefined
+        }
+        // Get the CWD first
+        const cwd = yield* getProcessCwd(session.pty.pid)
+        return yield* getGitBranch(cwd)
+      })
+
       return Pty.of({
         create,
         write,
@@ -748,6 +866,9 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         setScrollOffset,
         getEmulator,
         destroyAll,
+        listAll,
+        getForegroundProcess: getForegroundProcessFn,
+        getGitBranch: getGitBranchFn,
       })
     })
   )
@@ -791,5 +912,8 @@ export class Pty extends Context.Tag("@openmux/Pty")<
     setScrollOffset: () => Effect.void,
     getEmulator: () => Effect.die(new Error("No emulator in test layer")),
     destroyAll: () => Effect.void,
+    listAll: () => Effect.succeed([]),
+    getForegroundProcess: () => Effect.succeed(undefined),
+    getGitBranch: () => Effect.succeed(undefined),
   })
 }

@@ -7,9 +7,10 @@
  */
 import { Effect } from "effect"
 import { runEffect, runEffectIgnore } from "./runtime"
-import { Clipboard, Pty, SessionManager, SessionStorage } from "./services"
+import { Clipboard, Pty, SessionManager, SessionStorage, AggregateQuery, type PaneInfo, parseSearchQuery } from "./services"
 import { PtyId, Cols, Rows, SessionId, makePtyId } from "./types"
-import type { SerializedSession, SessionMetadata } from "./models"
+import { getHostColors, extractRgb } from "../terminal/terminal-colors"
+import type { SerializedSession, SessionMetadata, FilterExpression, AggregatedPty } from "./models"
 import {
   SerializedSession as EffectSerializedSession,
   SerializedWorkspace,
@@ -718,4 +719,152 @@ export async function loadSessionData(
   } catch {
     return null
   }
+}
+
+// =============================================================================
+// Aggregate Query Bridge
+// =============================================================================
+
+/**
+ * Query PTYs matching a filter expression.
+ * Pane info must be provided from the React layer.
+ */
+export async function queryAggregatedPtys(
+  panes: readonly PaneInfo[],
+  filter: FilterExpression | null
+): Promise<AggregatedPty[]> {
+  try {
+    return await runEffect(
+      Effect.gen(function* () {
+        const aggregateQuery = yield* AggregateQuery
+        return yield* aggregateQuery.query(panes, filter)
+      })
+    )
+  } catch {
+    return []
+  }
+}
+
+/**
+ * List all active PTYs across all sessions with their metadata.
+ * This bypasses pane info and queries the PTY service directly.
+ */
+/** Check if a process is still alive */
+async function isProcessAlive(pid: number): Promise<boolean> {
+  try {
+    // kill -0 sends no signal but checks if process exists
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function listAllPtysWithMetadata(): Promise<Array<{
+  ptyId: string
+  cwd: string
+  gitBranch: string | undefined
+  foregroundProcess: string | undefined
+}>> {
+  try {
+    return await runEffect(
+      Effect.gen(function* () {
+        const pty = yield* Pty
+        const ptyIds = yield* pty.listAll()
+
+        const results: Array<{
+          ptyId: string
+          cwd: string
+          gitBranch: string | undefined
+          foregroundProcess: string | undefined
+        }> = []
+
+        for (const ptyId of ptyIds) {
+          // Get session to check if PTY process is still alive
+          const session = yield* pty.getSession(ptyId).pipe(
+            Effect.catchAll(() => Effect.succeed(null))
+          )
+
+          // Skip if session not found or process is dead
+          if (!session || session.pid === 0) continue
+          const alive = yield* Effect.promise(() => isProcessAlive(session.pid))
+          if (!alive) continue
+
+          const cwd = yield* pty.getCwd(ptyId).pipe(
+            Effect.catchAll(() => Effect.succeed(process.cwd()))
+          )
+          const gitBranch = yield* pty.getGitBranch(ptyId).pipe(
+            Effect.catchAll(() => Effect.succeed(undefined))
+          )
+          const foregroundProcess = yield* pty.getForegroundProcess(ptyId).pipe(
+            Effect.catchAll(() => Effect.succeed(undefined))
+          )
+
+          // Skip defunct processes (zombie processes)
+          if (foregroundProcess?.includes('defunct')) continue
+
+          results.push({
+            ptyId,
+            cwd,
+            gitBranch,
+            foregroundProcess,
+          })
+        }
+
+        return results
+      })
+    )
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Parse a simple search query string into a FilterExpression.
+ * Returns null for empty queries.
+ */
+export function parseAggregateSearchQuery(query: string): FilterExpression | null {
+  return parseSearchQuery(query)
+}
+
+/**
+ * Re-export PaneInfo type for external use.
+ */
+export type { PaneInfo } from "./services"
+
+/**
+ * Re-export FilterExpression and AggregatedPty types for external use.
+ */
+export type { FilterExpression, AggregatedPty } from "./models"
+
+// =============================================================================
+// Terminal Color Bridge
+// =============================================================================
+
+/**
+ * Get the host terminal's background color as a hex string.
+ * Returns the cached color if available, otherwise returns a default.
+ */
+export function getHostBackgroundColor(): string {
+  const colors = getHostColors()
+  if (colors) {
+    const rgb = extractRgb(colors.background)
+    return `#${rgb.r.toString(16).padStart(2, '0')}${rgb.g.toString(16).padStart(2, '0')}${rgb.b.toString(16).padStart(2, '0')}`
+  }
+  // Default dark background if no host colors detected
+  return '#000000'
+}
+
+/**
+ * Get the host terminal's foreground color as a hex string.
+ * Returns the cached color if available, otherwise returns a default.
+ */
+export function getHostForegroundColor(): string {
+  const colors = getHostColors()
+  if (colors) {
+    const rgb = extractRgb(colors.foreground)
+    return `#${rgb.r.toString(16).padStart(2, '0')}${rgb.g.toString(16).padStart(2, '0')}${rgb.b.toString(16).padStart(2, '0')}`
+  }
+  // Default white foreground if no host colors detected
+  return '#ffffff'
 }

@@ -208,7 +208,7 @@ export interface SelectionBounds {
 /**
  * Keyboard mode for prefix key system
  */
-export type KeyMode = 'normal' | 'prefix' | 'search';
+export type KeyMode = 'normal' | 'prefix' | 'search' | 'aggregate';
 
 /**
  * Keyboard state

@@ -21,6 +21,8 @@ type KeyboardAction =
   | { type: 'EXIT_PREFIX_MODE' }
   | { type: 'ENTER_SEARCH_MODE' }
   | { type: 'EXIT_SEARCH_MODE' }
+  | { type: 'ENTER_AGGREGATE_MODE' }
+  | { type: 'EXIT_AGGREGATE_MODE' }
   | { type: 'TOGGLE_HINTS' };
 
 function keyboardReducer(state: KeyboardState, action: KeyboardAction): KeyboardState {
@@ -47,6 +49,19 @@ function keyboardReducer(state: KeyboardState, action: KeyboardAction): Keyboard
       };
 
     case 'EXIT_SEARCH_MODE':
+      return {
+        ...state,
+        mode: 'normal',
+      };
+
+    case 'ENTER_AGGREGATE_MODE':
+      return {
+        ...state,
+        mode: 'aggregate',
+        prefixActivatedAt: undefined,
+      };
+
+    case 'EXIT_AGGREGATE_MODE':
       return {
         ...state,
         mode: 'normal',
@@ -118,6 +133,7 @@ interface KeyboardHandlerOptions {
   onToggleSessionPicker?: () => void;
   onEnterSearch?: () => void;
   onToggleConsole?: () => void;
+  onToggleAggregateView?: () => void;
 }
 
 /**
@@ -126,7 +142,7 @@ interface KeyboardHandlerOptions {
 export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
   const { state: kbState, dispatch: kbDispatch } = useKeyboardState();
   const { dispatch: layoutDispatch, activeWorkspace } = useLayout();
-  const { onPaste, onNewPane, onQuit, onToggleSessionPicker, onEnterSearch, onToggleConsole } = options;
+  const { onPaste, onNewPane, onQuit, onToggleSessionPicker, onEnterSearch, onToggleConsole, onToggleAggregateView } = options;
 
   const handleKeyDown = useCallback((event: {
     key: string;
@@ -144,7 +160,7 @@ export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
 
     // Handle Alt keybindings (prefix-less actions) in normal mode
     if (kbState.mode === 'normal' && alt) {
-      return handleAltKey(key, kbDispatch, layoutDispatch, activeWorkspace.layoutMode, onNewPane, onToggleSessionPicker, onEnterSearch);
+      return handleAltKey(key, kbDispatch, layoutDispatch, activeWorkspace.layoutMode, onNewPane, onToggleSessionPicker, onEnterSearch, onToggleAggregateView);
     }
 
     // Handle Ctrl+B to enter prefix mode (only in normal mode)
@@ -164,12 +180,12 @@ export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
 
     // Prefix mode commands
     if (kbState.mode === 'prefix') {
-      return handlePrefixModeKey(key, kbDispatch, layoutDispatch, onPaste, onNewPane, onQuit, onToggleSessionPicker, onEnterSearch, onToggleConsole);
+      return handlePrefixModeKey(key, kbDispatch, layoutDispatch, onPaste, onNewPane, onQuit, onToggleSessionPicker, onEnterSearch, onToggleConsole, onToggleAggregateView);
     }
 
     // Normal mode - pass through to terminal
     return false;
-  }, [kbState.mode, kbDispatch, layoutDispatch, activeWorkspace.layoutMode, onPaste, onNewPane, onQuit, onToggleSessionPicker, onEnterSearch, onToggleConsole]);
+  }, [kbState.mode, kbDispatch, layoutDispatch, activeWorkspace.layoutMode, onPaste, onNewPane, onQuit, onToggleSessionPicker, onEnterSearch, onToggleConsole, onToggleAggregateView]);
 
   return { handleKeyDown, mode: kbState.mode };
 }
@@ -184,7 +200,8 @@ function handleAltKey(
   currentLayoutMode: 'vertical' | 'horizontal' | 'stacked',
   onNewPane?: () => void,
   onToggleSessionPicker?: () => void,
-  onEnterSearch?: () => void
+  onEnterSearch?: () => void,
+  onToggleAggregateView?: () => void
 ): boolean {
   // Alt+hjkl for navigation
   const direction = keyToDirection(key);
@@ -253,6 +270,15 @@ function handleAltKey(
       }
       return false;
 
+    // Alt+g to toggle aggregate view (global view)
+    case 'g':
+      if (onToggleAggregateView) {
+        kbDispatch({ type: 'ENTER_AGGREGATE_MODE' });
+        onToggleAggregateView();
+        return true;
+      }
+      return false;
+
     default:
       return false;
   }
@@ -267,7 +293,8 @@ function handlePrefixModeKey(
   onQuit?: () => void,
   onToggleSessionPicker?: () => void,
   onEnterSearch?: () => void,
-  onToggleConsole?: () => void
+  onToggleConsole?: () => void,
+  onToggleAggregateView?: () => void
 ): boolean {
   const exitPrefix = () => kbDispatch({ type: 'EXIT_PREFIX_MODE' });
 
@@ -364,6 +391,17 @@ function handlePrefixModeKey(
         kbDispatch({ type: 'ENTER_SEARCH_MODE' });
         onEnterSearch();
         // Don't call exitPrefix() here - ENTER_SEARCH_MODE already handles the mode transition
+        return true;
+      }
+      exitPrefix();
+      return true;
+
+    // Aggregate view (global view)
+    case 'g':
+      if (onToggleAggregateView) {
+        kbDispatch({ type: 'ENTER_AGGREGATE_MODE' });
+        onToggleAggregateView();
+        // Don't call exitPrefix() here - ENTER_AGGREGATE_MODE already handles the mode transition
         return true;
       }
       exitPrefix();

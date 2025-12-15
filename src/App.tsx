@@ -18,9 +18,11 @@ import {
 import { SelectionProvider, useSelection } from './contexts/SelectionContext';
 import { SearchProvider, useSearch } from './contexts/SearchContext';
 import { SessionProvider, useSession } from './contexts/SessionContext';
+import { AggregateViewProvider, useAggregateView } from './contexts/AggregateViewContext';
 import { PaneContainer, StatusBar, KeyboardHints, CopyNotification } from './components';
 import { SessionPicker } from './components/SessionPicker';
 import { SearchOverlay } from './components/SearchOverlay';
+import { AggregateView } from './components/AggregateView';
 import { inputHandler } from './terminal';
 import type { Workspace, WorkspaceId } from './core/types';
 import { getFocusedPtyId } from './core/workspace-utils';
@@ -32,6 +34,7 @@ function AppContent() {
   const { togglePicker, state: sessionState } = useSession();
   const { clearAllSelections, copyNotification } = useSelection();
   const { searchState, enterSearchMode, exitSearchMode, setSearchQuery, nextMatch, prevMatch } = useSearch();
+  const { state: aggregateState, openAggregateView } = useAggregateView();
   const { dispatch: kbDispatch } = useKeyboardState();
   const renderer = useRenderer();
 
@@ -85,6 +88,11 @@ function AppContent() {
     }
   }, [activeWorkspace, enterSearchMode, clearAllSelections]);
 
+  // Aggregate view toggle handler
+  const handleToggleAggregateView = useCallback(() => {
+    openAggregateView();
+  }, [openAggregateView]);
+
   // Handle bracketed paste from host terminal (Cmd+V sends this)
   useEffect(() => {
     const handleBracketedPaste = (event: PasteEvent) => {
@@ -108,6 +116,7 @@ function AppContent() {
     onToggleSessionPicker: handleToggleSessionPicker,
     onEnterSearch: handleEnterSearch,
     onToggleConsole: handleToggleConsole,
+    onToggleAggregateView: handleToggleAggregateView,
   });
 
   // Track which panes have PTYs created
@@ -202,6 +211,28 @@ function AppContent() {
     }
   }, [isInitialized, panes, resizePTY, setPanePosition]);
 
+  // Track previous aggregate view state to detect close
+  const prevShowAggregateView = useRef(aggregateState.showAggregateView);
+
+  // Restore PTY sizes when aggregate view closes
+  // The preview resizes PTYs to preview dimensions, so we need to restore pane dimensions
+  useEffect(() => {
+    const wasOpen = prevShowAggregateView.current;
+    const isOpen = aggregateState.showAggregateView;
+    prevShowAggregateView.current = isOpen;
+
+    // Only trigger resize when closing (was open, now closed)
+    if (wasOpen && !isOpen && isInitialized) {
+      for (const pane of panes) {
+        if (pane.ptyId && pane.rectangle) {
+          const cols = Math.max(1, pane.rectangle.width - 2);
+          const rows = Math.max(1, pane.rectangle.height - 2);
+          resizePTY(pane.ptyId, cols, rows);
+        }
+      }
+    }
+  }, [aggregateState.showAggregateView, isInitialized, panes, resizePTY]);
+
   // Handle keyboard input
   useKeyboard(
     useCallback(
@@ -219,6 +250,27 @@ function AppContent() {
             });
           }
           // Always return when picker is open - don't let keys fall through to multiplexer
+          return;
+        }
+
+        // If aggregate view is open, route keys to it
+        if (aggregateState.showAggregateView) {
+          const aggregateViewHandler = (globalThis as unknown as { __aggregateViewKeyHandler?: (e: { key: string; ctrl?: boolean; alt?: boolean; shift?: boolean; sequence?: string }) => boolean }).__aggregateViewKeyHandler;
+          if (aggregateViewHandler) {
+            // Use event.sequence for printable chars (handles shift for uppercase/symbols)
+            // Fall back to event.name for special keys
+            const charCode = event.sequence?.charCodeAt(0) ?? 0;
+            const isPrintable = event.sequence?.length === 1 && charCode >= 32 && charCode < 127;
+            const keyToPass = isPrintable ? event.sequence! : event.name;
+            aggregateViewHandler({
+              key: keyToPass,
+              ctrl: event.ctrl,
+              alt: event.option,
+              shift: event.shift,
+              sequence: event.sequence,
+            });
+          }
+          // Always return when aggregate view is open
           return;
         }
 
@@ -315,7 +367,7 @@ function AppContent() {
           }
         }
       },
-      [handleKeyDown, mode, writeToFocused, getFocusedCursorKeyMode, sessionState.showSessionPicker, clearAllSelections, searchState, exitSearchMode, nextMatch, prevMatch, setSearchQuery, kbDispatch]
+      [handleKeyDown, mode, writeToFocused, getFocusedCursorKeyMode, sessionState.showSessionPicker, aggregateState.showAggregateView, clearAllSelections, searchState, exitSearchMode, nextMatch, prevMatch, setSearchQuery, kbDispatch]
     )
   );
 
@@ -341,6 +393,9 @@ function AppContent() {
 
       {/* Search overlay */}
       <SearchOverlay width={width} height={height} />
+
+      {/* Aggregate view overlay */}
+      <AggregateView width={width} height={height} />
 
       {/* Copy notification toast */}
       <CopyNotification
@@ -469,7 +524,9 @@ function AppWithTerminal() {
       <SelectionProvider>
         <SearchProvider>
           <SessionBridge>
-            <AppContent />
+            <AggregateViewProvider>
+              <AppContent />
+            </AggregateViewProvider>
           </SessionBridge>
         </SearchProvider>
       </SelectionProvider>
