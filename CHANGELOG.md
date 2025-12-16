@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.5](https://github.com/monotykamary/openmux/compare/v0.2.4...v0.2.5) (2025-12-16)
+
+
+### Bug Fixes
+
+* **scroll:** add direction hysteresis to prevent trackpad scroll jitter ([2286ac0](https://github.com/monotykamary/openmux/commit/2286ac099ac3854c838578cbac9358c5252994f7))
+* **scroll:** uncommit direction on change to prevent stale scroll events ([023054b](https://github.com/monotykamary/openmux/commit/023054b9f52aeb5a3b69c2d7b60856f47ab0c9fa))
+
 ### [0.2.4](https://github.com/monotykamary/openmux/compare/v0.2.3...v0.2.4) (2025-12-16)
 
 
