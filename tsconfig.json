@@ -1,4 +1,6 @@
 {
+  "include": ["src/**/*", "zig-pty/**/*"],
+  "exclude": ["node_modules"],
   "compilerOptions": {
     // Effect Language Service
     "plugins": [{ "name": "@effect/language-service" }],
