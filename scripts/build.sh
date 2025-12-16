@@ -114,8 +114,36 @@ build() {
     # Build zig-pty native library first
     build_zig_pty
 
-    # Build the binary
-    bun build --compile --minify src/index.tsx --outfile "$DIST_DIR/$BINARY_NAME-bin"
+    # Bundle with Solid.js plugin (bun build --compile doesn't run preload scripts)
+    # This transforms JSX and bundles all dependencies into a single file
+    echo "Bundling with Solid.js transform..."
+    bun run scripts/bundle.ts
+
+    # Temporarily remove preload from bunfig.toml during compilation
+    # The bundle.ts already handles Solid.js transform, so preload is not needed
+    local bunfig_path="$PROJECT_DIR/bunfig.toml"
+    local bunfig_backup_path="$PROJECT_DIR/bunfig.toml.build-backup"
+
+    if [[ -f "$bunfig_path" ]]; then
+        cp "$bunfig_path" "$bunfig_backup_path"
+        # Create a version without preload lines
+        grep -v '^preload' "$bunfig_backup_path" > "$bunfig_path" || true
+    fi
+
+    # Compile the bundled output into a standalone binary
+    local compile_status=0
+    bun build --compile --minify "$DIST_DIR/index.js" --outfile "$DIST_DIR/$BINARY_NAME-bin" || compile_status=$?
+
+    # Restore bunfig.toml
+    if [[ -f "$bunfig_backup_path" ]]; then
+        mv "$bunfig_backup_path" "$bunfig_path"
+    fi
+
+    # Exit if compilation failed
+    if [[ $compile_status -ne 0 ]]; then
+        echo "Compilation failed"
+        exit $compile_status
+    fi
 
     # Find and copy native library from zig-pty
     local pty_lib="$PROJECT_DIR/zig-pty/zig-out/lib/$LIB_NAME"
@@ -153,11 +181,13 @@ set "ZIG_PTY_LIB=%SCRIPT_DIR%zig_pty.dll"
 WRAPPER
     else
         # Unix shell script
+        # Note: cd to SCRIPT_DIR to avoid reading bunfig.toml from user's cwd
         cat > "$wrapper_path" << WRAPPER
 #!/usr/bin/env bash
 SCRIPT_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 export ZIG_PTY_LIB="\${ZIG_PTY_LIB:-\$SCRIPT_DIR/libzig_pty.$LIB_EXT}"
-exec "\$SCRIPT_DIR/openmux-bin" "\$@"
+cd "\$SCRIPT_DIR"
+exec "./openmux-bin" "\$@"
 WRAPPER
         chmod +x "$wrapper_path"
     fi
