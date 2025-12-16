@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.9](https://github.com/monotykamary/openmux/compare/v0.2.8...v0.2.9) (2025-12-16)
+
+
+### Bug Fixes
+
+* **pty:** prevent handle leaks, zombie processes, and duplicate exit events ([757700f](https://github.com/monotykamary/openmux/commit/757700fc007c52370809a801b735d818f1ae27aa))
+
 ### [0.2.8](https://github.com/monotykamary/openmux/compare/v0.2.7...v0.2.8) (2025-12-16)
 
 
