@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.7](https://github.com/monotykamary/openmux/compare/v0.2.6...v0.2.7) (2025-12-16)
+
+
+### Bug Fixes
+
+* **render:** prevent smearing artifacts after wide characters at EOL ([dde9a59](https://github.com/monotykamary/openmux/commit/dde9a590545a244dda09abf50f49d52d36546c84))
+
+
+### Documentation
+
+* update documentation for SolidJS migration ([1156dcd](https://github.com/monotykamary/openmux/commit/1156dcd4a61e277bb9381e7062d1b2293a813290))
+
 ### [0.2.6](https://github.com/monotykamary/openmux/compare/v0.2.5...v0.2.6) (2025-12-16)
 
 
