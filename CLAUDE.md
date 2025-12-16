@@ -18,15 +18,15 @@ bun run test:watch    # Run tests in watch mode
 ## Technology Stack
 
 - **Bun** - Runtime and package manager (use instead of Node.js)
-- **OpenTUI** - Terminal UI library with React reconciler (@opentui/core, @opentui/react)
+- **OpenTUI** - Terminal UI library with SolidJS reconciler (@opentui/core, @opentui/solid)
+- **SolidJS** - Reactive UI framework via OpenTUI's SolidJS reconciler
 - **zig-pty** - PTY support for shell process management (pure Zig implementation)
 - **ghostty-web** - WASM-based terminal emulator (VT parsing)
-- **React 19** - UI components via OpenTUI's React reconciler
 - **Effect** - Typed functional programming for services (gradual migration in src/effect/)
 
 ## Architecture Overview
 
-openmux is a terminal multiplexer with a master-stack tiling layout (Zellij-style). The architecture follows a React-based component model rendered to the terminal via OpenTUI.
+openmux is a terminal multiplexer with a master-stack tiling layout (Zellij-style). The architecture follows a SolidJS-based component model rendered to the terminal via OpenTUI.
 
 ### Core Data Flow
 
@@ -63,8 +63,8 @@ ThemeProvider              // Styling/theming
 - `input-handler.ts` - Converts keyboard events to escape sequences (handles DECCKM mode)
 - `graphics-passthrough.ts` - Kitty Graphics and Sixel protocol passthrough to host terminal
 
-**React Contexts (src/contexts/)**
-- `LayoutContext.tsx` - Reducer-based workspace/pane management, handles NAVIGATE, NEW_PANE, CLOSE_PANE, etc.
+**SolidJS Contexts (src/contexts/)**
+- `LayoutContext.tsx` - Store-based workspace/pane management with action functions
 - `TerminalContext.tsx` - Manages PTY creation/destruction, subscribes to terminal state updates
 - `KeyboardContext.tsx` - Handles prefix mode (Ctrl+b) with 2s timeout, resize mode
 - `SelectionContext.tsx` - Text selection state and clipboard operations
@@ -74,7 +74,42 @@ ThemeProvider              // Styling/theming
 - `services/` - Effect services (Clipboard, FileSystem, Pty, SessionManager, SessionStorage)
 - `models.ts` - Domain models with Schema validation (Rectangle, PaneData, SerializedSession)
 - `runtime.ts` - App and test layer composition with ManagedRuntime
-- `bridge.ts` - Integration bridge for gradual adoption alongside React contexts
+- `bridge.ts` - Integration bridge for gradual adoption alongside SolidJS contexts
+
+### SolidJS Reactivity Patterns
+
+Contexts expose values via object properties. Understanding what's safe to destructure is critical:
+
+**Safe to destructure (action functions):**
+```tsx
+const { newPane, closePane, focusPane } = useLayout();  // ✅ Plain functions
+const { createPTY, writeToPTY } = useTerminal();        // ✅ Plain functions
+```
+
+**Safe to destructure (store proxy - accessing properties IS reactive):**
+```tsx
+const { state } = useLayout();
+state.workspaces;           // ✅ Reactive - store proxy tracks access
+state.activeWorkspaceId;    // ✅ Reactive
+```
+
+**NOT safe to destructure (computed getters - call signal/memo inside):**
+```tsx
+// ❌ DON'T: Destructuring calls the getter once, loses reactivity
+const { activeWorkspace, panes, isInitialized } = useLayout();
+
+// ✅ DO: Access via context object to call getter at access time
+const layout = useLayout();
+layout.activeWorkspace;     // Calls getter each time, stays reactive
+layout.panes;               // Calls getter each time, stays reactive
+```
+
+**Computed getters by context (access via context object, don't destructure):**
+- `LayoutContext`: `activeWorkspace`, `panes`, `paneCount`, `populatedWorkspaces`, `layoutVersion`
+- `TerminalContext`: `isInitialized`
+- `SessionContext`: `filteredSessions`
+- `SelectionContext`: `selectionVersion`, `copyNotification`
+- `SearchContext`: `searchVersion`
 
 ### Layout Modes
 

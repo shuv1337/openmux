@@ -3,7 +3,8 @@
 A terminal multiplexer with master-stack layout (Zellij-style), built with:
 
 - **Bun** - Fast JavaScript runtime
-- **OpenTUI** - Terminal UI library with React reconciler
+- **OpenTUI** - Terminal UI library with SolidJS reconciler
+- **SolidJS** - Reactive UI framework
 - **zig-pty** - PTY support for Bun (pure Zig implementation)
 - **ghostty-web** - Terminal emulation via WASM
 
@@ -148,7 +149,7 @@ src/
 │       ├── session-serializer.ts   # Serialize/deserialize sessions
 │       └── session-storage.ts      # Disk I/O for sessions
 │
-├── components/                     # OpenTUI React components
+├── components/                     # OpenTUI SolidJS components
 │   ├── index.ts                    # Component exports
 │   ├── Pane.tsx                    # Individual pane with border/focus
 │   ├── PaneContainer.tsx           # Layout pane renderer
@@ -158,9 +159,9 @@ src/
 │   ├── SessionPicker.tsx           # Session selection modal
 │   └── AggregateView.tsx           # PTY browser overlay
 │
-├── contexts/                       # React contexts for state
+├── contexts/                       # SolidJS contexts for state
 │   ├── index.ts                    # Context exports
-│   ├── LayoutContext.tsx           # Workspace/pane layout state reducer
+│   ├── LayoutContext.tsx           # Workspace/pane layout state (store + actions)
 │   ├── TerminalContext.tsx         # PTY management and lifecycle
 │   ├── KeyboardContext.tsx         # Prefix mode and key state
 │   ├── SessionContext.tsx          # Session management and persistence
@@ -180,8 +181,8 @@ src/
 │   ├── index.ts                    # Utils exports
 │   └── clipboard.ts                # Clipboard read/write
 │
-├── App.tsx                         # Main app component with context hierarchy
-└── index.tsx                       # Entry point (Bun serve + OpenTUI renderer)
+├── App.tsx                         # Main app component with provider hierarchy
+└── index.tsx                       # Entry point (Bun + OpenTUI renderer)
 ```
 
 ## Development Status
