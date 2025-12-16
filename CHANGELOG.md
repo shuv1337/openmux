@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.3](https://github.com/monotykamary/openmux/compare/v0.2.2...v0.2.3) (2025-12-16)
+
+
+### Bug Fixes
+
+* **build:** apply bunfig.toml isolation to npm/bun bin wrapper ([5958c5d](https://github.com/monotykamary/openmux/commit/5958c5db95b580c8849e4e6e823da28070afa10a))
+
 ### [0.2.2](https://github.com/monotykamary/openmux/compare/v0.2.1...v0.2.2) (2025-12-16)
 
 
