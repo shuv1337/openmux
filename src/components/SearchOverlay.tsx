@@ -15,7 +15,8 @@ interface SearchOverlayProps {
 }
 
 export function SearchOverlay(props: SearchOverlayProps) {
-  const { searchState } = useSearch();
+  // Keep search context to access searchState reactively (it's a getter)
+  const search = useSearch();
 
   // Calculate overlay dimensions
   const overlayWidth = () => Math.min(props.width - 4, 60);
@@ -25,7 +26,7 @@ export function SearchOverlay(props: SearchOverlayProps) {
 
   // Build match count display
   const matchDisplay = () => {
-    const state = searchState;
+    const state = search.searchState;
     if (!state) return '';
     const { query, matches, currentMatchIndex } = state;
     if (query === '') {
@@ -38,7 +39,7 @@ export function SearchOverlay(props: SearchOverlayProps) {
   };
 
   return (
-    <Show when={searchState}>
+    <Show when={search.searchState}>
       {(state: Accessor<SearchState>) => (
         <box
           style={{

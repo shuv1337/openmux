@@ -45,8 +45,11 @@ function AppContent() {
   const terminal = useTerminal();
   const { createPTY, resizePTY, setPanePosition, writeToFocused, writeToPTY, pasteToFocused, getFocusedCwd, getFocusedCursorKeyMode, destroyAllPTYs, getSessionCwd } = terminal;
   const { togglePicker, state: sessionState, saveSession } = useSession();
-  const { clearAllSelections, copyNotification } = useSelection();
-  const { searchState, enterSearchMode, exitSearchMode, setSearchQuery, nextMatch, prevMatch } = useSearch();
+  // Keep selection/search contexts to access reactive getters
+  const selection = useSelection();
+  const { clearAllSelections } = selection;
+  const search = useSearch();
+  const { enterSearchMode, exitSearchMode, setSearchQuery, nextMatch, prevMatch } = search;
   const { state: aggregateState, openAggregateView } = useAggregateView();
   const { enterConfirmMode, exitConfirmMode } = useKeyboardState();
   const renderer = useRenderer();
@@ -310,7 +313,7 @@ function AppContent() {
         }
 
         // Wait for searchState to be initialized before handling navigation/input
-        const currentSearchState = searchState;
+        const currentSearchState = search.searchState;
         if (!currentSearchState) {
           return;
         }
@@ -425,11 +428,11 @@ function AppContent() {
 
       {/* Copy notification toast */}
       <CopyNotification
-        visible={copyNotification.visible}
-        charCount={copyNotification.charCount}
+        visible={selection.copyNotification.visible}
+        charCount={selection.copyNotification.charCount}
         paneRect={
-          copyNotification.ptyId
-            ? layout.panes.find(p => p.ptyId === copyNotification.ptyId)?.rectangle ?? null
+          selection.copyNotification.ptyId
+            ? layout.panes.find(p => p.ptyId === selection.copyNotification.ptyId)?.rectangle ?? null
             : null
         }
       />
