@@ -4,7 +4,7 @@
  * Uses the same approach as the main TerminalView (renderAfter callback)
  */
 
-import { Show, createSignal, createEffect, onCleanup } from 'solid-js';
+import { Show, createSignal, createEffect, onCleanup, on } from 'solid-js';
 import { useRenderer } from '@opentui/solid';
 import { type OptimizedBuffer } from '@opentui/core';
 import { resizePty, subscribeUnifiedToPty } from '../../effect/bridge';
@@ -40,107 +40,119 @@ export function InteractivePreview(props: InteractivePreviewProps) {
   const [version, setVersion] = createSignal(0);
 
   // Resize PTY when previewing to match preview dimensions
-  createEffect(() => {
-    const ptyId = props.ptyId;
-    if (!ptyId) return;
+  // Using on() with explicit deps - runs when ptyId, width, or height changes
+  createEffect(
+    on(
+      [() => props.ptyId, () => props.width, () => props.height],
+      ([ptyId, width, height]) => {
+        if (!ptyId) return;
 
-    // Only resize if dimensions actually changed
-    if (lastResize && lastResize.ptyId === ptyId && lastResize.width === props.width && lastResize.height === props.height) {
-      return;
-    }
-
-    // Resize the PTY to match the preview dimensions
-    // When aggregate view closes, App.tsx will restore the original pane dimensions
-    resizePty(ptyId, props.width, props.height);
-    lastResize = { ptyId, width: props.width, height: props.height };
-  });
-
-  // Subscribe to terminal updates
-  createEffect(() => {
-    // Clean up previous subscription first
-    if (unsubscribe) {
-      unsubscribe();
-      unsubscribe = null;
-    }
-
-    const ptyId = props.ptyId;
-    if (!ptyId) {
-      terminalState = null;
-      setVersion(v => v + 1);
-      return;
-    }
-
-    let mounted = true;
-    // Frame batching: moved inside effect to ensure reset on re-run
-    let renderRequested = false;
-    cachedRows = [];
-
-    // Batched render request
-    const requestRender = () => {
-      if (!renderRequested && mounted) {
-        renderRequested = true;
-        queueMicrotask(() => {
-          if (mounted) {
-            renderRequested = false;
-            setVersion(v => v + 1);
-            renderer.requestRender();
-          }
-        });
-      }
-    };
-
-    const init = async () => {
-      const unsub = await subscribeUnifiedToPty(ptyId, (update: UnifiedTerminalUpdate) => {
-        if (!mounted) return;
-
-        const { terminalUpdate } = update;
-
-        if (terminalUpdate.isFull && terminalUpdate.fullState) {
-          terminalState = terminalUpdate.fullState;
-          cachedRows = [...terminalUpdate.fullState.cells];
-        } else {
-          const existingState = terminalState;
-          if (existingState) {
-            for (const [rowIdx, newRow] of terminalUpdate.dirtyRows) {
-              cachedRows[rowIdx] = newRow;
-            }
-            terminalState = {
-              ...existingState,
-              cells: cachedRows,
-              cursor: terminalUpdate.cursor,
-              alternateScreen: terminalUpdate.alternateScreen,
-              mouseTracking: terminalUpdate.mouseTracking,
-              cursorKeyMode: terminalUpdate.cursorKeyMode,
-            };
-          }
+        // Only resize if dimensions actually changed
+        if (lastResize && lastResize.ptyId === ptyId && lastResize.width === width && lastResize.height === height) {
+          return;
         }
 
-        requestRender();
-      });
+        // Resize the PTY to match the preview dimensions
+        // When aggregate view closes, App.tsx will restore the original pane dimensions
+        resizePty(ptyId, width, height);
+        lastResize = { ptyId, width, height };
+      },
+      { defer: false }
+    )
+  );
 
-      if (mounted) {
-        unsubscribe = unsub;
-      } else {
-        unsub();
-      }
+  // Subscribe to terminal updates
+  // Using on() for explicit ptyId dependency - effect re-runs only when ptyId changes
+  createEffect(
+    on(
+      () => props.ptyId,
+      (ptyId) => {
+        // Clean up previous subscription first
+        if (unsubscribe) {
+          unsubscribe();
+          unsubscribe = null;
+        }
 
-      if (mounted) {
-        requestRender();
-      }
-    };
+        if (!ptyId) {
+          terminalState = null;
+          setVersion(v => v + 1);
+          return;
+        }
 
-    init();
+        let mounted = true;
+        // Frame batching: moved inside effect to ensure reset on re-run
+        let renderRequested = false;
+        cachedRows = [];
 
-    onCleanup(() => {
-      mounted = false;
-      if (unsubscribe) {
-        unsubscribe();
-        unsubscribe = null;
-      }
-      terminalState = null;
-      cachedRows = [];
-    });
-  });
+        // Batched render request
+        const requestRender = () => {
+          if (!renderRequested && mounted) {
+            renderRequested = true;
+            queueMicrotask(() => {
+              if (mounted) {
+                renderRequested = false;
+                setVersion(v => v + 1);
+                renderer.requestRender();
+              }
+            });
+          }
+        };
+
+        const init = async () => {
+          const unsub = await subscribeUnifiedToPty(ptyId, (update: UnifiedTerminalUpdate) => {
+            if (!mounted) return;
+
+            const { terminalUpdate } = update;
+
+            if (terminalUpdate.isFull && terminalUpdate.fullState) {
+              terminalState = terminalUpdate.fullState;
+              cachedRows = [...terminalUpdate.fullState.cells];
+            } else {
+              const existingState = terminalState;
+              if (existingState) {
+                for (const [rowIdx, newRow] of terminalUpdate.dirtyRows) {
+                  cachedRows[rowIdx] = newRow;
+                }
+                terminalState = {
+                  ...existingState,
+                  cells: cachedRows,
+                  cursor: terminalUpdate.cursor,
+                  alternateScreen: terminalUpdate.alternateScreen,
+                  mouseTracking: terminalUpdate.mouseTracking,
+                  cursorKeyMode: terminalUpdate.cursorKeyMode,
+                };
+              }
+            }
+
+            requestRender();
+          });
+
+          if (mounted) {
+            unsubscribe = unsub;
+          } else {
+            unsub();
+          }
+
+          if (mounted) {
+            requestRender();
+          }
+        };
+
+        init();
+
+        onCleanup(() => {
+          mounted = false;
+          if (unsubscribe) {
+            unsubscribe();
+            unsubscribe = null;
+          }
+          terminalState = null;
+          cachedRows = [];
+        });
+      },
+      { defer: false }
+    )
+  );
 
   // Direct buffer render callback (same approach as TerminalView)
   const renderTerminal = (buffer: OptimizedBuffer) => {

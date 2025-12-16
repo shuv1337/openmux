@@ -2,7 +2,7 @@
  * Main App component for openmux
  */
 
-import { createSignal, createEffect, onMount, onCleanup } from 'solid-js';
+import { createSignal, createEffect, onMount, onCleanup, on } from 'solid-js';
 import { useKeyboard, useTerminalDimensions, useRenderer } from '@opentui/solid';
 import type { PasteEvent } from '@opentui/core';
 import {
@@ -253,27 +253,30 @@ function AppContent() {
     }
   });
 
-  // Track previous aggregate view state to detect close
-  let prevShowAggregateView = aggregateState.showAggregateView;
-
   // Restore PTY sizes when aggregate view closes
   // The preview resizes PTYs to preview dimensions, so we need to restore pane dimensions
-  createEffect(() => {
-    const wasOpen = prevShowAggregateView;
-    const isOpen = aggregateState.showAggregateView;
-    prevShowAggregateView = isOpen;
-
-    // Only trigger resize when closing (was open, now closed)
-    if (wasOpen && !isOpen && terminal.isInitialized) {
-      for (const pane of layout.panes) {
-        if (pane.ptyId && pane.rectangle) {
-          const cols = Math.max(1, pane.rectangle.width - 2);
-          const rows = Math.max(1, pane.rectangle.height - 2);
-          resizePTY(pane.ptyId, cols, rows);
+  // Using on() for explicit dependency - only runs when showAggregateView changes
+  // Previous value is provided automatically by on() as second argument
+  createEffect(
+    on(
+      () => aggregateState.showAggregateView,
+      (isOpen, wasOpen) => {
+        // Only trigger resize when closing (was open, now closed)
+        // Note: on() isolates deps, so reading terminal.isInitialized and layout.panes
+        // inside the callback doesn't create additional subscriptions
+        if (wasOpen && !isOpen && terminal.isInitialized) {
+          for (const pane of layout.panes) {
+            if (pane.ptyId && pane.rectangle) {
+              const cols = Math.max(1, pane.rectangle.width - 2);
+              const rows = Math.max(1, pane.rectangle.height - 2);
+              resizePTY(pane.ptyId, cols, rows);
+            }
+          }
         }
-      }
-    }
-  });
+      },
+      { defer: true } // Skip initial run - we only care about transitions
+    )
+  );
 
   // Handle keyboard input
   useKeyboard(

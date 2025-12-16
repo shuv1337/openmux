@@ -3,7 +3,7 @@
  * Uses Effect bridge for PTY operations.
  */
 
-import { createSignal, createEffect, onCleanup, Show } from 'solid-js';
+import { createSignal, createEffect, onCleanup, on, Show } from 'solid-js';
 import { useRenderer } from '@opentui/solid';
 import { RGBA, type OptimizedBuffer } from '@opentui/core';
 import type { TerminalState, TerminalCell, TerminalScrollState, UnifiedTerminalUpdate } from '../core/types';
@@ -95,89 +95,96 @@ export function TerminalView(props: TerminalViewProps) {
   // Version counter to trigger re-renders when state changes
   const [version, setVersion] = createSignal(0);
 
-  createEffect(() => {
-    const ptyId = props.ptyId;
-    let unsubscribe: (() => void) | null = null;
-    let mounted = true;
-    // Frame batching: coalesce multiple updates into single render per event loop tick
-    // Moved inside effect to ensure it's reset if effect re-runs
-    let renderRequested = false;
+  // Using on() for explicit ptyId dependency - effect re-runs only when ptyId changes
+  // defer: false ensures it runs immediately on mount
+  createEffect(
+    on(
+      () => props.ptyId,
+      (ptyId) => {
+        let unsubscribe: (() => void) | null = null;
+        let mounted = true;
+        // Frame batching: coalesce multiple updates into single render per event loop tick
+        // Moved inside effect to ensure it's reset if effect re-runs
+        let renderRequested = false;
 
-    // Cache for terminal rows (structural sharing)
-    let cachedRows: TerminalCell[][] = [];
+        // Cache for terminal rows (structural sharing)
+        let cachedRows: TerminalCell[][] = [];
 
-    // Batched render request - coalesces multiple updates into one render
-    const requestRenderFrame = () => {
-      if (!renderRequested && mounted) {
-        renderRequested = true;
-        queueMicrotask(() => {
-          if (mounted) {
-            renderRequested = false;
-            setVersion(v => v + 1);
-            renderer.requestRender();
+        // Batched render request - coalesces multiple updates into one render
+        const requestRenderFrame = () => {
+          if (!renderRequested && mounted) {
+            renderRequested = true;
+            queueMicrotask(() => {
+              if (mounted) {
+                renderRequested = false;
+                setVersion(v => v + 1);
+                renderer.requestRender();
+              }
+            });
           }
-        });
-      }
-    };
+        };
 
-    // Initialize async resources
-    const init = async () => {
-      // Get emulator for scrollback access
-      const em = await getEmulator(ptyId);
-      if (!mounted) return;
-      emulator = em;
+        // Initialize async resources
+        const init = async () => {
+          // Get emulator for scrollback access
+          const em = await getEmulator(ptyId);
+          if (!mounted) return;
+          emulator = em;
 
-      // Subscribe to unified updates (terminal + scroll combined)
-      // This replaces separate subscribeToPty + subscribeToScroll with single subscription
-      unsubscribe = await subscribeUnifiedToPty(ptyId, (update: UnifiedTerminalUpdate) => {
-        if (!mounted) return;
+          // Subscribe to unified updates (terminal + scroll combined)
+          // This replaces separate subscribeToPty + subscribeToScroll with single subscription
+          unsubscribe = await subscribeUnifiedToPty(ptyId, (update: UnifiedTerminalUpdate) => {
+            if (!mounted) return;
 
-        const { terminalUpdate } = update;
+            const { terminalUpdate } = update;
 
-        // Update terminal state
-        if (terminalUpdate.isFull && terminalUpdate.fullState) {
-          // Full refresh: store complete state
-          terminalState = terminalUpdate.fullState;
-          cachedRows = [...terminalUpdate.fullState.cells];
-        } else {
-          // Delta update: merge dirty rows into cached state
-          const existingState = terminalState;
-          if (existingState) {
-            // Apply dirty rows to cached rows
-            for (const [rowIdx, newRow] of terminalUpdate.dirtyRows) {
-              cachedRows[rowIdx] = newRow;
+            // Update terminal state
+            if (terminalUpdate.isFull && terminalUpdate.fullState) {
+              // Full refresh: store complete state
+              terminalState = terminalUpdate.fullState;
+              cachedRows = [...terminalUpdate.fullState.cells];
+            } else {
+              // Delta update: merge dirty rows into cached state
+              const existingState = terminalState;
+              if (existingState) {
+                // Apply dirty rows to cached rows
+                for (const [rowIdx, newRow] of terminalUpdate.dirtyRows) {
+                  cachedRows[rowIdx] = newRow;
+                }
+                // Update state with merged cells and new cursor/modes
+                terminalState = {
+                  ...existingState,
+                  cells: cachedRows,
+                  cursor: terminalUpdate.cursor,
+                  alternateScreen: terminalUpdate.alternateScreen,
+                  mouseTracking: terminalUpdate.mouseTracking,
+                  cursorKeyMode: terminalUpdate.cursorKeyMode,
+                };
+              }
             }
-            // Update state with merged cells and new cursor/modes
-            terminalState = {
-              ...existingState,
-              cells: cachedRows,
-              cursor: terminalUpdate.cursor,
-              alternateScreen: terminalUpdate.alternateScreen,
-              mouseTracking: terminalUpdate.mouseTracking,
-              cursorKeyMode: terminalUpdate.cursorKeyMode,
-            };
+
+            // Request batched render (scroll state comes from context cache)
+            requestRenderFrame();
+          });
+
+          // Trigger initial render
+          requestRenderFrame();
+        };
+
+        init();
+
+        onCleanup(() => {
+          mounted = false;
+          if (unsubscribe) {
+            unsubscribe();
           }
-        }
-
-        // Request batched render (scroll state comes from context cache)
-        requestRenderFrame();
-      });
-
-      // Trigger initial render
-      requestRenderFrame();
-    };
-
-    init();
-
-    onCleanup(() => {
-      mounted = false;
-      if (unsubscribe) {
-        unsubscribe();
-      }
-      terminalState = null;
-      emulator = null;
-    });
-  });
+          terminalState = null;
+          emulator = null;
+        });
+      },
+      { defer: false }
+    )
+  );
 
   // Render callback that directly writes to buffer
   const renderTerminal = (buffer: OptimizedBuffer) => {
@@ -355,11 +362,14 @@ export function TerminalView(props: TerminalViewProps) {
   };
 
   // Request render when selection or search version changes
-  createEffect(() => {
-    const sv = selection.selectionVersion;
-    const searchV = search.searchVersion;
-    renderer.requestRender();
-  });
+  // Using on() for explicit dependency tracking - only runs when these signals change
+  // defer: true (default) skips initial run since version() controls initial render
+  createEffect(
+    on(
+      [() => selection.selectionVersion, () => search.searchVersion],
+      () => renderer.requestRender()
+    )
+  );
 
   return (
     <Show
