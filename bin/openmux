@@ -130,6 +130,9 @@ download_binary() {
     # Make executable
     chmod +x "$BIN_DIR/openmux-bin" 2>/dev/null || true
 
+    # Create empty bunfig.toml to prevent reading user's project config
+    echo "# openmux runtime config (empty - preload already compiled in)" > "$BIN_DIR/bunfig.toml"
+
     # Write version file for upgrade detection
     echo "$version" > "$BIN_DIR/.version"
 
@@ -145,13 +148,22 @@ case "$(uname -s)" in
     *) echo "Unsupported OS" >&2; exit 1 ;;
 esac
 
+# Capture original cwd before any cd operations (for initial shell directory)
+export OPENMUX_ORIGINAL_CWD="${OPENMUX_ORIGINAL_CWD:-$(pwd)}"
+
 # Get package version
 PKG_JSON="$(find_package_json)"
 if [[ -z "$PKG_JSON" ]]; then
     # Fallback: if binary exists, just run it
     if [[ -x "$BIN_DIR/openmux-bin" ]]; then
-        export BUN_PTY_LIB="${BUN_PTY_LIB:-$BIN_DIR/librust_pty.$LIB_EXT}"
-        exec "$BIN_DIR/openmux-bin" "$@"
+        # Ensure empty bunfig.toml exists
+        if [[ ! -f "$BIN_DIR/bunfig.toml" ]]; then
+            echo "# openmux runtime config (empty - preload already compiled in)" > "$BIN_DIR/bunfig.toml"
+        fi
+        export ZIG_PTY_LIB="${ZIG_PTY_LIB:-$BIN_DIR/libzig_pty.$LIB_EXT}"
+        # cd to BIN_DIR to avoid reading user's bunfig.toml
+        cd "$BIN_DIR"
+        exec "./openmux-bin" "$@"
     fi
     echo "Error: Could not find openmux package" >&2
     exit 1
@@ -173,6 +185,12 @@ if [[ ! -x "$BIN_DIR/openmux-bin" ]] || [[ "$INSTALLED_VERSION" != "$VERSION" ]]
     download_binary "$VERSION" || exit 1
 fi
 
-# Set library path and execute
-export BUN_PTY_LIB="${BUN_PTY_LIB:-$BIN_DIR/librust_pty.$LIB_EXT}"
-exec "$BIN_DIR/openmux-bin" "$@"
+# Ensure empty bunfig.toml exists (for older releases that didn't include it)
+if [[ ! -f "$BIN_DIR/bunfig.toml" ]]; then
+    echo "# openmux runtime config (empty - preload already compiled in)" > "$BIN_DIR/bunfig.toml"
+fi
+
+# Set library path, cd to BIN_DIR to avoid user's bunfig.toml, and execute
+export ZIG_PTY_LIB="${ZIG_PTY_LIB:-$BIN_DIR/libzig_pty.$LIB_EXT}"
+cd "$BIN_DIR"
+exec "./openmux-bin" "$@"

@@ -211,11 +211,12 @@ create_release() {
 
     echo "Creating release tarball: $tarball_name"
 
-    # Create tarball with dist contents
+    # Create tarball with dist contents (includes empty bunfig.toml for isolation)
     tar -czf "$tarball_path" -C "$DIST_DIR" \
         "$BINARY_NAME" \
         "$BINARY_NAME-bin" \
-        "libzig_pty.$LIB_EXT"
+        "libzig_pty.$LIB_EXT" \
+        "bunfig.toml"
 
     echo "Created: $tarball_path"
 
