@@ -32,6 +32,8 @@ export interface SessionState {
   summaries: Map<SessionId, SessionSummary>;
   /** Whether initial load is complete */
   initialized: boolean;
+  /** Whether a session switch is in progress */
+  switching: boolean;
 }
 
 export type SessionAction =
@@ -47,4 +49,5 @@ export type SessionAction =
   | { type: 'START_RENAME'; sessionId: SessionId; currentName: string }
   | { type: 'UPDATE_RENAME_VALUE'; value: string }
   | { type: 'CANCEL_RENAME' }
-  | { type: 'SET_INITIALIZED' };
+  | { type: 'SET_INITIALIZED' }
+  | { type: 'SET_SWITCHING'; switching: boolean };

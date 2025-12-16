@@ -7,6 +7,7 @@ import type { PaneData, LayoutMode } from '../core/types';
 import { useLayout } from '../contexts/LayoutContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTerminal } from '../contexts/TerminalContext';
+import { useSession } from '../contexts/SessionContext';
 import { getFocusedPane, isMainPaneFocused } from '../core/workspace-utils';
 import { Pane } from './Pane';
 
@@ -15,6 +16,7 @@ export function PaneContainer() {
   const { focusPane } = layout;
   const theme = useTheme();
   const { writeToPTY, isMouseTrackingEnabled } = useTerminal();
+  const session = useSession();
 
   const handlePaneClick = (paneId: string) => {
     focusPane(paneId);
@@ -29,21 +31,26 @@ export function PaneContainer() {
     }
   };
 
+  // Don't show "No panes" message while session is switching (prevents flash)
+  const showNoPanesMessage = () => !layout.activeWorkspace.mainPane && !session.state.switching;
+
   return (
     <Show
       when={layout.activeWorkspace.mainPane}
       fallback={
-        <box
-          style={{
-            flexGrow: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <text fg="#666666">
-            No panes. Press Ctrl+b n or Alt+n to create a pane.
-          </text>
-        </box>
+        <Show when={showNoPanesMessage()}>
+          <box
+            style={{
+              flexGrow: 1,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <text fg="#666666">
+              No panes. Press Ctrl+b n or Alt+n to create a pane.
+            </text>
+          </box>
+        </Show>
       }
     >
       <Show

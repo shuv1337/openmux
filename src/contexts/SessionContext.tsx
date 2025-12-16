@@ -244,6 +244,9 @@ export function SessionProvider(props: SessionProviderProps) {
   const switchSession = async (id: SessionId) => {
     if (id === state.activeSessionId) return;
 
+    // Mark switching in progress to prevent "No panes" flash
+    dispatch({ type: 'SET_SWITCHING', switching: true });
+
     // Save current session
     if (state.activeSession && state.activeSessionId) {
       const workspaces = props.getWorkspaces();
@@ -267,6 +270,9 @@ export function SessionProvider(props: SessionProviderProps) {
       dispatch({ type: 'SET_ACTIVE_SESSION', id, session: data.metadata });
       props.onSessionLoad(data.workspaces, data.activeWorkspaceId, data.cwdMap, id);
     }
+
+    // Mark switching complete
+    dispatch({ type: 'SET_SWITCHING', switching: false });
 
     dispatch({ type: 'CLOSE_SESSION_PICKER' });
 

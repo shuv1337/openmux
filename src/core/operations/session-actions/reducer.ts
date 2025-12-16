@@ -21,6 +21,7 @@ export function createInitialState(): SessionState {
     renamingSessionId: null,
     summaries: new Map<SessionId, SessionSummary>(),
     initialized: false,
+    switching: false,
   };
 }
 
@@ -121,6 +122,9 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
 
     case 'SET_INITIALIZED':
       return { ...state, initialized: true };
+
+    case 'SET_SWITCHING':
+      return { ...state, switching: action.switching };
 
     default:
       return state;
