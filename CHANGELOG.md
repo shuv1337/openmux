@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.4](https://github.com/monotykamary/openmux/compare/v0.2.3...v0.2.4) (2025-12-16)
+
+
+### Performance
+
+* **solid:** use on() for explicit effect dependency tracking ([a9b270b](https://github.com/monotykamary/openmux/commit/a9b270b3e91a96ba210e53961ec718558bb41a1e))
+
 ### [0.2.3](https://github.com/monotykamary/openmux/compare/v0.2.2...v0.2.3) (2025-12-16)
 
 
