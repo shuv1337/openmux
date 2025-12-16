@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.2.0](https://github.com/monotykamary/openmux/compare/v0.1.41...v0.2.0) (2025-12-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* UI layer now uses Solid.js instead of React
+
+### Bug Fixes
+
+* **build:** support Solid.js JSX transform in compiled binary ([84b6496](https://github.com/monotykamary/openmux/commit/84b6496ccc66b81912d2b632d879adf3d109f1db))
+* **solid:** fix keyboard mode reactivity for search overlay ([5aae8af](https://github.com/monotykamary/openmux/commit/5aae8af36b82d54d1f13d5cfc068ec6b17093115))
+* **solid:** resolve remaining reactivity issues with context getters ([ddf0fa9](https://github.com/monotykamary/openmux/commit/ddf0fa9eed58469ea77508c54c3ff1cebd908e94))
+* **solid:** resolve remaining reactivity issues with context getters ([fd64f80](https://github.com/monotykamary/openmux/commit/fd64f8020df5013c958a5e6637f58c58b746c43d))
+
+
+### Refactoring
+
+* migrate UI layer from React to Solid.js ([034aed5](https://github.com/monotykamary/openmux/commit/034aed5e36b4939ad813d5686a1ff873280cdbea))
+
+
+### Performance
+
+* **solid:** replace periodic render polling with event-driven rendering ([2699f31](https://github.com/monotykamary/openmux/commit/2699f31c07f4849a846c7078d1cd66e5218f4186))
+
 ### [0.1.41](https://github.com/monotykamary/openmux/compare/v0.1.40...v0.1.41) (2025-12-15)
 
 
