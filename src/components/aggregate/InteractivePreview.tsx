@@ -34,7 +34,6 @@ export function InteractivePreview(props: InteractivePreviewProps) {
   // Plain variables (in Solid, no stale closure issues)
   let lastResize: { ptyId: string; width: number; height: number } | null = null;
   let terminalState: TerminalState | null = null;
-  let renderRequested = false;
   let unsubscribe: (() => void) | null = null;
   let cachedRows: TerminalCell[][] = [];
 
@@ -72,6 +71,8 @@ export function InteractivePreview(props: InteractivePreviewProps) {
     }
 
     let mounted = true;
+    // Frame batching: moved inside effect to ensure reset on re-run
+    let renderRequested = false;
     cachedRows = [];
 
     // Batched render request
@@ -82,7 +83,7 @@ export function InteractivePreview(props: InteractivePreviewProps) {
           if (mounted) {
             renderRequested = false;
             setVersion(v => v + 1);
-            renderer.requestRender();  // Trigger OpenTUI render
+            renderer.requestRender();
           }
         });
       }

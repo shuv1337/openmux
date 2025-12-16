@@ -92,9 +92,6 @@ export function TerminalView(props: TerminalViewProps) {
   let terminalState: TerminalState | null = null;
   // Cache emulator for sync access to scrollback lines
   let emulator: GhosttyEmulator | null = null;
-  // Frame batching: coalesce multiple updates into single render per event loop tick
-  let renderRequested = false;
-
   // Version counter to trigger re-renders when state changes
   const [version, setVersion] = createSignal(0);
 
@@ -102,6 +99,9 @@ export function TerminalView(props: TerminalViewProps) {
     const ptyId = props.ptyId;
     let unsubscribe: (() => void) | null = null;
     let mounted = true;
+    // Frame batching: coalesce multiple updates into single render per event loop tick
+    // Moved inside effect to ensure it's reset if effect re-runs
+    let renderRequested = false;
 
     // Cache for terminal rows (structural sharing)
     let cachedRows: TerminalCell[][] = [];
@@ -114,7 +114,7 @@ export function TerminalView(props: TerminalViewProps) {
           if (mounted) {
             renderRequested = false;
             setVersion(v => v + 1);
-            renderer.requestRender();  // Trigger OpenTUI render
+            renderer.requestRender();
           }
         });
       }
