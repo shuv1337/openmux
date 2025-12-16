@@ -323,7 +323,8 @@ export function TerminalView(props: TerminalViewProps) {
         if (cell.strikethrough) attributes |= ATTR_STRIKETHROUGH;
 
         // Write cell directly to buffer (with offset for pane position)
-        buffer.setCell(x + offsetX, y + offsetY, cell.char, fg, bg, attributes);
+        // Use fallback space if char is empty to ensure cell is always overwritten
+        buffer.setCell(x + offsetX, y + offsetY, cell.char || ' ', fg, bg, attributes);
       }
     }
 
