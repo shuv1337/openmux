@@ -7,10 +7,11 @@ import {
   createContext,
   useContext,
   createEffect,
+  onCleanup,
   type ParentProps,
 } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
-import { listAllPtysWithMetadata } from '../effect/bridge';
+import { listAllPtysWithMetadata, subscribeToPtyLifecycle, subscribeToAllTitleChanges } from '../effect/bridge';
 
 // =============================================================================
 // State Types
@@ -109,19 +110,92 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     setState('isLoading', true);
     const ptys = await listAllPtysWithMetadata();
     const matchedPtys = filterPtys(ptys, state.filterQuery);
-    const selectedPtyId = matchedPtys[state.selectedIndex]?.ptyId ?? matchedPtys[0]?.ptyId ?? null;
+
+    // Determine new selected PTY
+    const currentSelectedPtyId = state.selectedPtyId;
+    const currentPtyStillExists = currentSelectedPtyId && matchedPtys.some(p => p.ptyId === currentSelectedPtyId);
+
+    // If currently selected PTY was destroyed, exit preview mode and select next available
+    const newSelectedIndex = currentPtyStillExists
+      ? matchedPtys.findIndex(p => p.ptyId === currentSelectedPtyId)
+      : Math.min(state.selectedIndex, Math.max(0, matchedPtys.length - 1));
+    const selectedPtyId = matchedPtys[newSelectedIndex]?.ptyId ?? null;
+
     setState(produce((s) => {
       s.allPtys = ptys;
       s.matchedPtys = matchedPtys;
+      s.selectedIndex = newSelectedIndex;
       s.selectedPtyId = selectedPtyId;
       s.isLoading = false;
+      // Exit preview mode if the selected PTY was destroyed or no PTYs remain
+      if (!currentPtyStillExists || selectedPtyId === null) {
+        s.previewMode = false;
+      }
     }));
   };
 
-  // Refresh PTYs when view opens
+  // Track subscriptions and polling
+  let lifecycleUnsubscribe: (() => void) | null = null;
+  let titleChangeUnsubscribe: (() => void) | null = null;
+  let processPollingInterval: ReturnType<typeof setInterval> | null = null;
+
+  // Refresh PTYs when view opens and subscribe to lifecycle/title events
   createEffect(() => {
     if (state.showAggregateView) {
+      // Subscribe to PTY lifecycle events for auto-refresh (created/destroyed)
+      subscribeToPtyLifecycle(() => {
+        // Refresh the list when PTYs are created or destroyed
+        refreshPtys();
+      }).then((unsub) => {
+        lifecycleUnsubscribe = unsub;
+      });
+
+      // Subscribe to title changes across all PTYs (immediate updates)
+      subscribeToAllTitleChanges(() => {
+        // Refresh when any PTY's title changes
+        refreshPtys();
+      }).then((unsub) => {
+        titleChangeUnsubscribe = unsub;
+      });
+
+      // Initial refresh
       refreshPtys();
+
+      // Poll for foreground process changes (OS-level, not captured by title events)
+      // Use a reasonable interval to balance responsiveness vs overhead
+      processPollingInterval = setInterval(() => {
+        refreshPtys();
+      }, 2000); // Every 2 seconds
+    } else {
+      // Unsubscribe when view closes
+      if (lifecycleUnsubscribe) {
+        lifecycleUnsubscribe();
+        lifecycleUnsubscribe = null;
+      }
+      if (titleChangeUnsubscribe) {
+        titleChangeUnsubscribe();
+        titleChangeUnsubscribe = null;
+      }
+      if (processPollingInterval) {
+        clearInterval(processPollingInterval);
+        processPollingInterval = null;
+      }
+    }
+  });
+
+  // Cleanup on unmount
+  onCleanup(() => {
+    if (lifecycleUnsubscribe) {
+      lifecycleUnsubscribe();
+      lifecycleUnsubscribe = null;
+    }
+    if (titleChangeUnsubscribe) {
+      titleChangeUnsubscribe();
+      titleChangeUnsubscribe = null;
+    }
+    if (processPollingInterval) {
+      clearInterval(processPollingInterval);
+      processPollingInterval = null;
     }
   });
 

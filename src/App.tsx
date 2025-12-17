@@ -2,7 +2,7 @@
  * Main App component for openmux
  */
 
-import { createSignal, createEffect, onMount, onCleanup, on } from 'solid-js';
+import { createSignal, createEffect, onCleanup, on } from 'solid-js';
 import { useKeyboard, useTerminalDimensions, useRenderer } from '@opentui/solid';
 import type { PasteEvent } from '@opentui/core';
 import {
@@ -62,6 +62,9 @@ function AppContent() {
     visible: boolean;
     type: ConfirmationType;
   }>({ visible: false, type: 'close_pane' });
+
+  // Track pending kill PTY ID for aggregate view kill confirmation
+  const [pendingKillPtyId, setPendingKillPtyId] = createSignal<string | null>(null);
 
   // Create new pane handler that captures CWD first
   const handleNewPane = async () => {
@@ -124,6 +127,13 @@ function AppContent() {
     setConfirmationState({ visible: true, type: 'exit' });
   };
 
+  // Request kill PTY (show confirmation) - from aggregate view
+  const handleRequestKillPty = (ptyId: string) => {
+    setPendingKillPtyId(ptyId);
+    enterConfirmMode('kill_pty');
+    setConfirmationState({ visible: true, type: 'kill_pty' });
+  };
+
   // Confirmation dialog handlers
   const handleConfirmAction = async () => {
     const { type } = confirmationState();
@@ -142,12 +152,20 @@ function AppContent() {
       await saveSession();
       renderer.destroy();
       process.exit(0);
+    } else if (type === 'kill_pty') {
+      // Kill PTY from aggregate view
+      const ptyId = pendingKillPtyId();
+      if (ptyId) {
+        destroyPTY(ptyId);
+        setPendingKillPtyId(null);
+      }
     }
   };
 
   const handleCancelConfirmation = () => {
     exitConfirmMode();
     setConfirmationState({ visible: false, type: 'close_pane' });
+    setPendingKillPtyId(null);
   };
 
   // Handle bracketed paste from host terminal (Cmd+V sends this)
@@ -183,6 +201,9 @@ function AppContent() {
   // Retry counter to trigger effect re-run when PTY creation fails
   const [ptyRetryCounter, setPtyRetryCounter] = createSignal(0);
 
+  // Guard against concurrent PTY creation (synchronous Set for O(1) check)
+  const pendingPtyCreation = new Set<string>();
+
   // Update viewport when terminal resizes
   createEffect(() => {
     const w = width();
@@ -193,14 +214,32 @@ function AppContent() {
     }
   });
 
-  // Create first pane on mount
-  onMount(() => {
-    newPane('shell');
-  });
+  // Create first pane only if session loaded with no panes
+  // Using on() for explicit dependency - only runs when sessionState.initialized changes
+  createEffect(
+    on(
+      () => sessionState.initialized,
+      (initialized) => {
+        // Wait for session initialization
+        if (!initialized) return;
+
+        // Only create a pane if no panes exist after session load
+        if (layout.panes.length === 0) {
+          newPane('shell');
+        }
+      },
+      { defer: true } // Skip initial run, wait for initialized to become true
+    )
+  );
 
   // Create PTYs for panes that don't have one
+  // IMPORTANT: Wait for BOTH terminal AND session to be initialized
+  // This prevents creating PTYs before session has a chance to restore workspaces
+  // Also skip while session is switching to avoid creating PTYs for stale panes
   createEffect(() => {
     if (!terminal.isInitialized) return;
+    if (!sessionState.initialized) return;
+    if (sessionState.switching) return;
 
     // Track retry counter to re-trigger effect
     const _retry = ptyRetryCounter();
@@ -208,8 +247,22 @@ function AppContent() {
 
     const createPtysForPanes = async () => {
       for (const pane of layout.panes) {
-        const alreadyCreated = await isPtyCreated(pane.id);
-        if (!pane.ptyId && !alreadyCreated) {
+        // SYNCHRONOUS guard: check and add to pendingPtyCreation Set IMMEDIATELY
+        // This prevents race conditions where concurrent effect runs both pass the check
+        if (pendingPtyCreation.has(pane.id)) {
+          continue;
+        }
+        // Add to set synchronously BEFORE any async work
+        pendingPtyCreation.add(pane.id);
+
+        try {
+          // ASYNC check: verify PTY wasn't created in a previous session/effect run
+          const alreadyCreated = await isPtyCreated(pane.id);
+          if (pane.ptyId || alreadyCreated) {
+            // Already has a PTY, skip creation
+            continue;
+          }
+
           // Calculate pane dimensions (account for border)
           const rect = pane.rectangle ?? { width: 80, height: 24 };
           const cols = Math.max(1, rect.width - 2);
@@ -221,15 +274,15 @@ function AppContent() {
           let cwd = sessionCwd ?? pendingCwd ?? process.env.OPENMUX_ORIGINAL_CWD ?? undefined;
           pendingCwd = null; // Clear after use
 
-          try {
-            createPTY(pane.id, cols, rows, cwd);
-            // Only mark as created AFTER successful PTY creation
-            // This allows retry on subsequent renders if creation fails
-            await markPtyCreated(pane.id);
-          } catch (err) {
-            console.error(`Failed to create PTY for pane ${pane.id}:`, err);
-            hadFailure = true;
-          }
+          // Mark as created BEFORE calling createPTY (persistent marker)
+          await markPtyCreated(pane.id);
+          await createPTY(pane.id, cols, rows, cwd);
+        } catch (err) {
+          console.error(`Failed to create PTY for pane ${pane.id}:`, err);
+          hadFailure = true;
+        } finally {
+          // Always remove from pending set when done (success or failure)
+          pendingPtyCreation.delete(pane.id);
         }
       }
 
@@ -427,7 +480,7 @@ function AppContent() {
       <SearchOverlay width={width()} height={height()} />
 
       {/* Aggregate view overlay */}
-      <AggregateView width={width()} height={height()} onRequestQuit={handleRequestQuit} />
+      <AggregateView width={width()} height={height()} onRequestQuit={handleRequestQuit} onRequestKillPty={handleRequestKillPty} />
 
       {/* Confirmation dialog */}
       <ConfirmationDialog

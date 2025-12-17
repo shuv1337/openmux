@@ -27,6 +27,7 @@ interface AggregateViewProps {
   width: number;
   height: number;
   onRequestQuit?: () => void;
+  onRequestKillPty?: (ptyId: string) => void;
 }
 
 export function AggregateView(props: AggregateViewProps) {
@@ -190,6 +191,15 @@ export function AggregateView(props: AggregateViewProps) {
       }
 
       // Consume all other keys in search mode
+      return true;
+    }
+
+    // Global Alt+X to kill selected PTY (works in both list and preview mode)
+    if (event.alt && normalizedKey === 'x') {
+      const selectedPtyId = state.selectedPtyId;
+      if (selectedPtyId && props.onRequestKillPty) {
+        props.onRequestKillPty(selectedPtyId);
+      }
       return true;
     }
 
@@ -477,8 +487,8 @@ export function AggregateView(props: AggregateViewProps) {
       return 'Enter: confirm | Esc: cancel | ^n/^p: next/prev';
     }
     return state.previewMode
-      ? 'Alt+Esc: back | Alt+F: search'
-      : '↑↓/jk: navigate | Enter: interact | Tab: jump | Alt+Esc: close';
+      ? 'Alt+Esc: back | Alt+F: search | Alt+X: kill'
+      : '↑↓/jk: navigate | Enter: interact | Tab: jump | Alt+X: kill | Alt+Esc: close';
   };
 
   // Build search/filter text
@@ -498,6 +508,7 @@ export function AggregateView(props: AggregateViewProps) {
           width: props.width,
           height: props.height,
           flexDirection: 'column',
+          zIndex: 100,
         }}
         backgroundColor={hostBgColor}
       >
@@ -519,7 +530,7 @@ export function AggregateView(props: AggregateViewProps) {
               <Show
                 when={state.matchedPtys.length > 0}
                 fallback={
-                  <box style={{ height: 1 }}>
+                  <box style={{ height: listInnerHeight(), justifyContent: 'center', alignItems: 'center' }}>
                     <text fg="#666666">No PTYs match filter</text>
                   </box>
                 }

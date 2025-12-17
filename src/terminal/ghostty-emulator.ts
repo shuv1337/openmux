@@ -17,6 +17,7 @@ import { getDefaultColors, type TerminalColors } from './terminal-colors';
 import { convertCell, convertLine, createEmptyCell, createEmptyRow, createFillCell, safeRgb } from './ghostty-emulator/cell-converter';
 import { ScrollbackCache } from './ghostty-emulator/scrollback-cache';
 import { RowVersionTracker } from './ghostty-emulator/structural-sharing';
+import { createTitleParser } from './title-parser';
 
 /**
  * Options for creating a GhosttyEmulator
@@ -97,6 +98,11 @@ export class GhosttyEmulator {
   // Track if emulator has been disposed (prevents WASM errors)
   private _disposed: boolean = false;
 
+  // Terminal title (set via OSC sequences)
+  private currentTitle: string = '';
+  private titleChangeCallbacks: Set<(title: string) => void> = new Set();
+  private titleParser: ReturnType<typeof createTitleParser>;
+
   constructor(options: GhosttyEmulatorOptions = {}) {
     const { cols = 80, rows = 24, colors } = options;
     const ghostty = getGhostty();
@@ -117,6 +123,16 @@ export class GhosttyEmulator {
     };
 
     this.terminal = ghostty.createTerminal(cols, rows, config);
+
+    // Create title parser to detect OSC title sequences
+    this.titleParser = createTitleParser({
+      onTitleChange: (title: string) => {
+        this.currentTitle = title;
+        for (const callback of this.titleChangeCallbacks) {
+          callback(title);
+        }
+      },
+    });
 
     // Initialize cached cells
     this.initializeCachedCells();
@@ -183,6 +199,12 @@ export class GhosttyEmulator {
   write(data: string | Uint8Array): void {
     // Guard against writes after disposal (prevents WASM out-of-bounds errors)
     if (this._disposed) return;
+
+    // Parse data for title changes (OSC sequences)
+    // Convert to string if needed for title parsing
+    const dataStr = typeof data === 'string' ? data : new TextDecoder().decode(data);
+    this.titleParser.processData(dataStr);
+
     this.terminal.write(data);
     this.scrollbackCache.trim();
   }
@@ -315,6 +337,28 @@ export class GhosttyEmulator {
     const mode1002 = this.terminal.getMode(1002, false);
     const mode1003 = this.terminal.getMode(1003, false);
     return mode1000 || mode1002 || mode1003;
+  }
+
+  /**
+   * Get the current terminal title (set via OSC sequences)
+   */
+  getTitle(): string {
+    return this.currentTitle;
+  }
+
+  /**
+   * Subscribe to terminal title changes
+   * @returns Unsubscribe function
+   */
+  onTitleChange(callback: (title: string) => void): () => void {
+    this.titleChangeCallbacks.add(callback);
+    // Immediately call with current title if set
+    if (this.currentTitle) {
+      callback(this.currentTitle);
+    }
+    return () => {
+      this.titleChangeCallbacks.delete(callback);
+    };
   }
 
   /**
@@ -485,6 +529,7 @@ export class GhosttyEmulator {
   dispose(): void {
     this._disposed = true;
     this.subscribers.clear();
+    this.titleChangeCallbacks.clear();
     this.terminal.free();
   }
 }

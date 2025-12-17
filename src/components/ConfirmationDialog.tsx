@@ -26,6 +26,10 @@ const MESSAGES: Record<ConfirmationType, { title: string; message: string }> = {
     title: ' Exit openmux ',
     message: 'Exit openmux? All panes and PTYs will be terminated.',
   },
+  kill_pty: {
+    title: ' Kill PTY ',
+    message: 'Kill this PTY and terminate its process?',
+  },
 };
 
 export function ConfirmationDialog(props: ConfirmationDialogProps) {
@@ -128,6 +132,7 @@ export function ConfirmationDialog(props: ConfirmationDialogProps) {
           borderStyle: 'rounded',
           borderColor: '#FF6600',
           padding: 1,
+          zIndex: 200,
         }}
         backgroundColor="#1a1a1a"
         title={config().title}

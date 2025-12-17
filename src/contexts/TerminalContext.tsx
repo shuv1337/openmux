@@ -25,6 +25,7 @@ import {
   getPtyCwd,
   setPanePosition,
   readFromClipboard,
+  subscribeToAllTitleChanges,
 } from '../effect/bridge';
 import {
   subscribeToPtyWithCaches,
@@ -91,16 +92,19 @@ interface TerminalProviderProps extends ParentProps {}
 
 export function TerminalProvider(props: TerminalProviderProps) {
   const layout = useLayout();
-  const { setPanePty, closePaneById } = layout;
+  const { setPanePty, setPaneTitle, closePaneById } = layout;
   let initialized = false;
   const [isInitialized, setIsInitialized] = createSignal(false);
 
-  // Track ptyId -> paneId mapping for exit handling
+  // Track ptyId -> paneId mapping for exit handling (current session)
   const ptyToPaneMap = new Map<string, string>();
 
   // Track PTYs by session ID for persistence across session switches
   // sessionId → Map<paneId, ptyId>
   const sessionPtyMap = new Map<string, Map<string, string>>();
+
+  // Reverse index: ptyId → { sessionId, paneId } for O(1) lookups
+  const ptyToSessionMap = new Map<string, { sessionId: string; paneId: string }>();
 
   // Unified caches for PTY state (used by usePtySubscription)
   const ptyCaches: PtyCaches = {
@@ -111,6 +115,9 @@ export function TerminalProvider(props: TerminalProviderProps) {
 
   // Track unsubscribe functions for cleanup
   const unsubscribeFns = new Map<string, () => void>();
+
+  // Track global title subscription
+  let titleSubscriptionUnsub: (() => void) | null = null;
 
   // Create scroll handlers (extracted for reduced file size)
   const scrollHandlers = createScrollHandlers(ptyCaches);
@@ -124,7 +131,22 @@ export function TerminalProvider(props: TerminalProviderProps) {
     detectHostCapabilities()
       .then(() => initGhostty())
       .then(() => {
+        // Clean up any orphaned PTYs from previous hot reloads (dev mode)
+        // This ensures a fresh start without stale PTYs
+        return destroyAllPtys();
+      })
+      .then(() => {
         setIsInitialized(true);
+        // Subscribe to title changes across all PTYs
+        subscribeToAllTitleChanges((event) => {
+          // Find the pane associated with this PTY
+          const paneId = ptyToPaneMap.get(event.ptyId);
+          if (paneId && event.title) {
+            setPaneTitle(paneId, event.title);
+          }
+        }).then((unsub) => {
+          titleSubscriptionUnsub = unsub;
+        });
       })
       .catch((err) => {
         console.error('Failed to initialize terminal:', err);
@@ -133,26 +155,46 @@ export function TerminalProvider(props: TerminalProviderProps) {
 
   // Cleanup on unmount
   onCleanup(() => {
-    // Unsubscribe all
+    // Unsubscribe title subscription
+    if (titleSubscriptionUnsub) {
+      titleSubscriptionUnsub();
+      titleSubscriptionUnsub = null;
+    }
+    // Unsubscribe all PTY subscriptions
     for (const unsub of unsubscribeFns.values()) {
       unsub();
     }
     destroyAllPtys();
   });
 
-  // Handle PTY exit callback
+  // Handle PTY exit callback (when shell exits via Ctrl+D, `exit`, etc.)
   const handlePtyExit = (ptyId: string, _paneId: string) => {
     const mappedPaneId = ptyToPaneMap.get(ptyId);
     if (mappedPaneId) {
       closePaneById(mappedPaneId);
-      ptyToPaneMap.delete(ptyId);
     }
-    // Also remove from session mappings
-    for (const [, mapping] of sessionPtyMap) {
-      for (const [pid, ptid] of mapping) {
-        if (ptid === ptyId) mapping.delete(pid);
+
+    // Clean up PTY subscription and caches
+    const unsub = unsubscribeFns.get(ptyId);
+    if (unsub) {
+      unsub();
+      unsubscribeFns.delete(ptyId);
+    }
+    clearPtyCaches(ptyId, ptyCaches);
+    ptyToPaneMap.delete(ptyId);
+
+    // O(1) removal from session mappings using reverse index
+    const sessionInfo = ptyToSessionMap.get(ptyId);
+    if (sessionInfo) {
+      const mapping = sessionPtyMap.get(sessionInfo.sessionId);
+      if (mapping) {
+        mapping.delete(sessionInfo.paneId);
       }
+      ptyToSessionMap.delete(ptyId);
     }
+
+    // Destroy the PTY from the service (removes from HashMap, emits lifecycle event)
+    destroyPty(ptyId);
   };
 
   // Create a PTY session
@@ -183,8 +225,14 @@ export function TerminalProvider(props: TerminalProviderProps) {
     return ptyId;
   };
 
-  // Destroy a PTY session
+  // Destroy a PTY session (also closes associated pane if one exists)
   const handleDestroyPTY = (ptyId: string) => {
+    // Close associated pane if this PTY is in the current session
+    const paneId = ptyToPaneMap.get(ptyId);
+    if (paneId) {
+      closePaneById(paneId);
+    }
+
     // Unsubscribe from updates
     const unsub = unsubscribeFns.get(ptyId);
     if (unsub) {
@@ -195,6 +243,16 @@ export function TerminalProvider(props: TerminalProviderProps) {
     // Clear caches
     clearPtyCaches(ptyId, ptyCaches);
     ptyToPaneMap.delete(ptyId);
+
+    // O(1) removal from session mappings using reverse index
+    const sessionInfo = ptyToSessionMap.get(ptyId);
+    if (sessionInfo) {
+      const mapping = sessionPtyMap.get(sessionInfo.sessionId);
+      if (mapping) {
+        mapping.delete(sessionInfo.paneId);
+      }
+      ptyToSessionMap.delete(ptyId);
+    }
 
     // Destroy the PTY (fire and forget)
     destroyPty(ptyId);
@@ -209,6 +267,8 @@ export function TerminalProvider(props: TerminalProviderProps) {
     unsubscribeFns.clear();
     clearAllPtyCaches(ptyCaches);
     ptyToPaneMap.clear();
+    ptyToSessionMap.clear();
+    sessionPtyMap.clear();
 
     // Destroy all PTYs (fire and forget)
     destroyAllPtys();
@@ -220,6 +280,8 @@ export function TerminalProvider(props: TerminalProviderProps) {
     const mapping = new Map<string, string>();
     for (const [ptyId, paneId] of ptyToPaneMap) {
       mapping.set(paneId, ptyId);
+      // Populate reverse index for O(1) lookups
+      ptyToSessionMap.set(ptyId, { sessionId, paneId });
     }
     sessionPtyMap.set(sessionId, mapping);
 
@@ -276,6 +338,8 @@ export function TerminalProvider(props: TerminalProviderProps) {
           unsub();
           unsubscribeFns.delete(ptyId);
         }
+        // Clean up reverse index
+        ptyToSessionMap.delete(ptyId);
         // Destroy the PTY
         destroyPty(ptyId);
       }
@@ -397,32 +461,21 @@ export function TerminalProvider(props: TerminalProviderProps) {
     return ptyCaches.terminalStates.get(ptyId) ?? null;
   };
 
-  // Find which session owns a PTY
+  // Find which session owns a PTY - O(1) using reverse index
   const findSessionForPty = (ptyId: string): { sessionId: string; paneId: string } | null => {
-    // First check current session's ptyToPaneMap (active PTYs)
-    const currentPaneId = ptyToPaneMap.get(ptyId);
-    if (currentPaneId) {
-      // PTY is in the current session - find which session that is
-      // by checking sessionPtyMap for a session that has this mapping
-      for (const [sessionId, mapping] of sessionPtyMap) {
-        for (const [paneId, mappedPtyId] of mapping) {
-          if (mappedPtyId === ptyId) {
-            return { sessionId, paneId };
-          }
-        }
-      }
-      // If not found in sessionPtyMap, it's in the current unsaved session
-      // Return null for now - the caller should handle current session separately
-      return null;
+    // O(1) lookup using reverse index
+    const sessionInfo = ptyToSessionMap.get(ptyId);
+    if (sessionInfo) {
+      return sessionInfo;
     }
 
-    // Search through all session PTY mappings
-    for (const [sessionId, mapping] of sessionPtyMap) {
-      for (const [paneId, mappedPtyId] of mapping) {
-        if (mappedPtyId === ptyId) {
-          return { sessionId, paneId };
-        }
-      }
+    // If not in reverse index, check current session's ptyToPaneMap (active PTYs)
+    // These may not be in sessionPtyMap yet if session hasn't been suspended
+    const currentPaneId = ptyToPaneMap.get(ptyId);
+    if (currentPaneId) {
+      // PTY is in the current (unsaved) session - return null
+      // The caller should handle current session separately
+      return null;
     }
 
     return null;

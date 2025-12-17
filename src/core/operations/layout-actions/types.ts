@@ -24,6 +24,7 @@ export type LayoutAction =
   | { type: 'SWITCH_WORKSPACE'; workspaceId: WorkspaceId }
   | { type: 'SET_LAYOUT_MODE'; mode: LayoutMode }
   | { type: 'SET_PANE_PTY'; paneId: NodeId; ptyId: string }
+  | { type: 'SET_PANE_TITLE'; paneId: NodeId; title: string }
   | { type: 'SWAP_MAIN' }
   | { type: 'TOGGLE_ZOOM' }
   | { type: 'LOAD_SESSION'; workspaces: Map<WorkspaceId, Workspace>; activeWorkspaceId: WorkspaceId }

@@ -11,6 +11,7 @@ import type { Workspace, WorkspaceId } from '../core/types';
 import {
   clearPtyTracking,
   setSessionCwdMap,
+  clearSessionCwdMap,
 } from '../effect/bridge';
 
 interface SessionBridgeProps extends ParentProps {}
@@ -65,19 +66,21 @@ export function SessionBridge(props: SessionBridgeProps) {
     // Clear PTY tracking to allow new PTYs to be created for panes without restored PTYs
     await clearPtyTracking();
 
-    // Load workspaces into layout
-    loadSession({ workspaces, activeWorkspaceId });
-
-    // Store cwdMap in AppCoordinator for AppContent to use (for panes without restored PTYs)
+    // IMPORTANT: Store cwdMap BEFORE loading session
+    // This ensures CWDs are available when PTY creation effect runs
     await setSessionCwdMap(cwdMap);
+
+    // Load workspaces into layout (this triggers reactive effects)
+    loadSession({ workspaces, activeWorkspaceId });
   };
 
   const onBeforeSwitch = async (currentSessionId: string) => {
     // Suspend PTYs for current session (save mapping, unsubscribe but don't destroy)
     suspendSession(currentSessionId);
     clearAll();
-    // Clear PTY tracking
+    // Clear PTY tracking and CWD map to prevent stale state
     await clearPtyTracking();
+    await clearSessionCwdMap();
   };
 
   const onDeleteSession = (sessionId: string) => {

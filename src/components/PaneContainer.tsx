@@ -8,6 +8,7 @@ import { useLayout } from '../contexts/LayoutContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTerminal } from '../contexts/TerminalContext';
 import { useSession } from '../contexts/SessionContext';
+import { useAggregateView } from '../contexts/AggregateViewContext';
 import { getFocusedPane, isMainPaneFocused } from '../core/workspace-utils';
 import { Pane } from './Pane';
 
@@ -17,6 +18,7 @@ export function PaneContainer() {
   const theme = useTheme();
   const { writeToPTY, isMouseTrackingEnabled } = useTerminal();
   const session = useSession();
+  const { state: aggregateState } = useAggregateView();
 
   const handlePaneClick = (paneId: string) => {
     focusPane(paneId);
@@ -31,8 +33,8 @@ export function PaneContainer() {
     }
   };
 
-  // Don't show "No panes" message while session is switching (prevents flash)
-  const showNoPanesMessage = () => !layout.activeWorkspace.mainPane && !session.state.switching;
+  // Don't show "No panes" message while session is switching or aggregate view is open (prevents bleed-through)
+  const showNoPanesMessage = () => !layout.activeWorkspace.mainPane && !session.state.switching && !aggregateState.showAggregateView;
 
   return (
     <Show

@@ -121,6 +121,25 @@ export class Pty extends Context.Tag("@openmux/Pty")<
 
     /** Get git branch for a PTY's current directory */
     readonly getGitBranch: (id: PtyId) => Effect.Effect<string | undefined, PtyNotFoundError | PtyCwdError>
+
+    /** Subscribe to PTY lifecycle events (created/destroyed) */
+    readonly subscribeToLifecycle: (
+      callback: (event: { type: 'created' | 'destroyed'; ptyId: PtyId }) => void
+    ) => Effect.Effect<() => void>
+
+    /** Get current terminal title for a PTY */
+    readonly getTitle: (id: PtyId) => Effect.Effect<string, PtyNotFoundError>
+
+    /** Subscribe to terminal title changes for a PTY */
+    readonly subscribeToTitleChange: (
+      id: PtyId,
+      callback: (title: string) => void
+    ) => Effect.Effect<() => void, PtyNotFoundError>
+
+    /** Subscribe to title changes across ALL PTYs (for aggregate view) */
+    readonly subscribeToAllTitleChanges: (
+      callback: (event: { ptyId: PtyId; title: string }) => void
+    ) => Effect.Effect<() => void>
   }
 >() {
   /** Production layer */
@@ -133,6 +152,14 @@ export class Pty extends Context.Tag("@openmux/Pty")<
       const sessionsRef = yield* Ref.make(
         HashMap.empty<PtyId, InternalPtySession>()
       )
+
+      // Lifecycle event subscribers
+      type PtyLifecycleCallback = (event: { type: 'created' | 'destroyed'; ptyId: PtyId }) => void
+      const lifecycleSubscribers = new Set<PtyLifecycleCallback>()
+
+      // Global title change subscribers (for aggregate view)
+      type TitleChangeCallback = (event: { ptyId: PtyId; title: string }) => void
+      const globalTitleSubscribers = new Set<TitleChangeCallback>()
 
       // Helper to get a session or fail
       const getSessionOrFail = (id: PtyId) =>
@@ -210,9 +237,22 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           scrollSubscribers: new Set(),
           unifiedSubscribers: new Set(),
           exitCallbacks: new Set(),
+          titleSubscribers: new Set(),
           pendingNotify: false,
           scrollState: { viewportOffset: 0 },
         }
+
+        // Subscribe to emulator title changes and propagate to subscribers
+        emulator.onTitleChange((title: string) => {
+          // Notify per-PTY title subscribers
+          for (const callback of session.titleSubscribers) {
+            callback(title)
+          }
+          // Notify global title subscribers (for aggregate view)
+          for (const callback of globalTitleSubscribers) {
+            callback({ ptyId: id, title })
+          }
+        })
 
         // Set up query passthrough using extracted helper
         setupQueryPassthrough({
@@ -244,6 +284,11 @@ export class Pty extends Context.Tag("@openmux/Pty")<
 
         // Store session
         yield* Ref.update(sessionsRef, HashMap.set(id, session))
+
+        // Emit lifecycle event
+        for (const callback of lifecycleSubscribers) {
+          callback({ type: 'created', ptyId: id })
+        }
 
         return id
       })
@@ -325,8 +370,14 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           session.emulator.dispose()
           session.queryPassthrough.dispose()
 
-          // Remove from map
+          // Remove from map BEFORE emitting lifecycle event
+          // This ensures refreshPtys() sees the updated list
           yield* Ref.update(sessionsRef, HashMap.remove(id))
+
+          // Emit lifecycle event AFTER removal so listeners see updated state
+          for (const callback of lifecycleSubscribers) {
+            callback({ type: 'destroyed', ptyId: id })
+          }
         }
       })
 
@@ -496,6 +547,45 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         return yield* getGitBranch(cwd)
       })
 
+      const subscribeToLifecycle = Effect.fn("Pty.subscribeToLifecycle")(function* (
+        callback: (event: { type: 'created' | 'destroyed'; ptyId: PtyId }) => void
+      ) {
+        lifecycleSubscribers.add(callback)
+        return () => {
+          lifecycleSubscribers.delete(callback)
+        }
+      })
+
+      const getTitleFn = Effect.fn("Pty.getTitle")(function* (id: PtyId) {
+        const session = yield* getSessionOrFail(id)
+        return session.emulator.getTitle()
+      })
+
+      const subscribeToTitleChange = Effect.fn("Pty.subscribeToTitleChange")(function* (
+        id: PtyId,
+        callback: (title: string) => void
+      ) {
+        const session = yield* getSessionOrFail(id)
+        session.titleSubscribers.add(callback)
+        // Immediately call with current title if set
+        const currentTitle = session.emulator.getTitle()
+        if (currentTitle) {
+          callback(currentTitle)
+        }
+        return () => {
+          session.titleSubscribers.delete(callback)
+        }
+      })
+
+      const subscribeToAllTitleChanges = Effect.fn("Pty.subscribeToAllTitleChanges")(function* (
+        callback: (event: { ptyId: PtyId; title: string }) => void
+      ) {
+        globalTitleSubscribers.add(callback)
+        return () => {
+          globalTitleSubscribers.delete(callback)
+        }
+      })
+
       return Pty.of({
         create,
         write,
@@ -516,6 +606,10 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         listAll,
         getForegroundProcess: getForegroundProcessFn,
         getGitBranch: getGitBranchFn,
+        subscribeToLifecycle,
+        getTitle: getTitleFn,
+        subscribeToTitleChange,
+        subscribeToAllTitleChanges,
       })
     })
   )
@@ -562,5 +656,9 @@ export class Pty extends Context.Tag("@openmux/Pty")<
     listAll: () => Effect.succeed([]),
     getForegroundProcess: () => Effect.succeed(undefined),
     getGitBranch: () => Effect.succeed(undefined),
+    subscribeToLifecycle: () => Effect.succeed(() => {}),
+    getTitle: () => Effect.succeed(""),
+    subscribeToTitleChange: () => Effect.succeed(() => {}),
+    subscribeToAllTitleChanges: () => Effect.succeed(() => {}),
   })
 }

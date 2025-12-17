@@ -290,3 +290,78 @@ export async function getEmulator(
     return null
   }
 }
+
+/**
+ * PTY lifecycle event type
+ */
+export type PtyLifecycleEvent = {
+  type: 'created' | 'destroyed'
+  ptyId: string
+}
+
+/**
+ * Subscribe to PTY lifecycle events (created/destroyed).
+ * Returns an unsubscribe function.
+ */
+export async function subscribeToPtyLifecycle(
+  callback: (event: PtyLifecycleEvent) => void
+): Promise<() => void> {
+  try {
+    return await runEffect(
+      Effect.gen(function* () {
+        const pty = yield* Pty
+        return yield* pty.subscribeToLifecycle((event) => {
+          callback({ type: event.type, ptyId: event.ptyId })
+        })
+      })
+    )
+  } catch {
+    return () => {}
+  }
+}
+
+/**
+ * Title change event for subscriptions.
+ */
+export interface PtyTitleChangeEvent {
+  ptyId: string
+  title: string
+}
+
+/**
+ * Subscribe to title changes across ALL PTYs.
+ * Useful for aggregate view to update PTY list when titles change.
+ * Returns an unsubscribe function.
+ */
+export async function subscribeToAllTitleChanges(
+  callback: (event: PtyTitleChangeEvent) => void
+): Promise<() => void> {
+  try {
+    return await runEffect(
+      Effect.gen(function* () {
+        const pty = yield* Pty
+        return yield* pty.subscribeToAllTitleChanges((event) => {
+          callback({ ptyId: event.ptyId, title: event.title })
+        })
+      })
+    )
+  } catch {
+    return () => {}
+  }
+}
+
+/**
+ * Get the current title for a PTY.
+ */
+export async function getPtyTitle(ptyId: string): Promise<string> {
+  try {
+    return await runEffect(
+      Effect.gen(function* () {
+        const pty = yield* Pty
+        return yield* pty.getTitle(PtyId.make(ptyId))
+      })
+    )
+  } catch {
+    return ""
+  }
+}

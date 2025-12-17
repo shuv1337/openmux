@@ -44,6 +44,7 @@ interface LayoutContextValue {
   switchWorkspace: (workspaceId: WorkspaceId) => void;
   setLayoutMode: (mode: LayoutMode) => void;
   setPanePty: (paneId: string, ptyId: string) => void;
+  setPaneTitle: (paneId: string, title: string) => void;
   swapMain: () => void;
   toggleZoom: () => void;
   loadSession: (params: { workspaces: Map<WorkspaceId, Workspace>; activeWorkspaceId: WorkspaceId }) => void;
@@ -117,6 +118,8 @@ export function LayoutProvider(props: LayoutProviderProps) {
   const setLayoutMode = (mode: LayoutMode) => dispatch({ type: 'SET_LAYOUT_MODE', mode });
   const setPanePty = (paneId: string, ptyId: string) =>
     dispatch({ type: 'SET_PANE_PTY', paneId, ptyId });
+  const setPaneTitle = (paneId: string, title: string) =>
+    dispatch({ type: 'SET_PANE_TITLE', paneId, title });
   const swapMain = () => dispatch({ type: 'SWAP_MAIN' });
   const toggleZoom = () => dispatch({ type: 'TOGGLE_ZOOM' });
   const loadSession = (params: { workspaces: Map<WorkspaceId, Workspace>; activeWorkspaceId: WorkspaceId }) =>
@@ -140,6 +143,7 @@ export function LayoutProvider(props: LayoutProviderProps) {
     switchWorkspace,
     setLayoutMode,
     setPanePty,
+    setPaneTitle,
     swapMain,
     toggleZoom,
     loadSession,

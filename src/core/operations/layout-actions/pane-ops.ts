@@ -1,6 +1,6 @@
 /**
  * Pane operations action handlers
- * SET_LAYOUT_MODE, SET_PANE_PTY, SWAP_MAIN, TOGGLE_ZOOM
+ * SET_LAYOUT_MODE, SET_PANE_PTY, SET_PANE_TITLE, SWAP_MAIN, TOGGLE_ZOOM
  */
 
 import type { LayoutMode, Workspace } from '../../types';
@@ -39,6 +39,32 @@ export function handleSetPanePty(state: LayoutState, paneId: string, ptyId: stri
       ...workspace,
       stackPanes: workspace.stackPanes.map(p =>
         p.id === paneId ? { ...p, ptyId } : p
+      ),
+    };
+  }
+
+  return { ...state, workspaces: updateWorkspace(state, updated) };
+}
+
+/**
+ * Handle SET_PANE_TITLE action
+ * Updates the title of a pane
+ */
+export function handleSetPaneTitle(state: LayoutState, paneId: string, title: string): LayoutState {
+  const workspace = getActiveWorkspace(state);
+
+  let updated: Workspace = workspace;
+
+  if (workspace.mainPane?.id === paneId) {
+    updated = {
+      ...workspace,
+      mainPane: { ...workspace.mainPane, title },
+    };
+  } else {
+    updated = {
+      ...workspace,
+      stackPanes: workspace.stackPanes.map(p =>
+        p.id === paneId ? { ...p, title } : p
       ),
     };
   }

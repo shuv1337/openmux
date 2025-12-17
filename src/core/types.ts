@@ -211,7 +211,7 @@ export interface SelectionBounds {
 export type KeyMode = 'normal' | 'prefix' | 'search' | 'aggregate' | 'confirm';
 
 /** Confirmation dialog type */
-export type ConfirmationType = 'close_pane' | 'exit';
+export type ConfirmationType = 'close_pane' | 'exit' | 'kill_pty';
 
 /**
  * Keyboard state

@@ -28,6 +28,11 @@ export {
   subscribeUnifiedToPty,
   getScrollbackLine,
   getEmulator,
+  subscribeToPtyLifecycle,
+  subscribeToAllTitleChanges,
+  getPtyTitle,
+  type PtyLifecycleEvent,
+  type PtyTitleChangeEvent,
 } from "./pty-bridge"
 
 // Session operations

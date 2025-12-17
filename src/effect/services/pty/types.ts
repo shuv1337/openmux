@@ -27,6 +27,8 @@ export interface InternalPtySession {
   /** Unified subscribers receive both terminal and scroll updates in one callback */
   unifiedSubscribers: Set<(update: UnifiedTerminalUpdate) => void>
   exitCallbacks: Set<(exitCode: number) => void>
+  /** Title change subscribers for this specific PTY */
+  titleSubscribers: Set<(title: string) => void>
   pendingNotify: boolean
   scrollState: {
     viewportOffset: number

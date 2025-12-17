@@ -94,9 +94,9 @@ interface SessionProviderProps extends ParentProps {
     activeWorkspaceId: WorkspaceId,
     cwdMap: Map<string, string>,
     sessionId: string
-  ) => void;
+  ) => Promise<void>;
   /** Callback to suspend PTYs before switching (saves mapping, doesn't destroy) */
-  onBeforeSwitch: (currentSessionId: string) => void;
+  onBeforeSwitch: (currentSessionId: string) => Promise<void>;
   /** Callback to cleanup PTYs when a session is deleted */
   onDeleteSession: (sessionId: string) => void;
   /** Layout version counter - triggers save when changed */
@@ -157,7 +157,8 @@ export function SessionProvider(props: SessionProviderProps) {
         // Load session data and notify parent
         const data = await loadSessionData(activeId);
         if (data && data.workspaces.size > 0) {
-          props.onSessionLoad(data.workspaces, data.activeWorkspaceId, data.cwdMap, activeId);
+          // IMPORTANT: Await onSessionLoad to ensure CWD map is set before initialized
+          await props.onSessionLoad(data.workspaces, data.activeWorkspaceId, data.cwdMap, activeId);
         }
       }
     }
@@ -228,7 +229,7 @@ export function SessionProvider(props: SessionProviderProps) {
       );
 
       // Suspend PTYs for current session before switching
-      props.onBeforeSwitch(state.activeSessionId);
+      await props.onBeforeSwitch(state.activeSessionId);
     }
 
     const metadata = await createSessionOnDisk(name);
@@ -236,7 +237,7 @@ export function SessionProvider(props: SessionProviderProps) {
     dispatch({ type: 'SET_ACTIVE_SESSION', id: metadata.id, session: metadata });
 
     // Load empty workspaces for new session
-    props.onSessionLoad(new Map(), 1, new Map(), metadata.id);
+    await props.onSessionLoad(new Map(), 1, new Map(), metadata.id);
 
     return metadata;
   };
@@ -259,7 +260,7 @@ export function SessionProvider(props: SessionProviderProps) {
       );
 
       // Suspend PTYs for current session (save mapping, don't destroy)
-      props.onBeforeSwitch(state.activeSessionId);
+      await props.onBeforeSwitch(state.activeSessionId);
     }
 
     // Load new session
@@ -268,7 +269,8 @@ export function SessionProvider(props: SessionProviderProps) {
 
     if (data) {
       dispatch({ type: 'SET_ACTIVE_SESSION', id, session: data.metadata });
-      props.onSessionLoad(data.workspaces, data.activeWorkspaceId, data.cwdMap, id);
+      // IMPORTANT: Await onSessionLoad to ensure CWD map is set before switching completes
+      await props.onSessionLoad(data.workspaces, data.activeWorkspaceId, data.cwdMap, id);
     }
 
     // Mark switching complete

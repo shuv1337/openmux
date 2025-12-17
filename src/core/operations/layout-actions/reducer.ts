@@ -9,7 +9,7 @@ import { handleNavigate } from './navigate';
 import { handleNewPane } from './new-pane';
 import { handleClosePane, handleClosePaneById } from './close-pane';
 import { handleSetViewport, handleSwitchWorkspace, handleLoadSession, handleClearAll } from './workspace-ops';
-import { handleSetLayoutMode, handleSetPanePty, handleSwapMain, handleToggleZoom } from './pane-ops';
+import { handleSetLayoutMode, handleSetPanePty, handleSetPaneTitle, handleSwapMain, handleToggleZoom } from './pane-ops';
 
 /**
  * Layout reducer - handles all layout-related actions
@@ -42,6 +42,9 @@ export function layoutReducer(state: LayoutState, action: LayoutAction): LayoutS
 
     case 'SET_PANE_PTY':
       return handleSetPanePty(state, action.paneId, action.ptyId);
+
+    case 'SET_PANE_TITLE':
+      return handleSetPaneTitle(state, action.paneId, action.title);
 
     case 'SWAP_MAIN':
       return handleSwapMain(state);
