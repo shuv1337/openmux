@@ -54,6 +54,7 @@ export function SearchOverlay(props: SearchOverlayProps) {
             padding: 0,
             paddingLeft: 1,
             paddingRight: 1,
+            zIndex: 150,
           }}
           backgroundColor="#1a1a1a"
           title=" Search "

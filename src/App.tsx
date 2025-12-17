@@ -39,6 +39,7 @@ import {
   createPaneResizeHandlers,
   createPasteHandler,
 } from './components/app';
+import { calculateLayoutDimensions } from './components/aggregate';
 
 function AppContent() {
   const dimensions = useTerminalDimensions();
@@ -472,11 +473,24 @@ function AppContent() {
       <CopyNotification
         visible={selection.copyNotification.visible}
         charCount={selection.copyNotification.charCount}
-        paneRect={
-          selection.copyNotification.ptyId
-            ? layout.panes.find(p => p.ptyId === selection.copyNotification.ptyId)?.rectangle ?? null
-            : null
-        }
+        paneRect={(() => {
+          const ptyId = selection.copyNotification.ptyId;
+          if (!ptyId) return null;
+
+          // If aggregate view is open and showing this pty, use the preview rectangle
+          if (aggregateState.showAggregateView && aggregateState.selectedPtyId === ptyId) {
+            const aggLayout = calculateLayoutDimensions({ width: width(), height: height() });
+            return {
+              x: aggLayout.listPaneWidth,
+              y: 0,
+              width: aggLayout.previewPaneWidth,
+              height: aggLayout.contentHeight,
+            };
+          }
+
+          // Otherwise use the normal pane rectangle
+          return layout.panes.find(p => p.ptyId === ptyId)?.rectangle ?? null;
+        })()}
       />
     </box>
   );

@@ -52,7 +52,7 @@ export function CopyNotification(props: CopyNotificationProps) {
               width: TOAST_WIDTH,
               height: TOAST_HEIGHT,
               backgroundColor: BG_COLOR,
-              zIndex: 1000,
+              zIndex: 250,
               border: ['left', 'right'],
               borderStyle: 'single',
               borderColor: BORDER_COLOR,

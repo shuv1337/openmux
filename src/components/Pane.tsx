@@ -1,5 +1,6 @@
 /**
  * Pane component - individual terminal pane with border and focus state
+ * Uses shared terminal-mouse-handler for selection logic
  */
 
 import { onCleanup, type JSX } from 'solid-js';
@@ -9,6 +10,7 @@ import { useTerminal } from '../contexts/TerminalContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { TerminalView } from './TerminalView';
 import { inputHandler } from '../terminal';
+import { createTerminalMouseHandler } from './shared/terminal-mouse-handler';
 
 interface PaneProps {
   id: string;
@@ -26,75 +28,47 @@ interface PaneProps {
 
 export function Pane(props: PaneProps) {
   const theme = useTheme();
-  const { isMouseTrackingEnabled, isAlternateScreen, scrollTerminal, getScrollState, setScrollOffset, getEmulatorSync, getTerminalStateSync } = useTerminal();
-  const { startSelection, updateSelection, completeSelection, clearSelection, getSelection } = useSelection();
+  const terminal = useTerminal();
+  const { isMouseTrackingEnabled, isAlternateScreen, scrollTerminal, getScrollState, setScrollOffset, getEmulatorSync, getTerminalStateSync } = terminal;
+  const selection = useSelection();
+  const { startSelection, updateSelection, completeSelection, clearSelection, getSelection } = selection;
 
   // Calculate inner dimensions (account for border)
   const innerWidth = () => Math.max(1, props.width - 2);
   const innerHeight = () => Math.max(1, props.height - 2);
 
-  // Track if we're dragging the scrollbar (plain variable in Solid)
+  // Create shared mouse handler for selection logic
+  const mouseHandler = createTerminalMouseHandler({
+    isMouseTrackingEnabled,
+    isAlternateScreen,
+    getScrollState,
+    scrollTerminal,
+    startSelection,
+    updateSelection,
+    completeSelection,
+    clearSelection,
+    getSelection,
+    getEmulatorSync,
+    getTerminalStateSync,
+  });
+
+  // Track if we're dragging the scrollbar (pane-specific feature)
   let scrollbarDrag = {
     isDragging: false,
     startY: 0,
     startOffset: 0,
   };
 
-  // Track auto-scroll during selection drag outside pane bounds
-  let autoScroll: {
-    direction: 'up' | 'down' | null;
-    intervalId: ReturnType<typeof setInterval> | null;
-  } = {
-    direction: null,
-    intervalId: null,
-  };
-
-  // Track pending selection start (set on mouse down, used on first drag)
-  let pendingSelection: {
-    x: number;
-    y: number;
-    scrollbackLength: number;
-    scrollOffset: number;
-  } | null = null;
-
   // Track scroll direction with hysteresis to prevent jitter from trackpad micro-movements
+  // (pane-specific optimization)
   let committedDirection: 'up' | 'down' | null = null;
   let pendingDirection: 'up' | 'down' | null = null;
   let consecutiveCount = 0;
 
-  // Cleanup auto-scroll interval on unmount
+  // Cleanup on unmount
   onCleanup(() => {
-    if (autoScroll.intervalId) {
-      clearInterval(autoScroll.intervalId);
-    }
+    mouseHandler.cleanup();
   });
-
-  // Start or update auto-scroll
-  const startAutoScroll = (direction: 'up' | 'down') => {
-    if (autoScroll.direction === direction) return; // Already scrolling this direction
-
-    // Clear existing interval
-    if (autoScroll.intervalId) {
-      clearInterval(autoScroll.intervalId);
-    }
-
-    autoScroll.direction = direction;
-    autoScroll.intervalId = setInterval(() => {
-      if (props.ptyId) {
-        // Scroll up = increase offset (older content), scroll down = decrease offset (newer content)
-        scrollTerminal(props.ptyId, direction === 'up' ? 1 : -1);
-      }
-    }, 50); // Scroll every 50ms for smooth scrolling
-  };
-
-  // Stop auto-scroll
-  const stopAutoScroll = () => {
-    if (autoScroll.intervalId) {
-      clearInterval(autoScroll.intervalId);
-      autoScroll.intervalId = null;
-    }
-    autoScroll.direction = null;
-  };
 
   // Check if a position is on the scrollbar (rightmost column when scrolled)
   const isOnScrollbar = (relX: number, relY: number): boolean => {
@@ -136,16 +110,26 @@ export function Pane(props: PaneProps) {
     bold: 'single', // fallback
   };
 
-  // Convert OpenTUI mouse event to PTY mouse sequence
-  const handleMouseEvent = (event: OpenTUIMouseEvent, type: 'down' | 'up' | 'move' | 'drag' | 'scroll') => {
-    if (!props.onMouseInput) return;
-
-    // Calculate coordinates relative to pane content (subtract border)
+  // Calculate relative coordinates
+  const getRelativeCoords = (event: OpenTUIMouseEvent) => {
     const relX = event.x - props.x - 1;
     const relY = event.y - props.y - 1;
+    return { relX, relY };
+  };
 
-    // Only forward if inside the content area
-    if (relX < 0 || relY < 0 || relX >= innerWidth() || relY >= innerHeight()) return;
+  // Check if inside content area
+  const isInsideContent = (relX: number, relY: number) => {
+    return relX >= 0 && relY >= 0 && relX < innerWidth() && relY < innerHeight();
+  };
+
+  // Forward mouse event to PTY
+  const forwardMouseEvent = (
+    event: OpenTUIMouseEvent,
+    type: 'down' | 'up' | 'move' | 'drag',
+    relX: number,
+    relY: number
+  ) => {
+    if (!props.onMouseInput) return;
 
     const sequence = inputHandler.encodeMouse({
       type,
@@ -161,15 +145,13 @@ export function Pane(props: PaneProps) {
   };
 
   const handleMouseDown = (event: OpenTUIMouseEvent) => {
-    // Prevent default selection behavior
     event.preventDefault();
     props.onClick?.();
 
-    // Check if clicking on scrollbar
-    const relX = event.x - props.x - 1;
-    const relY = event.y - props.y - 1;
+    const { relX, relY } = getRelativeCoords(event);
+
+    // Check if clicking on scrollbar (pane-specific)
     if (isOnScrollbar(relX, relY) && props.ptyId) {
-      // Start scrollbar drag
       const scrollState = getScrollState(props.ptyId);
       scrollbarDrag = {
         isDragging: true,
@@ -177,165 +159,120 @@ export function Pane(props: PaneProps) {
         startOffset: scrollState?.viewportOffset ?? 0,
       };
       // Jump to clicked position
-      const newOffset = yToScrollOffset(relY);
-      setScrollOffset(props.ptyId, newOffset);
+      setScrollOffset(props.ptyId, yToScrollOffset(relY));
       return;
     }
 
-    // Check if should handle selection vs forward to PTY
-    // Shift key overrides app mouse tracking to allow selection
-    const appWantsMouse = props.ptyId && (isMouseTrackingEnabled(props.ptyId) || isAlternateScreen(props.ptyId));
-    const shiftOverride = event.modifiers?.shift;
-    const shouldSelect = !appWantsMouse || shiftOverride;
+    if (!props.ptyId) return;
+    if (!isInsideContent(relX, relY)) return;
 
-    if (shouldSelect && props.ptyId) {
-      // Clear any existing selection and store pending selection start
-      // Actual selection begins on drag, not on click (Zellij-style)
-      clearSelection(props.ptyId);
-      const scrollState = getScrollState(props.ptyId);
-      pendingSelection = {
-        x: relX,
-        y: relY,
-        scrollbackLength: scrollState?.scrollbackLength ?? 0,
-        scrollOffset: scrollState?.viewportOffset ?? 0,
-      };
-      return;
-    }
+    // Try selection first (shared logic)
+    const handled = mouseHandler.handleSelectionMouseDown(
+      props.ptyId, relX, relY, event.modifiers?.shift ?? false
+    );
+    if (handled) return;
 
-    handleMouseEvent(event, 'down');
+    // Don't forward mouse down when scrolled back - we're in "history viewing" mode
+    const scrollState = getScrollState(props.ptyId);
+    if (scrollState && scrollState.viewportOffset > 0) return;
+
+    forwardMouseEvent(event, 'down', relX, relY);
   };
 
   const handleMouseUp = (event: OpenTUIMouseEvent) => {
     event.preventDefault();
-    // End scrollbar drag
+
+    // End scrollbar drag (pane-specific)
     scrollbarDrag.isDragging = false;
-    // Clear any pending selection (click without drag)
-    pendingSelection = null;
-    // Stop any auto-scrolling
-    stopAutoScroll();
 
-    // Check if we're in selection mode - complete selection (auto-copy)
-    const selection = props.ptyId ? getSelection(props.ptyId) : undefined;
-    if (selection?.isSelecting && props.ptyId) {
-      const scrollState = getScrollState(props.ptyId);
-      const scrollbackLength = scrollState?.scrollbackLength ?? 0;
-
-      // Create a line getter that handles both scrollback and live terminal
-      const getLine = (absoluteY: number) => {
-        const emulator = getEmulatorSync(props.ptyId!);
-        const state = getTerminalStateSync(props.ptyId!);
-        if (absoluteY < scrollbackLength) {
-          return emulator?.getScrollbackLine(absoluteY) ?? null;
-        } else {
-          const liveY = absoluteY - scrollbackLength;
-          return state?.cells[liveY] ?? null;
-        }
-      };
-
-      completeSelection(props.ptyId, scrollbackLength, getLine);
+    // Try to complete selection (shared logic, handles cleanup)
+    if (props.ptyId && mouseHandler.handleSelectionMouseUp(props.ptyId)) {
       return;
     }
 
-    handleMouseEvent(event, 'up');
+    if (!props.ptyId) return;
+
+    // Don't forward mouse up when scrolled back - we're in "history viewing" mode
+    const scrollState = getScrollState(props.ptyId);
+    if (scrollState && scrollState.viewportOffset > 0) return;
+
+    const { relX, relY } = getRelativeCoords(event);
+    if (!isInsideContent(relX, relY)) return;
+
+    forwardMouseEvent(event, 'up', relX, relY);
   };
 
   const handleMouseMove = (event: OpenTUIMouseEvent) => {
     event.preventDefault();
-    handleMouseEvent(event, 'move');
+
+    if (!props.ptyId) return;
+
+    // Only forward mouse move if app explicitly wants mouse input
+    // (has mouse tracking enabled or is in alternate screen)
+    if (!mouseHandler.appWantsMouse(props.ptyId)) return;
+
+    const { relX, relY } = getRelativeCoords(event);
+    if (!isInsideContent(relX, relY)) return;
+
+    forwardMouseEvent(event, 'move', relX, relY);
   };
 
   const handleMouseDrag = (event: OpenTUIMouseEvent) => {
-    // Prevent default selection behavior during drag
     event.preventDefault();
 
-    // Handle scrollbar dragging
+    // Handle scrollbar dragging (pane-specific)
     if (scrollbarDrag.isDragging && props.ptyId) {
-      const relY = event.y - props.y - 1;
-      const newOffset = yToScrollOffset(relY);
-      setScrollOffset(props.ptyId, newOffset);
+      const { relY } = getRelativeCoords(event);
+      setScrollOffset(props.ptyId, yToScrollOffset(relY));
       return;
     }
 
-    const relX = event.x - props.x - 1;
-    const relY = event.y - props.y - 1;
+    if (!props.ptyId) return;
 
-    // Check if we have a pending selection start (first drag after mouse down)
-    if (pendingSelection && props.ptyId) {
-      const pending = pendingSelection;
-      // Start the actual selection from the original mouse down position
-      startSelection(props.ptyId, pending.x, pending.y, pending.scrollbackLength, pending.scrollOffset);
-      pendingSelection = null;
-      // Continue to update selection below
-    }
+    const { relX, relY } = getRelativeCoords(event);
 
-    // Check if we're in selection mode - update selection
-    const selection = props.ptyId ? getSelection(props.ptyId) : undefined;
-    if (selection?.isSelecting && props.ptyId) {
-      // Auto-scroll when dragging outside pane bounds
-      if (relY < 0) {
-        // Dragging above the pane - scroll up (show older content)
-        startAutoScroll('up');
-      } else if (relY >= innerHeight()) {
-        // Dragging below the pane - scroll down (show newer content)
-        startAutoScroll('down');
-      } else {
-        // Inside pane bounds - stop auto-scrolling
-        stopAutoScroll();
-      }
+    // Try selection drag (shared logic)
+    const handled = mouseHandler.handleSelectionMouseDrag(
+      props.ptyId, relX, relY, innerHeight()
+    );
+    if (handled) return;
 
-      const scrollState = getScrollState(props.ptyId);
-      const scrollbackLength = scrollState?.scrollbackLength ?? 0;
-      const scrollOffset = scrollState?.viewportOffset ?? 0;
+    // Don't forward drag when scrolled back - we're in "history viewing" mode
+    const scrollState = getScrollState(props.ptyId);
+    if (scrollState && scrollState.viewportOffset > 0) return;
 
-      // Clamp relY to valid range for selection update
-      const clampedY = Math.max(0, Math.min(relY, innerHeight() - 1));
-      updateSelection(props.ptyId, relX, clampedY, scrollbackLength, scrollOffset);
-      return;
-    }
-
-    handleMouseEvent(event, 'drag');
+    if (!isInsideContent(relX, relY)) return;
+    forwardMouseEvent(event, 'drag', relX, relY);
   };
 
   const handleMouseScroll = (event: OpenTUIMouseEvent) => {
     if (!props.ptyId) return;
 
-    // Calculate coordinates relative to pane content
-    const relX = event.x - props.x - 1;
-    const relY = event.y - props.y - 1;
+    const { relX, relY } = getRelativeCoords(event);
+    if (!isInsideContent(relX, relY)) return;
 
-    if (relX < 0 || relY < 0 || relX >= innerWidth() || relY >= innerHeight()) return;
-
-    // Check if terminal is in alternate screen or has mouse tracking enabled
-    // If so, forward scroll events to the PTY (apps like vim, htop need them)
-    const shouldForwardToApp = isAlternateScreen(props.ptyId) || isMouseTrackingEnabled(props.ptyId);
-
-    if (shouldForwardToApp && props.onMouseInput) {
+    // Forward scroll to app if it wants mouse input
+    if (mouseHandler.appWantsMouse(props.ptyId) && props.onMouseInput) {
+      // Hysteresis to prevent jitter from trackpad micro-movements (pane-specific)
       const eventDir = event.scroll?.direction === 'up' ? 'up' : 'down' as const;
-      const threshold = 2; // Consecutive events needed to commit/change direction
+      const threshold = 2;
 
-      // Track consecutive events in the same direction
       if (eventDir === pendingDirection) {
         consecutiveCount++;
       } else {
-        // Direction changed - reset and require re-confirmation
         pendingDirection = eventDir;
         consecutiveCount = 1;
-        // Uncommit direction when we see a different direction
-        // This prevents sending stale direction events during slow direction changes
         if (committedDirection !== null && eventDir !== committedDirection) {
           committedDirection = null;
         }
       }
 
-      // Commit direction once threshold reached
       if (consecutiveCount >= threshold) {
         committedDirection = eventDir;
       }
 
-      // Only send if direction is committed and matches current event
       if (committedDirection !== null && eventDir === committedDirection) {
         const button = committedDirection === 'up' ? 4 : 5;
-
         const sequence = inputHandler.encodeMouse({
           type: 'scroll',
           button,
@@ -345,20 +282,15 @@ export function Pane(props: PaneProps) {
           alt: event.modifiers?.alt,
           ctrl: event.modifiers?.ctrl,
         });
-
         props.onMouseInput(sequence);
       }
     } else {
-      // Handle scroll locally - scroll through scrollback buffer
-      // OpenTUI scroll events have direction: "up" | "down" | "left" | "right"
-      // Scroll by 3 lines per event for comfortable scrolling speed
+      // Handle scroll locally
       const scrollSpeed = 3;
       const direction = event.scroll?.direction;
       if (direction === 'up') {
-        // Scroll up = look at older content = increase viewport offset
         scrollTerminal(props.ptyId, scrollSpeed);
       } else if (direction === 'down') {
-        // Scroll down = look at newer content = decrease viewport offset
         scrollTerminal(props.ptyId, -scrollSpeed);
       }
     }

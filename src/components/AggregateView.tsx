@@ -47,13 +47,14 @@ export function AggregateView(props: AggregateViewProps) {
     navigateDown,
     enterPreviewMode,
     exitPreviewMode,
+    selectPty,
   } = useAggregateView();
   const { exitAggregateMode, enterSearchMode: keyboardEnterSearchMode } = useKeyboardState();
   const { state: layoutState, switchWorkspace, focusPane } = useLayout();
   const { state: sessionState, switchSession } = useSession();
-  const { findSessionForPty, scrollTerminal, isMouseTrackingEnabled, isAlternateScreen } = useTerminal();
+  const { findSessionForPty, scrollTerminal, isMouseTrackingEnabled, isAlternateScreen, getScrollState, getEmulatorSync, getTerminalStateSync } = useTerminal();
   const theme = useTheme();
-  const { clearAllSelections } = useSelection();
+  const { clearAllSelections, startSelection, updateSelection, completeSelection, clearSelection, getSelection } = useSelection();
   // Keep search context to access searchState reactively (it's a getter)
   const search = useSearch();
   const { enterSearchMode, exitSearchMode, setSearchQuery, nextMatch, prevMatch } = search;
@@ -192,7 +193,7 @@ export function AggregateView(props: AggregateViewProps) {
     startPrefixTimeout,
   });
 
-  // Create mouse handlers using factory
+  // Create mouse handlers using factory (uses shared terminal-mouse-handler)
   const mouseHandlers = createAggregateMouseHandlers({
     getPreviewMode: () => state.previewMode,
     getSelectedPtyId: () => state.selectedPtyId,
@@ -201,7 +202,20 @@ export function AggregateView(props: AggregateViewProps) {
     getPreviewInnerHeight: () => layout().previewInnerHeight,
     isMouseTrackingEnabled,
     isAlternateScreen,
+    getScrollState,
     scrollTerminal,
+    startSelection,
+    updateSelection,
+    completeSelection,
+    clearSelection,
+    getSelection,
+    getEmulatorSync,
+    getTerminalStateSync,
+  });
+
+  // Cleanup mouse handler state (auto-scroll intervals, pending selection) on unmount
+  onCleanup(() => {
+    mouseHandlers.cleanup();
   });
 
   // Register keyboard handler with KeyboardRouter
@@ -265,6 +279,13 @@ export function AggregateView(props: AggregateViewProps) {
             }}
             title={`PTYs (${state.matchedPtys.length})`}
             titleAlignment="left"
+            onMouseDown={(e: { preventDefault: () => void }) => {
+              e.preventDefault();
+              // Clicking on list pane exits preview mode
+              if (state.previewMode) {
+                exitPreviewMode();
+              }
+            }}
           >
             <box style={{ flexDirection: 'column' }}>
               <Show
@@ -281,6 +302,13 @@ export function AggregateView(props: AggregateViewProps) {
                       pty={pty}
                       isSelected={index() === state.selectedIndex}
                       maxWidth={layout().listInnerWidth}
+                      onClick={() => {
+                        // Select this PTY and exit preview mode if active
+                        selectPty(pty.ptyId);
+                        if (state.previewMode) {
+                          exitPreviewMode();
+                        }
+                      }}
                     />
                   )}
                 </For>
@@ -297,7 +325,15 @@ export function AggregateView(props: AggregateViewProps) {
               borderStyle: borderStyleMap[theme.pane.borderStyle] ?? 'single',
               borderColor: state.previewMode ? theme.pane.focusedBorderColor : theme.pane.borderColor,
             }}
-            onMouseDown={mouseHandlers.handlePreviewMouseDown}
+            onMouseDown={(e: Parameters<typeof mouseHandlers.handlePreviewMouseDown>[0]) => {
+              // Click on preview enters preview mode if not already in it
+              if (!state.previewMode) {
+                e.preventDefault();
+                enterPreviewMode();
+                return;
+              }
+              mouseHandlers.handlePreviewMouseDown(e);
+            }}
             onMouseUp={mouseHandlers.handlePreviewMouseUp}
             onMouseMove={mouseHandlers.handlePreviewMouseMove}
             onMouseDrag={mouseHandlers.handlePreviewMouseDrag}

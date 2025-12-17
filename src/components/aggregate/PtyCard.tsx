@@ -10,6 +10,7 @@ interface PtyCardProps {
   pty: PtyInfo;
   isSelected: boolean;
   maxWidth: number;
+  onClick?: () => void;
 }
 
 /**
@@ -33,8 +34,17 @@ export function PtyCard(props: PtyCardProps) {
   // Dim color needs to be readable - lighter on blue, darker otherwise
   const dimColor = () => props.isSelected ? '#93c5fd' : '#666666';
 
+  const handleClick = (event: { preventDefault: () => void }) => {
+    event.preventDefault();
+    props.onClick?.();
+  };
+
   return (
-    <box style={{ flexDirection: 'column', height: 2 }} backgroundColor={bgColor()}>
+    <box
+      style={{ flexDirection: 'column', height: 2 }}
+      backgroundColor={bgColor()}
+      onMouseDown={handleClick}
+    >
       <box style={{ height: 1 }}>
         <text fg={fgColor()}>{line1().slice(0, props.maxWidth)}</text>
       </box>
