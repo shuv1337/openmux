@@ -43,7 +43,7 @@ function AppContent() {
   const { setViewport, newPane, closePane } = layout;
   // Don't destructure isInitialized - it's a reactive getter that loses reactivity when destructured
   const terminal = useTerminal();
-  const { createPTY, resizePTY, setPanePosition, writeToFocused, writeToPTY, pasteToFocused, getFocusedCwd, getFocusedCursorKeyMode, destroyAllPTYs, getSessionCwd } = terminal;
+  const { createPTY, destroyPTY, resizePTY, setPanePosition, writeToFocused, writeToPTY, pasteToFocused, getFocusedCwd, getFocusedCursorKeyMode, destroyAllPTYs, getSessionCwd } = terminal;
   const { togglePicker, state: sessionState, saveSession } = useSession();
   // Keep selection/search contexts to access reactive getters
   const selection = useSelection();
@@ -131,7 +131,13 @@ function AppContent() {
     setConfirmationState({ visible: false, type: 'close_pane' });
 
     if (type === 'close_pane') {
+      // Get the focused pane's PTY ID before closing (so we can destroy it)
+      const ptyId = getFocusedPtyId(layout.activeWorkspace);
       closePane();
+      // Destroy the PTY to kill the terminal process
+      if (ptyId) {
+        destroyPTY(ptyId);
+      }
     } else if (type === 'exit') {
       await saveSession();
       renderer.destroy();
