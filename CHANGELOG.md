@@ -2,6 +2,54 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.12](https://github.com/monotykamary/openmux/compare/v0.2.11...v0.2.12) (2025-12-17)
+
+
+### Features
+
+* **pty:** add real-time title tracking and lifecycle events ([618aeca](https://github.com/monotykamary/openmux/commit/618aeca85a143c47eebb3d61d7d3067dc8bfa8ef))
+
+
+### Bug Fixes
+
+* **effect:** resolve effect-language-service lint warnings ([a4f3739](https://github.com/monotykamary/openmux/commit/a4f3739bdffe230e9cd0a765ed9228df45583ef2))
+* resolve async cleanup race conditions and polling overlap ([c606caa](https://github.com/monotykamary/openmux/commit/c606caaf9d0d0e062b7475b70e806d63a0845029))
+
+
+### Performance
+
+* **aggregate:** optimize PTY lookups and title updates ([e3bb4d9](https://github.com/monotykamary/openmux/commit/e3bb4d901cbe9434026efd2a520ac4b41f64ef9e))
+* **terminal:** add emulator pool to reduce pane create/close stutter ([96e2ea2](https://github.com/monotykamary/openmux/commit/96e2ea2fa87c750902ba498fe1c421d431b8c18b))
+
+
+### Documentation
+
+* add lint command to CLAUDE.md ([e33e98b](https://github.com/monotykamary/openmux/commit/e33e98b0732cef3162b6c70d2ad52890c1ef80c2))
+
+
+### Refactoring
+
+* **app:** extract handlers from App.tsx to components/app ([edf739c](https://github.com/monotykamary/openmux/commit/edf739c412980dec50406a7c92ce2526f13f0bd0))
+* extract handler modules from large files (500+ LOC) ([1a13095](https://github.com/monotykamary/openmux/commit/1a130954a41438fbf09fc3dd2bd2bc257f87c7b5))
+* **pty:** add Effect-based subscription registry and optimize layout ([8f57b79](https://github.com/monotykamary/openmux/commit/8f57b79abadab6d0d26740ff6c4077cfe48dcf0a))
+
+
+### Tests
+
+* add tests for title-parser and subscription-manager ([7f687ef](https://github.com/monotykamary/openmux/commit/7f687ef9c327dfe8fae6b0399194a5900e4dd181))
+* suppress expected warning log in subscription-manager test ([2f24c5d](https://github.com/monotykamary/openmux/commit/2f24c5da2a4a15ab591475ce7341085edfa75eae))
+
+
+### Build System
+
+* add @vitest/coverage-v8 dependency ([e6ed233](https://github.com/monotykamary/openmux/commit/e6ed2337de6f91da1de44d674018e1a288844b16))
+
+
+### CI/CD
+
+* add Codecov token for coverage upload ([b8f82c2](https://github.com/monotykamary/openmux/commit/b8f82c2e18291b72cb68c2b52a77ee9fa9b8ee4e))
+* add GitHub release badge and Codecov integration ([156022a](https://github.com/monotykamary/openmux/commit/156022af9d2fda87b433e1a433ce10c0657c0cf8))
+
 ### [0.2.11](https://github.com/monotykamary/openmux/compare/v0.2.10...v0.2.11) (2025-12-17)
 
 
