@@ -13,6 +13,11 @@ import { getActiveWorkspace, updateWorkspace, recalculateLayout } from './helper
 export function handleFocusPane(state: LayoutState, paneId: string): LayoutState {
   const workspace = getActiveWorkspace(state);
 
+  // Early return if pane is already focused (prevents unnecessary state recreation)
+  if (workspace.focusedPaneId === paneId) {
+    return state;
+  }
+
   // Update activeStackIndex if focusing a stack pane
   let activeStackIndex = workspace.activeStackIndex;
   const stackIndex = workspace.stackPanes.findIndex(p => p.id === paneId);

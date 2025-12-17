@@ -169,6 +169,12 @@ export class WorkerEmulator implements ITerminalEmulator {
 
   resize(cols: number, rows: number): void {
     if (this._disposed) return;
+
+    // Skip if dimensions haven't changed (prevents unnecessary cache clear on focus changes)
+    if (cols === this._cols && rows === this._rows) {
+      return;
+    }
+
     this._cols = cols;
     this._rows = rows;
     this.pool.resize(this.sessionId, cols, rows);
