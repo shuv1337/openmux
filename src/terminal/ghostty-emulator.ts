@@ -145,17 +145,17 @@ export class GhosttyEmulator {
   }
 
   /**
-   * Initialize the cached cells array with empty cells
+   * Initialize the cached cells array with empty cells.
+   * Uses optimized array creation to avoid O(n²) object allocation.
    */
   private initializeCachedCells(): void {
-    this.cachedCells = [];
-    for (let y = 0; y < this._rows; y++) {
-      const row: TerminalCell[] = [];
-      for (let x = 0; x < this._cols; x++) {
-        row.push(this.getEmptyCell());
-      }
-      this.cachedCells.push(row);
-    }
+    const emptyCell = this.getEmptyCell();
+    // Create all rows at once using Array.from with fill
+    // Each row is a new array reference, cells share the same empty cell reference
+    // This is much faster than nested loops with individual push operations
+    this.cachedCells = Array.from({ length: this._rows }, () =>
+      Array(this._cols).fill(emptyCell)
+    );
     this.cellsInitialized = true;
   }
 
@@ -521,6 +521,41 @@ export class GhosttyEmulator {
     return () => {
       this.subscribers.delete(callback);
     };
+  }
+
+  /**
+   * Reset the emulator to a clean state for pool reuse.
+   * This clears all state but keeps the WASM terminal alive.
+   */
+  reset(): void {
+    if (this._disposed) return;
+
+    // Send reset sequence to clear terminal state
+    // ESC c = Full Reset (RIS)
+    this.terminal.write('\x1bc');
+
+    // Clear title
+    this.currentTitle = '';
+
+    // Clear scrollback cache
+    this.scrollbackCache.clear();
+
+    // Reset version tracking
+    this.versionTracker.reset();
+
+    // Reinitialize cached cells
+    this.initializeCachedCells();
+
+    // Reset stableRows
+    this.stableRows = [...this.cachedCells];
+
+    // Reset tracking state
+    this.lastCols = this._cols;
+    this.lastRows = this._rows;
+    this.lastAlternateScreen = false;
+
+    // Clear dirty state
+    this.terminal.clearDirty();
   }
 
   /**

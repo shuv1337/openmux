@@ -6,6 +6,7 @@ import { Context, Effect, Layer, Ref, HashMap, Option } from "effect"
 import { spawn } from "../../../zig-pty/src/index"
 import type { TerminalState, UnifiedTerminalUpdate } from "../../core/types"
 import { GhosttyEmulator } from "../../terminal/ghostty-emulator"
+import { EmulatorPool } from "../../terminal/emulator-pool"
 import { GraphicsPassthrough } from "../../terminal/graphics-passthrough"
 import { TerminalQueryPassthrough } from "../../terminal/terminal-query-passthrough"
 import { createSyncModeParser } from "../../terminal/sync-mode-parser"
@@ -188,9 +189,17 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         // Get host colors if available
         const colors = getHostColors() ?? undefined
 
-        // Create ghostty emulator
+        // Try to acquire emulator from pool (instant) or create new one (fallback)
         const emulator = yield* Effect.try({
-          try: () => new GhosttyEmulator({ cols, rows, colors }),
+          try: () => {
+            // Try pool first for instant acquisition
+            const pooled = EmulatorPool.acquire(cols, rows)
+            if (pooled) {
+              return pooled
+            }
+            // Fallback: create new emulator if pool is empty
+            return new GhosttyEmulator({ cols, rows, colors })
+          },
           catch: (error) =>
             PtySpawnError.make({ shell, cwd, cause: error }),
         })
@@ -362,9 +371,9 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           }
           session.subscribers.clear()
 
-          // Kill PTY and dispose emulator and query passthrough
+          // Kill PTY and release emulator back to pool (or dispose if pool is full)
           session.pty.kill()
-          session.emulator.dispose()
+          EmulatorPool.release(session.emulator)
           session.queryPassthrough.dispose()
 
           // Remove from map BEFORE emitting lifecycle event

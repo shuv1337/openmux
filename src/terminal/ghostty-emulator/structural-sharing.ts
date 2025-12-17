@@ -92,6 +92,15 @@ export class RowVersionTracker {
     }
     this.globalVersion++;
   }
+
+  /**
+   * Reset all row versions to 0.
+   * Used when resetting an emulator for pool reuse.
+   */
+  reset(): void {
+    this.rowVersions.fill(0);
+    this.globalVersion = 0;
+  }
 }
 
 /**

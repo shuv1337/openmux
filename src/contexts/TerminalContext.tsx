@@ -11,7 +11,8 @@ import {
   onCleanup,
   type ParentProps,
 } from 'solid-js';
-import { initGhostty, isGhosttyInitialized, detectHostCapabilities } from '../terminal';
+import { initGhostty, isGhosttyInitialized, detectHostCapabilities, EmulatorPool } from '../terminal';
+import { getHostColors } from '../terminal/terminal-colors';
 import type { TerminalState, TerminalScrollState } from '../core/types';
 import { createScrollHandlers } from './terminal';
 import { getFocusedPtyId as getWorkspaceFocusedPtyId } from '../core/workspace-utils';
@@ -131,6 +132,12 @@ export function TerminalProvider(props: TerminalProviderProps) {
     detectHostCapabilities()
       .then(() => initGhostty())
       .then(() => {
+        // Initialize emulator pool with host colors (non-blocking prefill)
+        // This creates 3 emulators in the background for instant pane creation
+        const colors = getHostColors() ?? undefined;
+        return EmulatorPool.initialize({ targetSize: 3, minSize: 1 }, colors);
+      })
+      .then(() => {
         // Clean up any orphaned PTYs from previous hot reloads (dev mode)
         // This ensures a fresh start without stale PTYs
         return destroyAllPtys();
@@ -165,6 +172,8 @@ export function TerminalProvider(props: TerminalProviderProps) {
       unsub();
     }
     destroyAllPtys();
+    // Dispose emulator pool
+    EmulatorPool.dispose();
   });
 
   // Handle PTY exit callback (when shell exits via Ctrl+D, `exit`, etc.)
