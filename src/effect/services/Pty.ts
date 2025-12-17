@@ -279,12 +279,26 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         // Set up data handler using extracted helper
         const { handleData } = createDataHandler({
           session,
-          pty,
           syncParser,
         })
 
         // Wire up PTY data handler
         pty.onData(handleData)
+
+        // Wire up mode change handler for DECSET 2048 (in-band resize notifications)
+        // When mode 2048 is first enabled, we must immediately send the current size
+        emulator.onModeChange((modes, prevModes) => {
+          if (modes.inBandResize && !prevModes?.inBandResize) {
+            // Mode just got enabled - send initial size notification
+            // Format: CSI 48 ; height ; width ; pixelHeight ; pixelWidth t
+            const cellWidth = 8
+            const cellHeight = 16
+            const pixelWidth = session.cols * cellWidth
+            const pixelHeight = session.rows * cellHeight
+            const resizeNotification = `\x1b[48;${session.rows};${session.cols};${pixelHeight};${pixelWidth}t`
+            pty.write(resizeNotification)
+          }
+        })
 
         // Wire up exit handler
         pty.onExit(({ exitCode }) => {

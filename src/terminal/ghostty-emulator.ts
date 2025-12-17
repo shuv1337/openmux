@@ -12,7 +12,7 @@
 import { Ghostty, GhosttyTerminal, type GhosttyCell, type Cursor } from 'ghostty-web';
 import type { TerminalState, TerminalCell, TerminalCursor, DirtyTerminalUpdate, TerminalScrollState } from '../core/types';
 import { getDefaultColors, type TerminalColors } from './terminal-colors';
-import type { ITerminalEmulator, SearchMatch } from './emulator-interface';
+import type { ITerminalEmulator, SearchMatch, TerminalModes } from './emulator-interface';
 
 // Import extracted utilities
 import { convertCell, convertLine, createEmptyCell, createEmptyRow, createFillCell, safeRgb } from './ghostty-emulator/cell-converter';
@@ -110,6 +110,15 @@ export class GhosttyEmulator implements ITerminalEmulator {
   // Update callbacks (fires after write() completes)
   private updateCallbacks: Set<() => void> = new Set();
 
+  // Mode change callbacks
+  private modeChangeCallbacks: Set<(modes: TerminalModes, prevModes?: TerminalModes) => void> = new Set();
+  private lastModes: TerminalModes = {
+    mouseTracking: false,
+    cursorKeyMode: 'normal',
+    alternateScreen: false,
+    inBandResize: false,
+  };
+
   constructor(options: GhosttyEmulatorOptions = {}) {
     const { cols = 80, rows = 24, colors } = options;
     const ghostty = getGhostty();
@@ -199,6 +208,37 @@ export class GhosttyEmulator implements ITerminalEmulator {
   }
 
   /**
+   * Get current terminal modes as a TerminalModes object
+   */
+  private getCurrentModes(): TerminalModes {
+    return {
+      mouseTracking: this.isMouseTrackingEnabled(),
+      cursorKeyMode: this.getCursorKeyMode(),
+      alternateScreen: this.isAlternateScreen(),
+      inBandResize: this.getMode(2048),
+    };
+  }
+
+  /**
+   * Check for mode changes and notify callbacks
+   */
+  private checkModeChanges(): void {
+    const currentModes = this.getCurrentModes();
+    if (
+      currentModes.mouseTracking !== this.lastModes.mouseTracking ||
+      currentModes.cursorKeyMode !== this.lastModes.cursorKeyMode ||
+      currentModes.alternateScreen !== this.lastModes.alternateScreen ||
+      currentModes.inBandResize !== this.lastModes.inBandResize
+    ) {
+      const prevModes = { ...this.lastModes };
+      this.lastModes = currentModes;
+      for (const callback of this.modeChangeCallbacks) {
+        callback(currentModes, prevModes);
+      }
+    }
+  }
+
+  /**
    * Write data to terminal (parses VT sequences).
    * Calls onUpdate callbacks after processing completes.
    */
@@ -213,6 +253,9 @@ export class GhosttyEmulator implements ITerminalEmulator {
 
     this.terminal.write(data);
     this.scrollbackCache.trim();
+
+    // Check for mode changes and notify
+    this.checkModeChanges();
 
     // Notify update subscribers
     for (const callback of this.updateCallbacks) {
@@ -380,6 +423,17 @@ export class GhosttyEmulator implements ITerminalEmulator {
     this.updateCallbacks.add(callback);
     return () => {
       this.updateCallbacks.delete(callback);
+    };
+  }
+
+  /**
+   * Subscribe to terminal mode changes
+   * @returns Unsubscribe function
+   */
+  onModeChange(callback: (modes: TerminalModes, prevModes?: TerminalModes) => void): () => void {
+    this.modeChangeCallbacks.add(callback);
+    return () => {
+      this.modeChangeCallbacks.delete(callback);
     };
   }
 

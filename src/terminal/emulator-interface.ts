@@ -142,6 +142,13 @@ export interface ITerminalEmulator {
    */
   onUpdate(callback: () => void): () => void;
 
+  /**
+   * Subscribe to terminal mode changes (DECSET/DECRST)
+   * Callback receives new modes and optionally previous modes for transition detection.
+   * @returns Unsubscribe function
+   */
+  onModeChange(callback: (modes: TerminalModes, prevModes?: TerminalModes) => void): () => void;
+
   // ============================================================================
   // Search
   // ============================================================================

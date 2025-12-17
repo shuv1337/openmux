@@ -58,6 +58,9 @@ export class WorkerEmulator implements ITerminalEmulator {
   // Update callbacks (fires when worker sends state update)
   private updateCallbacks = new Set<() => void>();
 
+  // Mode change callbacks (fires when terminal modes change)
+  private modeChangeCallbacks = new Set<(modes: TerminalModes, prevModes?: TerminalModes) => void>();
+
   // Scrollback cache (main thread side)
   // Size 1000 provides buffer for ~40 screens during fast scrolling
   private scrollbackCache = new Map<number, TerminalCell[]>();
@@ -101,7 +104,12 @@ export class WorkerEmulator implements ITerminalEmulator {
 
     // Subscribe to mode changes
     this.unsubMode = this.pool.onModeChange(this.sessionId, (modes) => {
+      const prevModes = { ...this.modes };
       this.modes = modes;
+      // Notify mode change subscribers
+      for (const callback of this.modeChangeCallbacks) {
+        callback(modes, prevModes);
+      }
     });
   }
 
@@ -408,6 +416,13 @@ export class WorkerEmulator implements ITerminalEmulator {
     this.updateCallbacks.add(callback);
     return () => {
       this.updateCallbacks.delete(callback);
+    };
+  }
+
+  onModeChange(callback: (modes: TerminalModes, prevModes?: TerminalModes) => void): () => void {
+    this.modeChangeCallbacks.add(callback);
+    return () => {
+      this.modeChangeCallbacks.delete(callback);
     };
   }
 
