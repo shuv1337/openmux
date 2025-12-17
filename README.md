@@ -1,5 +1,8 @@
 # openmux
 
+[![GitHub Release](https://img.shields.io/github/v/release/monotykamary/openmux)](https://github.com/monotykamary/openmux/releases)
+[![codecov](https://codecov.io/gh/monotykamary/openmux/graph/badge.svg)](https://codecov.io/gh/monotykamary/openmux)
+
 A terminal multiplexer with master-stack layout (Zellij-style), built with:
 
 - **Bun** - Fast JavaScript runtime

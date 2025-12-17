@@ -6,6 +6,12 @@ export default defineConfig({
     globals: false,
     environment: "node",
     testTimeout: 10000,
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html"],
+      include: ["src/**/*.ts", "src/**/*.tsx"],
+      exclude: ["src/**/*.test.ts", "src/**/*.d.ts"],
+    },
   },
   esbuild: {
     jsx: "automatic",
