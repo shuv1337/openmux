@@ -12,6 +12,7 @@
 import { Ghostty, GhosttyTerminal, type GhosttyCell, type Cursor } from 'ghostty-web';
 import type { TerminalState, TerminalCell, TerminalCursor, DirtyTerminalUpdate, TerminalScrollState } from '../core/types';
 import { getDefaultColors, type TerminalColors } from './terminal-colors';
+import type { ITerminalEmulator, SearchMatch } from './emulator-interface';
 
 // Import extracted utilities
 import { convertCell, convertLine, createEmptyCell, createEmptyRow, createFillCell, safeRgb } from './ghostty-emulator/cell-converter';
@@ -62,8 +63,11 @@ export function isGhosttyInitialized(): boolean {
 /**
  * GhosttyEmulator wraps GhosttyTerminal for use with our PTY manager.
  * Optimized with dirty line tracking to minimize allocations.
+ *
+ * Implements ITerminalEmulator interface to support both main thread
+ * and worker-based terminal emulation.
  */
-export class GhosttyEmulator {
+export class GhosttyEmulator implements ITerminalEmulator {
   private terminal: GhosttyTerminal;
   private _cols: number;
   private _rows: number;
@@ -102,6 +106,9 @@ export class GhosttyEmulator {
   private currentTitle: string = '';
   private titleChangeCallbacks: Set<(title: string) => void> = new Set();
   private titleParser: ReturnType<typeof createTitleParser>;
+
+  // Update callbacks (fires after write() completes)
+  private updateCallbacks: Set<() => void> = new Set();
 
   constructor(options: GhosttyEmulatorOptions = {}) {
     const { cols = 80, rows = 24, colors } = options;
@@ -193,8 +200,7 @@ export class GhosttyEmulator {
 
   /**
    * Write data to terminal (parses VT sequences).
-   * Note: Does NOT notify subscribers - the caller (Pty service) is responsible
-   * for calling getTerminalState() and notifying its own subscribers.
+   * Calls onUpdate callbacks after processing completes.
    */
   write(data: string | Uint8Array): void {
     // Guard against writes after disposal (prevents WASM out-of-bounds errors)
@@ -207,6 +213,11 @@ export class GhosttyEmulator {
 
     this.terminal.write(data);
     this.scrollbackCache.trim();
+
+    // Notify update subscribers
+    for (const callback of this.updateCallbacks) {
+      callback();
+    }
   }
 
   /**
@@ -358,6 +369,17 @@ export class GhosttyEmulator {
     }
     return () => {
       this.titleChangeCallbacks.delete(callback);
+    };
+  }
+
+  /**
+   * Subscribe to terminal state updates
+   * @returns Unsubscribe function
+   */
+  onUpdate(callback: () => void): () => void {
+    this.updateCallbacks.add(callback);
+    return () => {
+      this.updateCallbacks.delete(callback);
     };
   }
 
@@ -559,12 +581,76 @@ export class GhosttyEmulator {
   }
 
   /**
+   * Search for text in terminal (scrollback + visible area)
+   * Implements ITerminalEmulator.search() for main-thread emulation
+   */
+  async search(query: string): Promise<SearchMatch[]> {
+    if (!query) return [];
+
+    const matches: SearchMatch[] = [];
+    const lowerQuery = query.toLowerCase();
+    const scrollbackLength = this.getScrollbackLength();
+
+    // Search scrollback lines (oldest to newest)
+    for (let offset = 0; offset < scrollbackLength; offset++) {
+      const cells = this.getScrollbackLine(offset);
+      if (!cells) continue;
+
+      const lineText = this.extractLineText(cells).toLowerCase();
+      let searchPos = 0;
+      while ((searchPos = lineText.indexOf(lowerQuery, searchPos)) !== -1) {
+        matches.push({
+          lineIndex: offset,
+          startCol: searchPos,
+          endCol: searchPos + query.length,
+        });
+        searchPos += 1; // Move past this match to find overlapping matches
+      }
+    }
+
+    // Search visible lines
+    for (let y = 0; y < this._rows; y++) {
+      const cells = this.stableRows[y];
+      if (!cells) continue;
+
+      const lineText = this.extractLineText(cells).toLowerCase();
+      let searchPos = 0;
+      while ((searchPos = lineText.indexOf(lowerQuery, searchPos)) !== -1) {
+        matches.push({
+          lineIndex: scrollbackLength + y,
+          startCol: searchPos,
+          endCol: searchPos + query.length,
+        });
+        searchPos += 1;
+      }
+    }
+
+    return matches;
+  }
+
+  /**
+   * Extract text from a row of terminal cells
+   */
+  private extractLineText(cells: TerminalCell[]): string {
+    const chars: string[] = [];
+    for (let i = 0; i < cells.length; i++) {
+      chars.push(cells[i].char);
+      // Skip placeholder for wide characters
+      if (cells[i].width === 2) {
+        i++;
+      }
+    }
+    return chars.join('');
+  }
+
+  /**
    * Free resources
    */
   dispose(): void {
     this._disposed = true;
     this.subscribers.clear();
     this.titleChangeCallbacks.clear();
+    this.updateCallbacks.clear();
     this.terminal.free();
   }
 }

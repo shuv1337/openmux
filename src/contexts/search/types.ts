@@ -2,7 +2,7 @@
  * Search context types
  */
 import type { TerminalState } from '../../core/types';
-import type { GhosttyEmulator } from '../../terminal/ghostty-emulator';
+import type { ITerminalEmulator } from '../../terminal/emulator-interface';
 
 /**
  * A single search match in the terminal
@@ -29,7 +29,7 @@ export interface SearchState {
   /** The ptyId being searched */
   ptyId: string;
   /** Cached emulator for scrollback access */
-  emulator: GhosttyEmulator | null;
+  emulator: ITerminalEmulator | null;
   /** Cached terminal state */
   terminalState: TerminalState | null;
   /** Total scrollback length at search time */

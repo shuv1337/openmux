@@ -5,13 +5,14 @@
 import { Context, Effect, Layer, Ref, HashMap, Option } from "effect"
 import { spawn } from "../../../zig-pty/src/index"
 import type { TerminalState, UnifiedTerminalUpdate } from "../../core/types"
-import { GhosttyEmulator } from "../../terminal/ghostty-emulator"
-import { EmulatorPool } from "../../terminal/emulator-pool"
+import type { ITerminalEmulator } from "../../terminal/emulator-interface"
+import { createWorkerEmulator } from "../../terminal/worker-emulator"
+import { getWorkerPool, initWorkerPool } from "../../terminal/worker-pool"
 import { GraphicsPassthrough } from "../../terminal/graphics-passthrough"
 import { TerminalQueryPassthrough } from "../../terminal/terminal-query-passthrough"
 import { createSyncModeParser } from "../../terminal/sync-mode-parser"
 import { getCapabilityEnvironment } from "../../terminal/capabilities"
-import { getHostColors } from "../../terminal/terminal-colors"
+import { getHostColors, getDefaultColors } from "../../terminal/terminal-colors"
 import { PtySpawnError, PtyNotFoundError, PtyCwdError } from "../errors"
 import { PtyId, Cols, Rows, makePtyId } from "../types"
 import { PtySession } from "../models"
@@ -110,7 +111,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
     ) => Effect.Effect<void, PtyNotFoundError>
 
     /** Get emulator for direct access (e.g., scrollback lines) */
-    readonly getEmulator: (id: PtyId) => Effect.Effect<GhosttyEmulator, PtyNotFoundError>
+    readonly getEmulator: (id: PtyId) => Effect.Effect<ITerminalEmulator, PtyNotFoundError>
 
     /** Destroy all sessions */
     readonly destroyAll: () => Effect.Effect<void>
@@ -150,6 +151,10 @@ export class Pty extends Context.Tag("@openmux/Pty")<
     Effect.gen(function* () {
       const config = yield* AppConfig
 
+      // Initialize worker pool for terminal emulation
+      yield* Effect.promise(() => initWorkerPool(2))
+      const workerPool = getWorkerPool()
+
       // Internal session storage
       const sessionsRef = yield* Ref.make(
         HashMap.empty<PtyId, InternalPtySession>()
@@ -186,20 +191,12 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         const cwd = options.cwd ?? process.cwd()
         const shell = config.defaultShell
 
-        // Get host colors if available
-        const colors = getHostColors() ?? undefined
+        // Get host colors (required for worker emulator)
+        const colors = getHostColors() ?? getDefaultColors()
 
-        // Try to acquire emulator from pool (instant) or create new one (fallback)
-        const emulator = yield* Effect.try({
-          try: () => {
-            // Try pool first for instant acquisition
-            const pooled = EmulatorPool.acquire(cols, rows)
-            if (pooled) {
-              return pooled
-            }
-            // Fallback: create new emulator if pool is empty
-            return new GhosttyEmulator({ cols, rows, colors })
-          },
+        // Create worker-based emulator
+        const emulator = yield* Effect.tryPromise({
+          try: () => createWorkerEmulator(workerPool, cols, rows, colors),
           catch: (error) =>
             PtySpawnError.make({ shell, cwd, cause: error }),
         })
@@ -260,6 +257,12 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           }
           // Notify global title subscribers (sync for non-Effect callback context)
           globalTitleRegistry.notifySync({ ptyId: id, title })
+        })
+
+        // Subscribe to emulator updates (critical for async workers)
+        // This fires when write() processing completes, enabling proper notification timing
+        emulator.onUpdate(() => {
+          notifySubscribers(session)
         })
 
         // Set up query passthrough using extracted helper
@@ -371,9 +374,9 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           }
           session.subscribers.clear()
 
-          // Kill PTY and release emulator back to pool (or dispose if pool is full)
+          // Kill PTY and dispose emulator (cleans up worker session)
           session.pty.kill()
-          EmulatorPool.release(session.emulator)
+          session.emulator.dispose()
           session.queryPassthrough.dispose()
 
           // Remove from map BEFORE emitting lifecycle event

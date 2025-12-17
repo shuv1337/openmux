@@ -42,12 +42,12 @@ export function isValidCodepoint(codepoint: number): boolean {
 }
 
 /**
- * Check if a codepoint is a CJK ideograph that requires width=2.
+ * Check if a codepoint is a CJK ideograph or Korean Hangul that requires width=2.
  * These should only be rendered if the cell has proper double-width (width=2).
  * If they appear with width=1, it's likely corrupted cell data.
  *
  * @param codepoint - The Unicode codepoint to check
- * @returns true if the codepoint is a CJK ideograph
+ * @returns true if the codepoint is a CJK ideograph or Korean Hangul
  */
 export function isCjkIdeograph(codepoint: number): boolean {
   // CJK Unified Ideographs (U+4E00-U+9FFF)
@@ -68,6 +68,13 @@ export function isCjkIdeograph(codepoint: number): boolean {
   if (codepoint >= 0xf900 && codepoint <= 0xfaff) return true;
   // CJK Compatibility Ideographs Supplement (U+2F800-U+2FA1F)
   if (codepoint >= 0x2f800 && codepoint <= 0x2fa1f) return true;
+  // Korean Hangul Syllables (U+AC00-U+D7AF) - width=2 characters
+  // If appearing with width=1, likely corrupted data from byte misalignment
+  if (codepoint >= 0xac00 && codepoint <= 0xd7af) return true;
+  // Korean Hangul Jamo (U+1100-U+11FF) - conjoining jamo
+  if (codepoint >= 0x1100 && codepoint <= 0x11ff) return true;
+  // Korean Hangul Compatibility Jamo (U+3130-U+318F)
+  if (codepoint >= 0x3130 && codepoint <= 0x318f) return true;
   return false;
 }
 

@@ -11,7 +11,7 @@ import {
   onCleanup,
   type ParentProps,
 } from 'solid-js';
-import { initGhostty, detectHostCapabilities, EmulatorPool } from '../terminal';
+import { initGhostty, detectHostCapabilities } from '../terminal';
 import { getHostColors } from '../terminal/terminal-colors';
 import type { TerminalState, TerminalScrollState } from '../core/types';
 import {
@@ -35,7 +35,7 @@ import {
   clearAllPtyCaches,
   type PtyCaches,
 } from '../hooks/usePtySubscription';
-import type { GhosttyEmulator } from '../terminal/ghostty-emulator';
+import type { ITerminalEmulator } from '../terminal/emulator-interface';
 
 interface TerminalContextValue {
   /** Create a new PTY session for a pane */
@@ -79,7 +79,7 @@ interface TerminalContextValue {
   /** Scroll terminal to bottom (live content) */
   scrollToBottom: (ptyId: string) => void;
   /** Get cached emulator synchronously (for selection text extraction) */
-  getEmulatorSync: (ptyId: string) => GhosttyEmulator | null;
+  getEmulatorSync: (ptyId: string) => ITerminalEmulator | null;
   /** Get cached terminal state synchronously (for selection text extraction) */
   getTerminalStateSync: (ptyId: string) => TerminalState | null;
   /** Check if ghostty is initialized */
@@ -112,7 +112,7 @@ export function TerminalProvider(props: TerminalProviderProps) {
   const ptyCaches: PtyCaches = {
     terminalStates: new Map<string, TerminalState>(),
     scrollStates: new Map<string, TerminalScrollState>(),
-    emulators: new Map<string, GhosttyEmulator>(),
+    emulators: new Map<string, ITerminalEmulator>(),
   };
 
   // Track unsubscribe functions for cleanup
@@ -157,14 +157,8 @@ export function TerminalProvider(props: TerminalProviderProps) {
     detectHostCapabilities()
       .then(() => initGhostty())
       .then(() => {
-        // Initialize emulator pool with host colors (non-blocking prefill)
-        // This creates 3 emulators in the background for instant pane creation
-        const colors = getHostColors() ?? undefined;
-        return EmulatorPool.initialize({ targetSize: 3, minSize: 1 }, colors);
-      })
-      .then(() => {
+        // Worker pool is initialized when Pty layer is first accessed
         // Clean up any orphaned PTYs from previous hot reloads (dev mode)
-        // This ensures a fresh start without stale PTYs
         return destroyAllPtys();
       })
       .then(() => {
@@ -197,8 +191,7 @@ export function TerminalProvider(props: TerminalProviderProps) {
       unsub();
     }
     destroyAllPtys();
-    // Dispose emulator pool
-    EmulatorPool.dispose();
+    // Worker pool cleanup happens via runtime disposal
   });
 
   // Suspend a session: save PTY mapping and unsubscribe (but don't destroy PTYs)

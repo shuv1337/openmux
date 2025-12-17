@@ -4,7 +4,7 @@
  */
 
 import type { TerminalCell } from '../../core/types';
-import type { GhosttyEmulator } from '../../terminal/ghostty-emulator';
+import type { ITerminalEmulator } from '../../terminal/emulator-interface';
 import type { TerminalState } from '../../core/types';
 
 // Selection state type (matching SelectionContext)
@@ -32,7 +32,7 @@ export interface TerminalMouseDeps {
   getSelection: (ptyId: string) => SelectionState | undefined;
 
   // For completeSelection's line getter
-  getEmulatorSync: (ptyId: string) => GhosttyEmulator | null;
+  getEmulatorSync: (ptyId: string) => ITerminalEmulator | null;
   getTerminalStateSync: (ptyId: string) => TerminalState | null;
 }
 

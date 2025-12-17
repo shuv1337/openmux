@@ -4,7 +4,7 @@
 
 import type { IPty } from "../../../../zig-pty/src/index"
 import type { TerminalState, UnifiedTerminalUpdate } from "../../../core/types"
-import type { GhosttyEmulator } from "../../../terminal/ghostty-emulator"
+import type { ITerminalEmulator } from "../../../terminal/emulator-interface"
 import type { GraphicsPassthrough } from "../../../terminal/graphics-passthrough"
 import type { TerminalQueryPassthrough } from "../../../terminal/terminal-query-passthrough"
 import type { PtyId } from "../../types"
@@ -15,7 +15,7 @@ import type { PtyId } from "../../types"
 export interface InternalPtySession {
   id: PtyId
   pty: IPty
-  emulator: GhosttyEmulator
+  emulator: ITerminalEmulator
   graphicsPassthrough: GraphicsPassthrough
   queryPassthrough: TerminalQueryPassthrough
   cols: number

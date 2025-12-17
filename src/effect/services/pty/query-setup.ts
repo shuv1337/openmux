@@ -3,12 +3,12 @@
  * Configures the TerminalQueryPassthrough with all necessary getters/setters
  */
 import type { IPty } from "../../../../zig-pty/src/index"
-import type { GhosttyEmulator } from "../../../terminal/ghostty-emulator"
+import type { ITerminalEmulator } from "../../../terminal/emulator-interface"
 import type { TerminalQueryPassthrough } from "../../../terminal/terminal-query-passthrough"
 
 interface QuerySetupOptions {
   queryPassthrough: TerminalQueryPassthrough
-  emulator: GhosttyEmulator
+  emulator: ITerminalEmulator
   pty: IPty
   getSessionDimensions: () => { cols: number; rows: number }
   terminalVersion?: string

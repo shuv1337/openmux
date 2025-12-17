@@ -8,7 +8,7 @@ import { runEffect, runEffectIgnore } from "../runtime"
 import { Pty } from "../services"
 import { PtyId, Cols, Rows } from "../types"
 import type { TerminalState, UnifiedTerminalUpdate, TerminalCell } from "../../core/types"
-import type { GhosttyEmulator } from "../../terminal/ghostty-emulator"
+import type { ITerminalEmulator } from "../../terminal/emulator-interface"
 
 /**
  * Create a PTY session using Effect service.
@@ -272,13 +272,39 @@ export async function getScrollbackLine(
 }
 
 /**
+ * Prefetch scrollback lines into the emulator's cache.
+ * Used to load scrollback lines before they're needed for rendering.
+ * For WorkerEmulator, this fetches lines from the worker thread.
+ */
+export async function prefetchScrollbackLines(
+  ptyId: string,
+  startOffset: number,
+  count: number
+): Promise<void> {
+  try {
+    await runEffect(
+      Effect.gen(function* () {
+        const pty = yield* Pty
+        const emulator = yield* pty.getEmulator(PtyId.make(ptyId))
+        // Check if emulator has async prefetch (WorkerEmulator)
+        if ('prefetchScrollbackLines' in emulator && typeof emulator.prefetchScrollbackLines === 'function') {
+          yield* Effect.promise(() => (emulator as { prefetchScrollbackLines: (start: number, count: number) => Promise<void> }).prefetchScrollbackLines(startOffset, count))
+        }
+      })
+    )
+  } catch {
+    // Ignore errors - prefetch is best-effort
+  }
+}
+
+/**
  * Get the terminal emulator instance for direct access.
  * Primarily used for scrollback rendering in TerminalView.
  * Should be called once and cached for sync access in render loops.
  */
 export async function getEmulator(
   ptyId: string
-): Promise<GhosttyEmulator | null> {
+): Promise<ITerminalEmulator | null> {
   try {
     return await runEffect(
       Effect.gen(function* () {

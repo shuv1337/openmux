@@ -6,7 +6,6 @@
 import type { IPty } from "../../../../zig-pty/src/index"
 import type { SyncModeParser } from "../../../terminal/sync-mode-parser"
 import type { InternalPtySession } from "./types"
-import { notifySubscribers } from "./notification"
 
 interface DataHandlerOptions {
   session: InternalPtySession
@@ -92,7 +91,8 @@ export function createDataHandler(options: DataHandlerOptions) {
           }
         }
 
-        notifySubscribers(session)
+        // Note: notifySubscribers is called via emulator.onUpdate() callback
+        // This ensures proper timing for both sync (GhosttyEmulator) and async (WorkerEmulator)
         session.pendingNotify = false
       })
     }

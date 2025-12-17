@@ -216,13 +216,27 @@ export function convertLine(line: GhosttyCell[], cols: number, colors: TerminalC
     row.push(convertCell(line[x]));
   }
 
-  // Fill remaining cells with last cell's background color (terminal EOL behavior)
+  // Fill remaining cells with default background color (not last cell's color)
+  // Using default prevents "smearing" where colored backgrounds extend to EOL
   if (lineLength < cols) {
-    const lastCell = lineLength > 0 ? line[lineLength - 1] : null;
-    const fillCell = createFillCell(lastCell, colors);
+    const fg = extractRgb(colors.foreground);
+    const bg = extractRgb(colors.background);
 
     for (let x = lineLength; x < cols; x++) {
-      row.push(fillCell);
+      // Create a new object for each cell to avoid shared references
+      row.push({
+        char: ' ',
+        fg,
+        bg,
+        bold: false,
+        italic: false,
+        underline: false,
+        strikethrough: false,
+        inverse: false,
+        blink: false,
+        dim: false,
+        width: 1,
+      });
     }
   }
 
@@ -238,9 +252,24 @@ export function convertLine(line: GhosttyCell[], cols: number, colors: TerminalC
  */
 export function createEmptyRow(cols: number, colors: TerminalColors): TerminalCell[] {
   const row: TerminalCell[] = [];
-  const emptyCell = createEmptyCell(colors);
+  const fg = extractRgb(colors.foreground);
+  const bg = extractRgb(colors.background);
+
   for (let x = 0; x < cols; x++) {
-    row.push(emptyCell);
+    // Create a new object for each cell to avoid shared references
+    row.push({
+      char: ' ',
+      fg,
+      bg,
+      bold: false,
+      italic: false,
+      underline: false,
+      strikethrough: false,
+      inverse: false,
+      blink: false,
+      dim: false,
+      width: 1,
+    });
   }
   return row;
 }

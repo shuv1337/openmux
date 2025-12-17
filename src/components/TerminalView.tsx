@@ -7,11 +7,12 @@ import { createSignal, createEffect, onCleanup, on, Show } from 'solid-js';
 import { useRenderer } from '@opentui/solid';
 import { RGBA, type OptimizedBuffer } from '@opentui/core';
 import type { TerminalState, TerminalCell, TerminalScrollState, UnifiedTerminalUpdate } from '../core/types';
-import type { GhosttyEmulator } from '../terminal/ghostty-emulator';
+import type { ITerminalEmulator } from '../terminal/emulator-interface';
 import {
   getTerminalState,
   subscribeUnifiedToPty,
   getEmulator,
+  prefetchScrollbackLines,
 } from '../effect/bridge';
 import { useSelection } from '../contexts/SelectionContext';
 import { useSearch } from '../contexts/SearchContext';
@@ -62,9 +63,14 @@ export function TerminalView(props: TerminalViewProps) {
   // Store terminal state in a plain variable (Solid has no stale closures)
   let terminalState: TerminalState | null = null;
   // Cache emulator for sync access to scrollback lines
-  let emulator: GhosttyEmulator | null = null;
+  let emulator: ITerminalEmulator | null = null;
   // Version counter to trigger re-renders when state changes
   const [version, setVersion] = createSignal(0);
+  // Track pending scrollback prefetch to avoid duplicate requests
+  let pendingPrefetch: { ptyId: string; start: number; count: number } | null = null;
+  let prefetchInProgress = false;
+  // Function reference for executing prefetch (set by effect, used by render)
+  let executePrefetchFn: (() => void) | null = null;
 
   // Using on() for explicit ptyId dependency - effect re-runs only when ptyId changes
   // defer: false ensures it runs immediately on mount
@@ -94,6 +100,32 @@ export function TerminalView(props: TerminalViewProps) {
             });
           }
         };
+
+        // Execute pending scrollback prefetch
+        const executePrefetch = async () => {
+          if (!pendingPrefetch || prefetchInProgress || !mounted) return;
+
+          const { ptyId: prefetchPtyId, start, count } = pendingPrefetch;
+          pendingPrefetch = null;
+          prefetchInProgress = true;
+
+          try {
+            await prefetchScrollbackLines(prefetchPtyId, start, count);
+            if (mounted) {
+              // Trigger re-render after prefetch completes
+              requestRenderFrame();
+            }
+          } finally {
+            prefetchInProgress = false;
+            // Check if another prefetch was requested while this one was running
+            if (pendingPrefetch && mounted) {
+              executePrefetch();
+            }
+          }
+        };
+
+        // Expose executePrefetch for use in renderTerminal
+        executePrefetchFn = executePrefetch;
 
         // Initialize async resources
         const init = async () => {
@@ -151,6 +183,7 @@ export function TerminalView(props: TerminalViewProps) {
           }
           terminalState = null;
           emulator = null;
+          executePrefetchFn = null;
         });
       },
       { defer: false }
@@ -194,6 +227,10 @@ export function TerminalView(props: TerminalViewProps) {
     const currentEmulator = viewportOffset > 0 ? emulator : null;
     const rowCache: (TerminalCell[] | null)[] = new Array(rows);
 
+    // Track missing scrollback lines for prefetching
+    let firstMissingOffset = -1;
+    let lastMissingOffset = -1;
+
     for (let y = 0; y < rows; y++) {
       if (viewportOffset === 0) {
         // Normal case: use live terminal rows
@@ -207,13 +244,34 @@ export function TerminalView(props: TerminalViewProps) {
           rowCache[y] = null;
         } else if (absoluteY < scrollbackLength) {
           // In scrollback buffer
-          rowCache[y] = currentEmulator?.getScrollbackLine(absoluteY) ?? null;
+          const line = currentEmulator?.getScrollbackLine(absoluteY) ?? null;
+          rowCache[y] = line;
+          // Track missing scrollback lines (null when should have data)
+          if (line === null && currentEmulator) {
+            if (firstMissingOffset === -1) {
+              firstMissingOffset = absoluteY;
+            }
+            lastMissingOffset = absoluteY;
+          }
         } else {
           // In live terminal area
           const liveY = absoluteY - scrollbackLength;
           rowCache[y] = state.cells[liveY] ?? null;
         }
       }
+    }
+
+    // Schedule prefetch for missing scrollback lines with buffer zone
+    // Prefetch ahead of scroll direction to reduce flicker during fast scrolling
+    if (firstMissingOffset !== -1 && !prefetchInProgress && executePrefetchFn) {
+      // Prefetch buffer: 2x viewport height above current position
+      const bufferSize = rows * 2;
+      const prefetchStart = Math.max(0, firstMissingOffset - bufferSize);
+      const prefetchEnd = Math.min(scrollbackLength - 1, lastMissingOffset + rows);
+      const count = prefetchEnd - prefetchStart + 1;
+      pendingPrefetch = { ptyId, start: prefetchStart, count };
+      // Execute prefetch asynchronously (don't block render)
+      queueMicrotask(executePrefetchFn);
     }
 
     // Pre-check if selection/search is active for this pane (avoid 5760 function calls per frame)

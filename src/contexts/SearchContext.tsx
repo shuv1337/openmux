@@ -20,7 +20,6 @@ import { useTerminal } from './TerminalContext';
 // Import extracted search utilities
 import type { SearchState, SearchContextValue } from './search/types';
 import {
-  performSearch,
   isCellInMatch,
   calculateScrollOffset,
   buildMatchLookup,
@@ -140,13 +139,16 @@ export function SearchProvider(props: SearchProviderProps) {
     });
 
     // Debounce the actual search
-    searchDebounceTimer = setTimeout(() => {
+    searchDebounceTimer = setTimeout(async () => {
       const currentState = searchState();
       if (!currentState || !currentState.emulator || !currentState.terminalState) return;
       if (pendingQuery !== query) return; // Query changed, skip
 
-      // Perform search
-      const matches = performSearch(query, currentState.emulator, currentState.terminalState);
+      // Perform search via emulator (async - may run in worker)
+      const matches = await currentState.emulator.search(query);
+
+      // Check again after async search in case state changed
+      if (pendingQuery !== query) return;
 
       // Start at the most recent match (last in array = closest to bottom of terminal)
       const initialIndex = matches.length > 0 ? matches.length - 1 : -1;

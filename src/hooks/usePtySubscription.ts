@@ -9,7 +9,7 @@ import {
   getEmulator,
 } from '../effect/bridge';
 import type { TerminalState, TerminalCell, TerminalScrollState, UnifiedTerminalUpdate } from '../core/types';
-import type { GhosttyEmulator } from '../terminal/ghostty-emulator';
+import type { ITerminalEmulator } from '../terminal/emulator-interface';
 
 /**
  * Caches used for synchronous access to PTY state
@@ -17,7 +17,7 @@ import type { GhosttyEmulator } from '../terminal/ghostty-emulator';
 export interface PtyCaches {
   terminalStates: Map<string, TerminalState>;
   scrollStates: Map<string, TerminalScrollState>;
-  emulators: Map<string, GhosttyEmulator>;
+  emulators: Map<string, ITerminalEmulator>;
 }
 
 /**

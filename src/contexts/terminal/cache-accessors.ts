@@ -4,7 +4,7 @@
  */
 
 import type { TerminalState } from '../../core/types';
-import type { GhosttyEmulator } from '../../terminal/ghostty-emulator';
+import type { ITerminalEmulator } from '../../terminal/emulator-interface';
 import type { PtyCaches } from '../../hooks/usePtySubscription';
 import { getPtyCwd } from '../../effect/bridge';
 
@@ -76,7 +76,7 @@ export function createCacheAccessors(deps: CacheAccessorDeps) {
   /**
    * Get cached emulator synchronously (for selection text extraction)
    */
-  const getEmulatorSync = (ptyId: string): GhosttyEmulator | null => {
+  const getEmulatorSync = (ptyId: string): ITerminalEmulator | null => {
     return ptyCaches.emulators.get(ptyId) ?? null;
   };
 

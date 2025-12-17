@@ -2,7 +2,7 @@
  * Search helper functions - pure utilities for terminal search
  */
 import type { TerminalCell, TerminalState } from '../../core/types';
-import type { GhosttyEmulator } from '../../terminal/ghostty-emulator';
+import type { ITerminalEmulator } from '../../terminal/emulator-interface';
 import type { SearchMatch } from './types';
 
 /**
@@ -32,7 +32,7 @@ export function extractLineText(cells: TerminalCell[]): string {
  */
 export function performSearch(
   query: string,
-  emulator: GhosttyEmulator,
+  emulator: ITerminalEmulator,
   terminalState: TerminalState
 ): SearchMatch[] {
   if (!query) return [];
