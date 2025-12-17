@@ -91,6 +91,21 @@ function convertLine(
 }
 
 /**
+ * Extract text from a row of terminal cells, skipping wide character placeholders
+ */
+function extractLineText(cells: TerminalCell[]): string {
+  const chars: string[] = [];
+  for (let i = 0; i < cells.length; i++) {
+    chars.push(cells[i].char);
+    // Skip placeholder for wide characters (width=2 takes two cells)
+    if (cells[i].width === 2) {
+      i++;
+    }
+  }
+  return chars.join('');
+}
+
+/**
  * Get current terminal modes
  */
 function getModes(terminal: GhosttyTerminal): TerminalModes {
@@ -514,7 +529,7 @@ function handleSearch(sessionId: string, query: string, requestId: number): void
       if (!line) continue;
 
       const cells = convertLine(line, cols, terminalColors);
-      const text = cells.map(c => c.char).join('').toLowerCase();
+      const text = extractLineText(cells).toLowerCase();
 
       let pos = 0;
       while ((pos = text.indexOf(lowerQuery, pos)) !== -1) {
@@ -532,7 +547,7 @@ function handleSearch(sessionId: string, query: string, requestId: number): void
     for (let y = 0; y < rows; y++) {
       const line = terminal.getLine(y);
       const cells = convertLine(line, cols, terminalColors);
-      const text = cells.map(c => c.char).join('').toLowerCase();
+      const text = extractLineText(cells).toLowerCase();
 
       let pos = 0;
       while ((pos = text.indexOf(lowerQuery, pos)) !== -1) {

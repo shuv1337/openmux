@@ -3,7 +3,6 @@
  * Handles creation, destruction, and exit events for PTY sessions
  */
 
-import { isGhosttyInitialized } from '../../terminal';
 import {
   createPtySession,
   destroyPty,
@@ -89,10 +88,7 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     rows: number,
     cwd?: string
   ): Promise<string> => {
-    if (!isGhosttyInitialized()) {
-      throw new Error('Ghostty not initialized');
-    }
-
+    // Worker pool initializes Ghostty WASM in each worker on demand
     const ptyId = await createPtySession({ cols, rows, cwd });
 
     // Track the mapping

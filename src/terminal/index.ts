@@ -3,8 +3,7 @@
  */
 
 export * from './input-handler';
-export * from './ghostty-emulator';
-export * from './emulator-pool';
+export * from './ghostty-emulator/index';
 export * from './graphics-passthrough';
 export * from './capabilities';
 export * from './terminal-query-passthrough';

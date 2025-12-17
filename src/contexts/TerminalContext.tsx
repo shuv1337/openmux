@@ -11,7 +11,7 @@ import {
   onCleanup,
   type ParentProps,
 } from 'solid-js';
-import { initGhostty, detectHostCapabilities } from '../terminal';
+import { detectHostCapabilities } from '../terminal';
 import { getHostColors } from '../terminal/terminal-colors';
 import type { TerminalState, TerminalScrollState } from '../core/types';
 import {
@@ -154,10 +154,9 @@ export function TerminalProvider(props: TerminalProviderProps) {
     initialized = true;
 
     // Detect host capabilities first (for graphics passthrough)
+    // Worker pool initializes its own Ghostty WASM in each worker
     detectHostCapabilities()
-      .then(() => initGhostty())
       .then(() => {
-        // Worker pool is initialized when Pty layer is first accessed
         // Clean up any orphaned PTYs from previous hot reloads (dev mode)
         return destroyAllPtys();
       })

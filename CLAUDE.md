@@ -36,7 +36,9 @@ Keyboard Input → KeyboardContext → LayoutContext (dispatch actions)
                                           ↓
                               Master-stack layout calculation
                                           ↓
-PTY Data → PTYManager → GhosttyEmulator → TerminalContext → TerminalView components
+PTY Data → Pty Service → WorkerEmulator → TerminalContext → TerminalView components
+                              ↓
+                    EmulatorWorkerPool (Web Workers with ghostty-web WASM)
 ```
 
 ### Context Hierarchy (src/App.tsx)
@@ -59,10 +61,13 @@ ThemeProvider              // Styling/theming
 - `session/` - Session serialization and persistence to `~/.config/openmux/sessions/`
 
 **Terminal Layer (src/terminal/)**
-- `pty-manager.ts` - Singleton managing PTY sessions via zig-pty, coordinates with ghostty emulator
-- `ghostty-emulator.ts` - WASM terminal emulator wrapper, handles VT parsing and scrollback
+- `worker-pool.ts` - Manages pool of Web Workers running ghostty-web WASM for VT parsing
+- `worker-emulator.ts` - Main thread adapter implementing ITerminalEmulator, proxies to worker pool
+- `emulator-worker.ts` - Web Worker entry point, runs ghostty-web WASM for terminal emulation
+- `emulator-interface.ts` - ITerminalEmulator interface for terminal emulator abstraction
 - `input-handler.ts` - Converts keyboard events to escape sequences (handles DECCKM mode)
 - `graphics-passthrough.ts` - Kitty Graphics and Sixel protocol passthrough to host terminal
+- `ghostty-emulator/` - Shared utilities (cell conversion, codepoint utils) used by workers
 
 **SolidJS Contexts (src/contexts/)**
 - `LayoutContext.tsx` - Store-based workspace/pane management with action functions
