@@ -301,14 +301,17 @@ function AppContent() {
   createEffect(() => {
     if (!terminal.isInitialized) return;
 
+    // Resize all panes with PTYs
     for (const pane of layout.panes) {
-      if (pane.ptyId && pane.rectangle) {
-        const cols = Math.max(1, pane.rectangle.width - 2);
-        const rows = Math.max(1, pane.rectangle.height - 2);
-        resizePTY(pane.ptyId, cols, rows);
-        // Update pane position for graphics passthrough (+1 for border)
-        setPanePosition(pane.ptyId, pane.rectangle.x + 1, pane.rectangle.y + 1);
-      }
+      if (!pane.ptyId || !pane.rectangle) continue;
+
+      const cols = Math.max(1, pane.rectangle.width - 2);
+      const rows = Math.max(1, pane.rectangle.height - 2);
+      const x = pane.rectangle.x + 1;
+      const y = pane.rectangle.y + 1;
+
+      resizePTY(pane.ptyId, cols, rows);
+      setPanePosition(pane.ptyId, x, y);
     }
   });
 

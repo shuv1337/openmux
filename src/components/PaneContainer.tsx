@@ -2,7 +2,7 @@
  * PaneContainer - renders master-stack layout panes
  */
 
-import { Show, For, createMemo } from 'solid-js';
+import { Show, For, Index, createMemo } from 'solid-js';
 import type { PaneData, LayoutMode } from '../core/types';
 import { useLayout } from '../contexts/LayoutContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -77,17 +77,20 @@ export function PaneContainer() {
             <Show
               when={layout.activeWorkspace.layoutMode === 'stacked'}
               fallback={
-                <For each={layout.activeWorkspace.stackPanes}>
+                /* Use Index instead of For - tracks by position not reference.
+                   This prevents component recreation when array reference changes
+                   but individual panes stay the same (just their rectangles update) */
+                <Index each={layout.activeWorkspace.stackPanes}>
                   {(pane) => (
                     <PaneRenderer
-                      pane={pane}
-                      isFocused={layout.activeWorkspace.focusedPaneId === pane.id}
+                      pane={pane()}
+                      isFocused={layout.activeWorkspace.focusedPaneId === pane().id}
                       isMain={false}
                       onFocus={handlePaneClick}
                       onMouseInput={handleMouseInput}
                     />
                   )}
-                </For>
+                </Index>
               }
             >
               {/* Stacked mode: render tab headers and only the active pane */}

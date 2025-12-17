@@ -8,7 +8,7 @@ import {
   createMemo,
   type ParentProps,
 } from 'solid-js';
-import { createStore, reconcile, unwrap } from 'solid-js/store';
+import { createStore, produce, unwrap } from 'solid-js/store';
 import type { Workspace, WorkspaceId, PaneData, Direction, LayoutMode } from '../core/types';
 import { LayoutConfig, DEFAULT_CONFIG } from '../core/config';
 import {
@@ -77,12 +77,18 @@ export function LayoutProvider(props: LayoutProviderProps) {
   const [state, setState] = createStore<LayoutState>(initialState);
 
   // Helper to dispatch actions through the reducer
-  // Use reconcile to preserve object references for unchanged items,
-  // which allows Solid's For to correctly identify existing components
+  // Use produce for efficient structural sharing - only updates changed paths
+  // This avoids full tree comparison that reconcile does, reducing re-renders
   const dispatch = (action: LayoutAction) => {
     const currentState = unwrap(state);
     const newState = layoutReducer(currentState, action);
-    setState(reconcile(newState));
+    setState(produce((draft) => {
+      draft.workspaces = newState.workspaces;
+      draft.activeWorkspaceId = newState.activeWorkspaceId;
+      draft.viewport = newState.viewport;
+      draft.config = newState.config;
+      draft.layoutVersion = newState.layoutVersion;
+    }));
   };
 
   // Computed values using createMemo

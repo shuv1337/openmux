@@ -69,6 +69,21 @@ const initialState: AggregateViewState = {
 // Helper Functions
 // =============================================================================
 
+/**
+ * Debounce a function - delays execution until after wait ms have elapsed
+ * since the last call. Useful for reducing rapid successive calls.
+ */
+function debounce<T extends (...args: unknown[]) => void>(
+  fn: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  return (...args: Parameters<T>) => {
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(() => fn(...args), wait);
+  };
+}
+
 /** Filter PTYs by search query (matches cwd, git branch, or process) */
 function filterPtys(ptys: PtyInfo[], query: string): PtyInfo[] {
   if (!query.trim()) return ptys;
@@ -181,11 +196,15 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     }));
   };
 
+  // Debounced refresh for lifecycle events - prevents cascading refreshes
+  // when multiple panes are created/destroyed rapidly
+  const debouncedRefreshPtys = debounce(() => refreshPtys(), 100);
+
   const setupSubscriptions = async () => {
     // Subscribe to PTY lifecycle events for auto-refresh (created/destroyed)
+    // Use debounced refresh to prevent animation stutter from rapid events
     subscriptions.lifecycle = await subscribeToPtyLifecycle(() => {
-      // Full refresh needed when PTYs are created or destroyed
-      refreshPtys();
+      debouncedRefreshPtys();
     });
 
     // Subscribe to title changes - use incremental update instead of full refresh

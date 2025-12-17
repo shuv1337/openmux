@@ -22,6 +22,7 @@ import { getForegroundProcess, getGitBranch, getProcessCwd } from "./pty/helpers
 import { getCurrentScrollState, notifySubscribers, notifyScrollSubscribers } from "./pty/notification"
 import { createDataHandler } from "./pty/data-handler"
 import { setupQueryPassthrough } from "./pty/query-setup"
+import { makeSubscriptionRegistry } from "./pty/subscription-manager"
 
 // =============================================================================
 // PTY Service
@@ -157,9 +158,9 @@ export class Pty extends Context.Tag("@openmux/Pty")<
       type LifecycleEvent = { type: 'created' | 'destroyed'; ptyId: PtyId }
       type TitleChangeEvent = { ptyId: PtyId; title: string }
 
-      // Callback Sets for subscriptions (simple, reliable cleanup)
-      const lifecycleSubscribers = new Set<(event: LifecycleEvent) => void>()
-      const globalTitleSubscribers = new Set<(event: TitleChangeEvent) => void>()
+      // Effect-based subscription registries with synchronous cleanup support
+      const lifecycleRegistry = yield* makeSubscriptionRegistry<LifecycleEvent>()
+      const globalTitleRegistry = yield* makeSubscriptionRegistry<TitleChangeEvent>()
 
       // Helper to get a session or fail
       const getSessionOrFail = (id: PtyId) =>
@@ -248,10 +249,8 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           for (const callback of session.titleSubscribers) {
             callback(title)
           }
-          // Notify global title subscribers
-          for (const callback of globalTitleSubscribers) {
-            callback({ ptyId: id, title })
-          }
+          // Notify global title subscribers (sync for non-Effect callback context)
+          globalTitleRegistry.notifySync({ ptyId: id, title })
         })
 
         // Set up query passthrough using extracted helper
@@ -285,10 +284,8 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         // Store session
         yield* Ref.update(sessionsRef, HashMap.set(id, session))
 
-        // Emit lifecycle event
-        for (const callback of lifecycleSubscribers) {
-          callback({ type: 'created', ptyId: id })
-        }
+        // Emit lifecycle event using registry
+        yield* lifecycleRegistry.notify({ type: 'created', ptyId: id })
 
         return id
       })
@@ -375,9 +372,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           yield* Ref.update(sessionsRef, HashMap.remove(id))
 
           // Emit lifecycle event AFTER removal so listeners see updated state
-          for (const callback of lifecycleSubscribers) {
-            callback({ type: 'destroyed', ptyId: id })
-          }
+          yield* lifecycleRegistry.notify({ type: 'destroyed', ptyId: id })
         }
       })
 
@@ -550,10 +545,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
       const subscribeToLifecycle = Effect.fn("Pty.subscribeToLifecycle")(function* (
         callback: (event: { type: 'created' | 'destroyed'; ptyId: PtyId }) => void
       ) {
-        lifecycleSubscribers.add(callback)
-        return () => {
-          lifecycleSubscribers.delete(callback)
-        }
+        return yield* lifecycleRegistry.subscribe(callback)
       })
 
       const getTitleFn = Effect.fn("Pty.getTitle")(function* (id: PtyId) {
@@ -580,10 +572,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
       const subscribeToAllTitleChanges = Effect.fn("Pty.subscribeToAllTitleChanges")(function* (
         callback: (event: { ptyId: PtyId; title: string }) => void
       ) {
-        globalTitleSubscribers.add(callback)
-        return () => {
-          globalTitleSubscribers.delete(callback)
-        }
+        return yield* globalTitleRegistry.subscribe(callback)
       })
 
       return Pty.of({
