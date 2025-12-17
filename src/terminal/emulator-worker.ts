@@ -340,10 +340,11 @@ function handleResize(sessionId: string, cols: number, rows: number): void {
     session.cols = cols;
     session.rows = rows;
 
-    // Clear scrollback cache on resize (lines may reflow)
-    session.scrollbackCache.clear();
+    // Don't clear scrollback cache on resize - ghostty handles reflow internally
+    // and clearing causes flash when scrolled up. Cache will naturally refresh
+    // as lines are re-fetched with new dimensions.
 
-    // Send full refresh
+    // Send full refresh for visible terminal area
     sendFullUpdate(sessionId, session);
   } catch (error) {
     sendError(`Resize failed: ${error}`, sessionId);

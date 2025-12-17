@@ -114,6 +114,9 @@ export class WorkerEmulator implements ITerminalEmulator {
       scrollbackLength: update.scrollState.scrollbackLength,
     };
 
+    // Track if alternate screen mode changed (need to clear cache)
+    const altScreenChanged = this.modes.alternateScreen !== update.alternateScreen;
+
     // Update modes
     this.modes = {
       mouseTracking: update.mouseTracking,
@@ -125,8 +128,11 @@ export class WorkerEmulator implements ITerminalEmulator {
     // If full update, cache the full state
     if (update.isFull && update.fullState) {
       this.cachedState = update.fullState;
-      // Clear scrollback cache on full refresh (resize/alt screen)
-      this.scrollbackCache.clear();
+      // Only clear scrollback cache when alternate screen mode changes
+      // (entering/exiting vim, htop, etc.) - not on resize, to prevent flash
+      if (altScreenChanged) {
+        this.scrollbackCache.clear();
+      }
     } else if (this.cachedState) {
       // Apply dirty rows to cached state
       for (const [rowIndex, cells] of update.dirtyRows) {
@@ -178,8 +184,9 @@ export class WorkerEmulator implements ITerminalEmulator {
     this._cols = cols;
     this._rows = rows;
     this.pool.resize(this.sessionId, cols, rows);
-    // Clear scrollback cache on resize (lines may reflow)
-    this.scrollbackCache.clear();
+    // Don't clear scrollback cache here - keep stale content visible during resize
+    // to prevent flash. Cache will be cleared in handleUpdate() when worker sends
+    // the full state update with reflowed content.
   }
 
   reset(): void {
