@@ -24,11 +24,12 @@ export interface TitleParserOptions {
 export function createTitleParser(options: TitleParserOptions) {
   const { onTitleChange } = options;
 
-  // Buffer for accumulating partial sequences
-  let buffer = '';
+  // State for OSC sequence parsing
   let inOscSequence = false;
-  let oscCode = '';
-  let oscText = '';
+  let collectingText = false; // Whether we've passed the semicolon
+  // Use array buffers instead of string concatenation for O(n) instead of O(n²)
+  let oscCodeBuffer: string[] = [];
+  let oscTextBuffer: string[] = [];
 
   /**
    * Process a chunk of data and extract title changes
@@ -53,19 +54,20 @@ export function createTitleParser(options: TitleParserOptions) {
         }
 
         // Still collecting OSC sequence
-        if (oscCode === '') {
+        if (!collectingText) {
           // Collecting code (until semicolon)
           if (char === ';') {
             // Code complete, now collecting text
+            collectingText = true;
           } else if (char >= '0' && char <= '9') {
-            oscCode += char;
+            oscCodeBuffer.push(char);
           } else {
             // Invalid OSC, abort
             resetOsc();
           }
         } else {
           // Collecting text (after semicolon)
-          oscText += char;
+          oscTextBuffer.push(char);
         }
         continue;
       }
@@ -74,8 +76,9 @@ export function createTitleParser(options: TitleParserOptions) {
       if (char === ESC && i + 1 < data.length && data[i + 1] === ']') {
         // Found ESC ] - start of OSC
         inOscSequence = true;
-        oscCode = '';
-        oscText = '';
+        collectingText = false;
+        oscCodeBuffer = [];
+        oscTextBuffer = [];
         i++; // Skip the ]
         continue;
       }
@@ -83,6 +86,8 @@ export function createTitleParser(options: TitleParserOptions) {
   }
 
   function handleOscComplete(): void {
+    const oscCode = oscCodeBuffer.join('');
+    const oscText = oscTextBuffer.join('');
     const code = parseInt(oscCode, 10);
 
     // OSC 0, 1, 2 all set title (0 sets both icon and title, 1 sets icon, 2 sets title)
@@ -95,8 +100,9 @@ export function createTitleParser(options: TitleParserOptions) {
 
   function resetOsc(): void {
     inOscSequence = false;
-    oscCode = '';
-    oscText = '';
+    collectingText = false;
+    oscCodeBuffer = [];
+    oscTextBuffer = [];
   }
 
   return {

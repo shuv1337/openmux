@@ -153,13 +153,13 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         HashMap.empty<PtyId, InternalPtySession>()
       )
 
-      // Lifecycle event subscribers
-      type PtyLifecycleCallback = (event: { type: 'created' | 'destroyed'; ptyId: PtyId }) => void
-      const lifecycleSubscribers = new Set<PtyLifecycleCallback>()
+      // Lifecycle event types
+      type LifecycleEvent = { type: 'created' | 'destroyed'; ptyId: PtyId }
+      type TitleChangeEvent = { ptyId: PtyId; title: string }
 
-      // Global title change subscribers (for aggregate view)
-      type TitleChangeCallback = (event: { ptyId: PtyId; title: string }) => void
-      const globalTitleSubscribers = new Set<TitleChangeCallback>()
+      // Callback Sets for subscriptions (simple, reliable cleanup)
+      const lifecycleSubscribers = new Set<(event: LifecycleEvent) => void>()
+      const globalTitleSubscribers = new Set<(event: TitleChangeEvent) => void>()
 
       // Helper to get a session or fail
       const getSessionOrFail = (id: PtyId) =>
@@ -248,7 +248,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           for (const callback of session.titleSubscribers) {
             callback(title)
           }
-          // Notify global title subscribers (for aggregate view)
+          // Notify global title subscribers
           for (const callback of globalTitleSubscribers) {
             callback({ ptyId: id, title })
           }

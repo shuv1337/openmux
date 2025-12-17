@@ -46,6 +46,10 @@ interface AggregateViewState {
   isLoading: boolean;
   /** Whether in interactive preview mode (vs list mode) */
   previewMode: boolean;
+  /** Map from ptyId to index in allPtys for O(1) lookup */
+  allPtysIndex: Map<string, number>;
+  /** Map from ptyId to index in matchedPtys for O(1) lookup */
+  matchedPtysIndex: Map<string, number>;
 }
 
 const initialState: AggregateViewState = {
@@ -57,6 +61,8 @@ const initialState: AggregateViewState = {
   selectedPtyId: null,
   isLoading: false,
   previewMode: false,
+  allPtysIndex: new Map(),
+  matchedPtysIndex: new Map(),
 };
 
 // =============================================================================
@@ -74,6 +80,11 @@ function filterPtys(ptys: PtyInfo[], query: string): PtyInfo[] {
     const process = pty.foregroundProcess?.toLowerCase() ?? '';
     return cwd.includes(lowerQuery) || branch.includes(lowerQuery) || process.includes(lowerQuery);
   });
+}
+
+/** Build an index map from ptyId to array index for O(1) lookups */
+function buildPtyIndex(ptys: PtyInfo[]): Map<string, number> {
+  return new Map(ptys.map((p, i) => [p.ptyId, i]));
 }
 
 // =============================================================================
@@ -111,19 +122,26 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     const ptys = await listAllPtysWithMetadata();
     const matchedPtys = filterPtys(ptys, state.filterQuery);
 
-    // Determine new selected PTY
+    // Build O(1) lookup indexes
+    const allPtysIndex = buildPtyIndex(ptys);
+    const matchedPtysIndex = buildPtyIndex(matchedPtys);
+
+    // Determine new selected PTY using O(1) lookup
     const currentSelectedPtyId = state.selectedPtyId;
-    const currentPtyStillExists = currentSelectedPtyId && matchedPtys.some(p => p.ptyId === currentSelectedPtyId);
+    const currentPtyIndex = currentSelectedPtyId ? matchedPtysIndex.get(currentSelectedPtyId) : undefined;
+    const currentPtyStillExists = currentPtyIndex !== undefined;
 
     // If currently selected PTY was destroyed, exit preview mode and select next available
     const newSelectedIndex = currentPtyStillExists
-      ? matchedPtys.findIndex(p => p.ptyId === currentSelectedPtyId)
+      ? currentPtyIndex
       : Math.min(state.selectedIndex, Math.max(0, matchedPtys.length - 1));
     const selectedPtyId = matchedPtys[newSelectedIndex]?.ptyId ?? null;
 
     setState(produce((s) => {
       s.allPtys = ptys;
       s.matchedPtys = matchedPtys;
+      s.allPtysIndex = allPtysIndex;
+      s.matchedPtysIndex = matchedPtysIndex;
       s.selectedIndex = newSelectedIndex;
       s.selectedPtyId = selectedPtyId;
       s.isLoading = false;
@@ -134,69 +152,74 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     }));
   };
 
-  // Track subscriptions and polling
-  let lifecycleUnsubscribe: (() => void) | null = null;
-  let titleChangeUnsubscribe: (() => void) | null = null;
-  let processPollingInterval: ReturnType<typeof setInterval> | null = null;
+  // Consolidated subscription manager
+  interface SubscriptionManager {
+    lifecycle: (() => void) | null;
+    titleChange: (() => void) | null;
+    polling: ReturnType<typeof setInterval> | null;
+  }
+
+  const subscriptions: SubscriptionManager = {
+    lifecycle: null,
+    titleChange: null,
+    polling: null,
+  };
+
+  // Incremental title update handler - O(1) instead of full refresh
+  const handleTitleChange = (event: { ptyId: string; title: string }) => {
+    setState(produce((s) => {
+      // Update in allPtys using O(1) lookup
+      const allIndex = s.allPtysIndex.get(event.ptyId);
+      if (allIndex !== undefined && s.allPtys[allIndex]) {
+        s.allPtys[allIndex] = { ...s.allPtys[allIndex], foregroundProcess: event.title };
+      }
+      // Update in matchedPtys using O(1) lookup
+      const matchedIndex = s.matchedPtysIndex.get(event.ptyId);
+      if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
+        s.matchedPtys[matchedIndex] = { ...s.matchedPtys[matchedIndex], foregroundProcess: event.title };
+      }
+    }));
+  };
+
+  const setupSubscriptions = async () => {
+    // Subscribe to PTY lifecycle events for auto-refresh (created/destroyed)
+    subscriptions.lifecycle = await subscribeToPtyLifecycle(() => {
+      // Full refresh needed when PTYs are created or destroyed
+      refreshPtys();
+    });
+
+    // Subscribe to title changes - use incremental update instead of full refresh
+    subscriptions.titleChange = await subscribeToAllTitleChanges(handleTitleChange);
+
+    // Poll for foreground process changes (OS-level, not captured by title events)
+    subscriptions.polling = setInterval(() => {
+      refreshPtys();
+    }, 2000);
+  };
+
+  const cleanupSubscriptions = () => {
+    subscriptions.lifecycle?.();
+    subscriptions.titleChange?.();
+    if (subscriptions.polling) clearInterval(subscriptions.polling);
+    subscriptions.lifecycle = null;
+    subscriptions.titleChange = null;
+    subscriptions.polling = null;
+  };
 
   // Refresh PTYs when view opens and subscribe to lifecycle/title events
   createEffect(() => {
     if (state.showAggregateView) {
-      // Subscribe to PTY lifecycle events for auto-refresh (created/destroyed)
-      subscribeToPtyLifecycle(() => {
-        // Refresh the list when PTYs are created or destroyed
-        refreshPtys();
-      }).then((unsub) => {
-        lifecycleUnsubscribe = unsub;
-      });
-
-      // Subscribe to title changes across all PTYs (immediate updates)
-      subscribeToAllTitleChanges(() => {
-        // Refresh when any PTY's title changes
-        refreshPtys();
-      }).then((unsub) => {
-        titleChangeUnsubscribe = unsub;
-      });
-
-      // Initial refresh
+      // Initial refresh then setup subscriptions
       refreshPtys();
-
-      // Poll for foreground process changes (OS-level, not captured by title events)
-      // Use a reasonable interval to balance responsiveness vs overhead
-      processPollingInterval = setInterval(() => {
-        refreshPtys();
-      }, 2000); // Every 2 seconds
+      setupSubscriptions();
     } else {
-      // Unsubscribe when view closes
-      if (lifecycleUnsubscribe) {
-        lifecycleUnsubscribe();
-        lifecycleUnsubscribe = null;
-      }
-      if (titleChangeUnsubscribe) {
-        titleChangeUnsubscribe();
-        titleChangeUnsubscribe = null;
-      }
-      if (processPollingInterval) {
-        clearInterval(processPollingInterval);
-        processPollingInterval = null;
-      }
+      cleanupSubscriptions();
     }
   });
 
   // Cleanup on unmount
   onCleanup(() => {
-    if (lifecycleUnsubscribe) {
-      lifecycleUnsubscribe();
-      lifecycleUnsubscribe = null;
-    }
-    if (titleChangeUnsubscribe) {
-      titleChangeUnsubscribe();
-      titleChangeUnsubscribe = null;
-    }
-    if (processPollingInterval) {
-      clearInterval(processPollingInterval);
-      processPollingInterval = null;
-    }
+    cleanupSubscriptions();
   });
 
   // Actions
@@ -206,6 +229,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
       s.filterQuery = '';
       s.selectedIndex = 0;
       s.matchedPtys = s.allPtys;
+      s.matchedPtysIndex = s.allPtysIndex; // Share index since matchedPtys === allPtys
       s.selectedPtyId = s.allPtys[0]?.ptyId ?? null;
     }));
   };
@@ -221,9 +245,11 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
 
   const setFilterQuery = (query: string) => {
     const matchedPtys = filterPtys(state.allPtys, query);
+    const matchedPtysIndex = buildPtyIndex(matchedPtys);
     setState(produce((s) => {
       s.filterQuery = query;
       s.matchedPtys = matchedPtys;
+      s.matchedPtysIndex = matchedPtysIndex;
       s.selectedIndex = 0;
       s.selectedPtyId = matchedPtys[0]?.ptyId ?? null;
     }));
@@ -248,13 +274,16 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
   const selectPty = (ptyId: string) => {
     setState(produce((s) => {
       s.selectedPtyId = ptyId;
-      s.selectedIndex = s.matchedPtys.findIndex((p) => p.ptyId === ptyId);
+      // O(1) lookup instead of findIndex
+      s.selectedIndex = s.matchedPtysIndex.get(ptyId) ?? -1;
     }));
   };
 
   const getSelectedPty = (): PtyInfo | null => {
     if (state.selectedPtyId === null) return null;
-    return state.matchedPtys.find((p) => p.ptyId === state.selectedPtyId) ?? null;
+    // O(1) lookup using index then direct access
+    const index = state.matchedPtysIndex.get(state.selectedPtyId);
+    return index !== undefined ? state.matchedPtys[index] ?? null : null;
   };
 
   const enterPreviewMode = () => {
