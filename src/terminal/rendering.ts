@@ -50,9 +50,6 @@ export function getCachedRGBA(r: number, g: number, b: number): RGBA {
 /** Bold text attribute flag */
 export const ATTR_BOLD = 1;
 
-/** Dim text attribute flag */
-export const ATTR_DIM = 2;
-
 /** Italic text attribute flag */
 export const ATTR_ITALIC = 4;
 
@@ -89,22 +86,3 @@ export const SEARCH_CURRENT_BG = RGBA.fromInts(255, 50, 150);
 
 /** Current search match foreground color (white text) */
 export const SEARCH_CURRENT_FG = RGBA.fromInts(255, 255, 255);
-
-/**
- * Calculate combined attributes from a terminal cell
- */
-export function calculateAttributes(cell: {
-  bold?: boolean;
-  dim?: boolean;
-  italic?: boolean;
-  underline?: boolean;
-  strikethrough?: boolean;
-}): number {
-  let attributes = 0;
-  if (cell.bold) attributes |= ATTR_BOLD;
-  if (cell.dim) attributes |= ATTR_DIM;
-  if (cell.italic) attributes |= ATTR_ITALIC;
-  if (cell.underline) attributes |= ATTR_UNDERLINE;
-  if (cell.strikethrough) attributes |= ATTR_STRIKETHROUGH;
-  return attributes;
-}

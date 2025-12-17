@@ -175,14 +175,6 @@ export async function getSessionSummary(
   )
 }
 
-/**
- * Extract auto-name from a path (last directory component).
- */
-export function getAutoName(cwd: string): string {
-  const parts = cwd.split("/").filter(Boolean)
-  return parts[parts.length - 1] ?? "untitled"
-}
-
 // =============================================================================
 // Legacy Compatibility Functions
 // These maintain backwards compatibility with SessionContext imports

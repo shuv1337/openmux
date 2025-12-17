@@ -50,7 +50,6 @@ export {
   getSessionMetadata,
   updateAutoName,
   getSessionSummary,
-  getAutoName,
   // Legacy compatibility
   createSessionLegacy,
   listSessionsLegacy,
