@@ -2,7 +2,7 @@
  * Main App component for openmux
  */
 
-import { createSignal, createEffect, onCleanup, on } from 'solid-js';
+import { createSignal, createEffect, createMemo, onCleanup, on } from 'solid-js';
 import { useKeyboard, useTerminalDimensions, useRenderer } from '@opentui/solid';
 import {
   ThemeProvider,
@@ -31,6 +31,7 @@ import {
   isPtyCreated,
   getSessionCwd as getSessionCwdFromCoordinator,
 } from './effect/bridge';
+import { disposeRuntime } from './effect/runtime';
 import { inputHandler } from './terminal';
 import type { PasteEvent } from '@opentui/core';
 import {
@@ -116,6 +117,8 @@ function AppContent() {
   const handleQuit = async () => {
     // Save the current session before quitting
     await saveSession();
+    // Dispose Effect runtime to cleanup services
+    await disposeRuntime();
     renderer.destroy();
     process.exit(0);
   };
@@ -204,70 +207,87 @@ function AppContent() {
     )
   );
 
+  // Memoize pane IDs that need PTYs - only changes when panes are added/removed
+  // or when a pane's ptyId status changes. This prevents re-triggering PTY creation
+  // when unrelated pane properties change (rectangle, cursor position, etc.)
+  const panesNeedingPtys = createMemo(() =>
+    layout.panes.filter(p => !p.ptyId).map(p => ({ id: p.id, rectangle: p.rectangle }))
+  );
+
   // Create PTYs for panes that don't have one
   // IMPORTANT: Wait for BOTH terminal AND session to be initialized
   // This prevents creating PTYs before session has a chance to restore workspaces
   // Also skip while session is switching to avoid creating PTYs for stale panes
-  createEffect(() => {
-    if (!terminal.isInitialized) return;
-    if (!sessionState.initialized) return;
-    if (sessionState.switching) return;
+  // Using on() for explicit dependency tracking - only re-runs when these specific values change
+  createEffect(
+    on(
+      [
+        () => terminal.isInitialized,
+        () => sessionState.initialized,
+        () => sessionState.switching,
+        ptyRetryCounter,
+        panesNeedingPtys,
+      ],
+      ([isTerminalInit, isSessionInit, isSwitching, _retry, panes]) => {
+        if (!isTerminalInit) return;
+        if (!isSessionInit) return;
+        if (isSwitching) return;
 
-    // Track retry counter to re-trigger effect
-    const _retry = ptyRetryCounter();
-    let hadFailure = false;
+        let hadFailure = false;
 
-    const createPtysForPanes = async () => {
-      for (const pane of layout.panes) {
-        // SYNCHRONOUS guard: check and add to pendingPtyCreation Set IMMEDIATELY
-        // This prevents race conditions where concurrent effect runs both pass the check
-        if (pendingPtyCreation.has(pane.id)) {
-          continue;
-        }
-        // Add to set synchronously BEFORE any async work
-        pendingPtyCreation.add(pane.id);
+        const createPtysForPanes = async () => {
+          for (const pane of panes) {
+            // SYNCHRONOUS guard: check and add to pendingPtyCreation Set IMMEDIATELY
+            // This prevents race conditions where concurrent effect runs both pass the check
+            if (pendingPtyCreation.has(pane.id)) {
+              continue;
+            }
+            // Add to set synchronously BEFORE any async work
+            pendingPtyCreation.add(pane.id);
 
-        try {
-          // ASYNC check: verify PTY wasn't created in a previous session/effect run
-          const alreadyCreated = await isPtyCreated(pane.id);
-          if (pane.ptyId || alreadyCreated) {
-            // Already has a PTY, skip creation
-            continue;
+            try {
+              // ASYNC check: verify PTY wasn't created in a previous session/effect run
+              const alreadyCreated = await isPtyCreated(pane.id);
+              if (alreadyCreated) {
+                // Already has a PTY, skip creation
+                continue;
+              }
+
+              // Calculate pane dimensions (account for border)
+              const rect = pane.rectangle ?? { width: 80, height: 24 };
+              const cols = Math.max(1, rect.width - 2);
+              const rows = Math.max(1, rect.height - 2);
+
+              // Check for session-restored CWD first, then pending CWD from new pane,
+              // then OPENMUX_ORIGINAL_CWD (set by wrapper to preserve user's cwd)
+              const sessionCwd = await getSessionCwdFromCoordinator(pane.id);
+              let cwd = sessionCwd ?? pendingCwd ?? process.env.OPENMUX_ORIGINAL_CWD ?? undefined;
+              pendingCwd = null; // Clear after use
+
+              // Mark as created BEFORE calling createPTY (persistent marker)
+              await markPtyCreated(pane.id);
+              await createPTY(pane.id, cols, rows, cwd);
+            } catch (err) {
+              console.error(`Failed to create PTY for pane ${pane.id}:`, err);
+              hadFailure = true;
+            } finally {
+              // Always remove from pending set when done (success or failure)
+              pendingPtyCreation.delete(pane.id);
+            }
           }
 
-          // Calculate pane dimensions (account for border)
-          const rect = pane.rectangle ?? { width: 80, height: 24 };
-          const cols = Math.max(1, rect.width - 2);
-          const rows = Math.max(1, rect.height - 2);
+          // Schedule a retry if any PTY creation failed
+          if (hadFailure) {
+            setTimeout(() => {
+              setPtyRetryCounter(c => c + 1);
+            }, 100);
+          }
+        };
 
-          // Check for session-restored CWD first, then pending CWD from new pane,
-          // then OPENMUX_ORIGINAL_CWD (set by wrapper to preserve user's cwd)
-          const sessionCwd = await getSessionCwdFromCoordinator(pane.id);
-          let cwd = sessionCwd ?? pendingCwd ?? process.env.OPENMUX_ORIGINAL_CWD ?? undefined;
-          pendingCwd = null; // Clear after use
-
-          // Mark as created BEFORE calling createPTY (persistent marker)
-          await markPtyCreated(pane.id);
-          await createPTY(pane.id, cols, rows, cwd);
-        } catch (err) {
-          console.error(`Failed to create PTY for pane ${pane.id}:`, err);
-          hadFailure = true;
-        } finally {
-          // Always remove from pending set when done (success or failure)
-          pendingPtyCreation.delete(pane.id);
-        }
+        createPtysForPanes();
       }
-
-      // Schedule a retry if any PTY creation failed
-      if (hadFailure) {
-        setTimeout(() => {
-          setPtyRetryCounter(c => c + 1);
-        }, 100);
-      }
-    };
-
-    createPtysForPanes();
-  });
+    )
+  );
 
   // Resize PTYs and update positions when pane dimensions change
   createEffect(() => {

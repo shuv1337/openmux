@@ -131,40 +131,51 @@ interface AggregateViewProviderProps extends ParentProps {}
 export function AggregateViewProvider(props: AggregateViewProviderProps) {
   const [state, setState] = createStore<AggregateViewState>(initialState);
 
+  // Track if a refresh is in progress to prevent overlapping calls
+  let refreshInProgress = false;
+
   // Fetch all PTYs from all sessions
   const refreshPtys = async () => {
-    setState('isLoading', true);
-    const ptys = await listAllPtysWithMetadata();
-    const matchedPtys = filterPtys(ptys, state.filterQuery);
+    // Skip if a refresh is already in progress
+    if (refreshInProgress) return;
+    refreshInProgress = true;
 
-    // Build O(1) lookup indexes
-    const allPtysIndex = buildPtyIndex(ptys);
-    const matchedPtysIndex = buildPtyIndex(matchedPtys);
+    try {
+      setState('isLoading', true);
+      const ptys = await listAllPtysWithMetadata();
+      const matchedPtys = filterPtys(ptys, state.filterQuery);
 
-    // Determine new selected PTY using O(1) lookup
-    const currentSelectedPtyId = state.selectedPtyId;
-    const currentPtyIndex = currentSelectedPtyId ? matchedPtysIndex.get(currentSelectedPtyId) : undefined;
-    const currentPtyStillExists = currentPtyIndex !== undefined;
+      // Build O(1) lookup indexes
+      const allPtysIndex = buildPtyIndex(ptys);
+      const matchedPtysIndex = buildPtyIndex(matchedPtys);
 
-    // If currently selected PTY was destroyed, exit preview mode and select next available
-    const newSelectedIndex = currentPtyStillExists
-      ? currentPtyIndex
-      : Math.min(state.selectedIndex, Math.max(0, matchedPtys.length - 1));
-    const selectedPtyId = matchedPtys[newSelectedIndex]?.ptyId ?? null;
+      // Determine new selected PTY using O(1) lookup
+      const currentSelectedPtyId = state.selectedPtyId;
+      const currentPtyIndex = currentSelectedPtyId ? matchedPtysIndex.get(currentSelectedPtyId) : undefined;
+      const currentPtyStillExists = currentPtyIndex !== undefined;
 
-    setState(produce((s) => {
-      s.allPtys = ptys;
-      s.matchedPtys = matchedPtys;
-      s.allPtysIndex = allPtysIndex;
-      s.matchedPtysIndex = matchedPtysIndex;
-      s.selectedIndex = newSelectedIndex;
-      s.selectedPtyId = selectedPtyId;
-      s.isLoading = false;
-      // Exit preview mode if the selected PTY was destroyed or no PTYs remain
-      if (!currentPtyStillExists || selectedPtyId === null) {
-        s.previewMode = false;
-      }
-    }));
+      // If currently selected PTY was destroyed, exit preview mode and select next available
+      const newSelectedIndex = currentPtyStillExists
+        ? currentPtyIndex
+        : Math.min(state.selectedIndex, Math.max(0, matchedPtys.length - 1));
+      const selectedPtyId = matchedPtys[newSelectedIndex]?.ptyId ?? null;
+
+      setState(produce((s) => {
+        s.allPtys = ptys;
+        s.matchedPtys = matchedPtys;
+        s.allPtysIndex = allPtysIndex;
+        s.matchedPtysIndex = matchedPtysIndex;
+        s.selectedIndex = newSelectedIndex;
+        s.selectedPtyId = selectedPtyId;
+        s.isLoading = false;
+        // Exit preview mode if the selected PTY was destroyed or no PTYs remain
+        if (!currentPtyStillExists || selectedPtyId === null) {
+          s.previewMode = false;
+        }
+      }));
+    } finally {
+      refreshInProgress = false;
+    }
   };
 
   // Consolidated subscription manager

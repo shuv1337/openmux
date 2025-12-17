@@ -207,12 +207,19 @@ export function AggregateView(props: AggregateViewProps) {
   // Register keyboard handler with KeyboardRouter
   createEffect(() => {
     let unsubscribe: (() => void) | null = null;
+    let mounted = true;
 
     registerKeyboardHandler('aggregateView', keyboardHandler.handleKeyDown).then((unsub) => {
-      unsubscribe = unsub;
+      if (mounted) {
+        unsubscribe = unsub;
+      } else {
+        // Component unmounted before registration completed - cleanup immediately
+        unsub();
+      }
     });
 
     onCleanup(() => {
+      mounted = false;
       if (unsubscribe) {
         unsubscribe();
       }
