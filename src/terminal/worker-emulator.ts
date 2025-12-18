@@ -119,28 +119,30 @@ export class WorkerEmulator implements ITerminalEmulator {
   private handleUpdate(update: DirtyTerminalUpdate): void {
     this.cachedUpdate = update;
 
-    // HYBRID FIX: Clear scrollback cache when scrollback length changes
-    // This handles content shifting when new lines push old ones up
-    const scrollbackLengthChanged =
-      update.scrollState.scrollbackLength !== this.lastScrollbackLength;
+    const newScrollbackLength = update.scrollState.scrollbackLength;
+    const scrollbackDelta = newScrollbackLength - this.lastScrollbackLength;
 
-    if (scrollbackLengthChanged) {
+    // Smart cache invalidation to prevent flicker when scrolled back:
+    // - When scrollback GROWS (delta > 0): existing cached lines at their absolute
+    //   offsets are still valid, no need to clear cache
+    // - When scrollback stays same (delta == 0) while receiving updates: we're at the
+    //   scrollback limit and old lines are being evicted, content shifts, must clear
+    // - When scrollback shrinks (delta < 0): reset occurred, must clear
+    //
+    // Note: We don't clear cache just because scrollback grew - this prevents
+    // flicker when user is scrolled back viewing history while new content arrives.
+    const contentShifted = scrollbackDelta <= 0 && this.lastScrollbackLength > 0;
+
+    if (contentShifted) {
       this.scrollbackCache.clear();
-      this.lastScrollbackLength = update.scrollState.scrollbackLength;
     }
 
-    // HYBRID FIX (part B): Also clear when at bottom receiving updates
-    // Extra safety - ensures cache is fresh when viewing live terminal
-    // This handles edge case where scrollback is at limit (10k lines) and
-    // length doesn't change but content still shifts as old lines are evicted
-    if (this.scrollState.isAtBottom) {
-      this.scrollbackCache.clear();
-    }
+    this.lastScrollbackLength = newScrollbackLength;
 
     // Update scroll state
     this.scrollState = {
       ...this.scrollState,
-      scrollbackLength: update.scrollState.scrollbackLength,
+      scrollbackLength: newScrollbackLength,
     };
 
     // Track if alternate screen mode changed (need to clear cache)

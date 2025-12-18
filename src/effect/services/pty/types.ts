@@ -32,5 +32,7 @@ export interface InternalPtySession {
   pendingNotify: boolean
   scrollState: {
     viewportOffset: number
+    /** Track last scrollback length to detect when new content is added */
+    lastScrollbackLength: number
   }
 }

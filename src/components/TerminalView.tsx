@@ -7,6 +7,7 @@ import { createSignal, createEffect, onCleanup, on, Show } from 'solid-js';
 import { useRenderer } from '@opentui/solid';
 import { RGBA, type OptimizedBuffer } from '@opentui/core';
 import type { TerminalState, TerminalCell, TerminalScrollState, UnifiedTerminalUpdate } from '../core/types';
+import { isAtBottom as checkIsAtBottom } from '../core/scroll-utils';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
 import {
   getTerminalState,
@@ -16,7 +17,6 @@ import {
 } from '../effect/bridge';
 import { useSelection } from '../contexts/SelectionContext';
 import { useSearch } from '../contexts/SearchContext';
-import { useTerminal } from '../contexts/TerminalContext';
 import {
   WHITE,
   BLACK,
@@ -57,11 +57,16 @@ export function TerminalView(props: TerminalViewProps) {
   // Get search state - keep full context to access searchVersion reactively
   const search = useSearch();
   const { isSearchMatch, isCurrentMatch } = search;
-  // Get scroll state from context cache (synchronous, already updated by scroll events)
-  const { getScrollState: getScrollStateFromCache } = useTerminal();
-
   // Store terminal state in a plain variable (Solid has no stale closures)
   let terminalState: TerminalState | null = null;
+  // Store scroll state locally from unified updates to avoid race conditions
+  // This ensures scroll state and terminal state are always in sync
+  let scrollState: TerminalScrollState = { viewportOffset: 0, scrollbackLength: 0, isAtBottom: true };
+  // Cache for lines transitioning from live terminal to scrollback
+  // When scrollback grows, the top rows of the terminal move to scrollback.
+  // We capture them before the state update so we can render them immediately
+  // without waiting for async prefetch from the worker.
+  const transitionCache = new Map<number, TerminalCell[]>();
   // Cache emulator for sync access to scrollback lines
   let emulator: ITerminalEmulator | null = null;
   // Version counter to trigger re-renders when state changes
@@ -140,12 +145,36 @@ export function TerminalView(props: TerminalViewProps) {
             if (!mounted) return;
 
             const { terminalUpdate } = update;
+            const oldScrollbackLength = scrollState.scrollbackLength;
+            const newScrollbackLength = update.scrollState.scrollbackLength;
+            const scrollbackDelta = newScrollbackLength - oldScrollbackLength;
+
+            // Handle transition cache based on scrollback changes:
+            // - When scrollback GROWS (delta > 0): capture lines moving from live terminal to scrollback
+            // - When scrollback stays same or shrinks (delta <= 0): content shifted, clear stale cache
+            //   This happens when scrollback is at its limit and old lines are evicted.
+            if (scrollbackDelta > 0 && terminalState && scrollState.viewportOffset > 0) {
+              // Capture lines transitioning from live terminal to scrollback BEFORE updating state.
+              // We capture them so we can render them immediately without waiting for async prefetch.
+              for (let i = 0; i < scrollbackDelta; i++) {
+                const row = terminalState.cells[i];
+                if (row) {
+                  transitionCache.set(oldScrollbackLength + i, row);
+                }
+              }
+            } else if (scrollbackDelta <= 0 && oldScrollbackLength > 0) {
+              // Content shifted (at scrollback limit) - clear stale transition cache entries
+              // to prevent returning wrong data for offsets that now have different content
+              transitionCache.clear();
+            }
 
             // Update terminal state
             if (terminalUpdate.isFull && terminalUpdate.fullState) {
               // Full refresh: store complete state
               terminalState = terminalUpdate.fullState;
               cachedRows = [...terminalUpdate.fullState.cells];
+              // Clear transition cache on full refresh
+              transitionCache.clear();
             } else {
               // Delta update: merge dirty rows into cached state
               const existingState = terminalState;
@@ -166,7 +195,11 @@ export function TerminalView(props: TerminalViewProps) {
               }
             }
 
-            // Request batched render (scroll state comes from context cache)
+            // Update scroll state from unified update to ensure it's in sync with terminal state
+            // This prevents race conditions where render uses stale scroll state from cache
+            scrollState = update.scrollState;
+
+            // Request batched render
             requestRenderFrame();
           });
 
@@ -210,11 +243,10 @@ export function TerminalView(props: TerminalViewProps) {
       return;
     }
 
-    // Get scroll state from context cache (synchronous, no async overhead)
-    const scrollState = getScrollStateFromCache(ptyId);
-    const viewportOffset = scrollState?.viewportOffset ?? 0;
-    const scrollbackLength = scrollState?.scrollbackLength ?? 0;
-    const isAtBottom = viewportOffset === 0;
+    // Use scroll state from unified update (stored locally, always in sync with terminal state)
+    const viewportOffset = scrollState.viewportOffset;
+    const scrollbackLength = scrollState.scrollbackLength;
+    const isAtBottom = checkIsAtBottom(viewportOffset);
 
     const rows = Math.min(state.rows, height);
     const cols = Math.min(state.cols, width);
@@ -243,8 +275,12 @@ export function TerminalView(props: TerminalViewProps) {
           // Before scrollback
           rowCache[y] = null;
         } else if (absoluteY < scrollbackLength) {
-          // In scrollback buffer
-          const line = currentEmulator?.getScrollbackLine(absoluteY) ?? null;
+          // In scrollback buffer - try emulator cache first, then transition cache
+          let line = currentEmulator?.getScrollbackLine(absoluteY) ?? null;
+          // Fall back to transition cache for lines that just moved from live terminal
+          if (line === null) {
+            line = transitionCache.get(absoluteY) ?? null;
+          }
           rowCache[y] = line;
           // Track missing scrollback lines (null when should have data)
           if (line === null && currentEmulator) {
@@ -387,6 +423,7 @@ export function TerminalView(props: TerminalViewProps) {
     }
 
     // Render scrollbar when scrolled back (not at bottom)
+    // Uses semi-transparent overlay to preserve underlying content visibility
     if (!isAtBottom && scrollbackLength > 0) {
       const totalLines = scrollbackLength + rows;
       const thumbHeight = Math.max(1, Math.floor(rows * rows / totalLines));
@@ -395,15 +432,22 @@ export function TerminalView(props: TerminalViewProps) {
       const thumbPosition = Math.floor((1 - viewportOffset / scrollbackLength) * scrollRange);
 
       // Render scrollbar on the rightmost column
+      // Preserve underlying character but apply scrollbar background tint
       const scrollbarX = offsetX + width - 1;
+      const contentCol = cols - 1; // Last column in terminal content
       for (let y = 0; y < rows; y++) {
         const isThumb = y >= thumbPosition && y < thumbPosition + thumbHeight;
+        // Get the underlying cell to preserve its character
+        const row = rowCache[y];
+        const cell = contentCol >= 0 ? row?.[contentCol] : null;
+        const underlyingChar = cell?.char || ' ';
+        const underlyingFg = cell ? getCachedRGBA(cell.fg.r, cell.fg.g, cell.fg.b) : fallbackFg;
         buffer.setCell(
           scrollbarX,
           y + offsetY,
-          isThumb ? '█' : '░',
+          underlyingChar,
+          underlyingFg,
           isThumb ? SCROLLBAR_THUMB : SCROLLBAR_TRACK,
-          SCROLLBAR_TRACK,
           0
         );
       }

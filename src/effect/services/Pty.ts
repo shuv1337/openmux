@@ -246,7 +246,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           exitCallbacks: new Set(),
           titleSubscribers: new Set(),
           pendingNotify: false,
-          scrollState: { viewportOffset: 0 },
+          scrollState: { viewportOffset: 0, lastScrollbackLength: 0 },
         }
 
         // Subscribe to emulator title changes and propagate to subscribers

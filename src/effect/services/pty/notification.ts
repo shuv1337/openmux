@@ -6,10 +6,27 @@ import type { TerminalScrollState, UnifiedTerminalUpdate } from "../../../core/t
 import type { InternalPtySession } from "./types"
 
 /**
- * Get current scroll state from a session
+ * Get current scroll state from a session.
+ * Adjusts viewportOffset when new content is added while scrolled back,
+ * to maintain the same visual position (prevents content from shifting up).
  */
 export function getCurrentScrollState(session: InternalPtySession): TerminalScrollState {
   const scrollbackLength = session.emulator.getScrollbackLength()
+
+  // SCROLL POSITION FIX: When new content is added (scrollback grows) and user
+  // is scrolled back, adjust viewportOffset by the delta to maintain the same
+  // visual position. Without this, new lines cause the viewed content to shift up.
+  const scrollbackDelta = scrollbackLength - session.scrollState.lastScrollbackLength
+  if (scrollbackDelta > 0 && session.scrollState.viewportOffset > 0) {
+    session.scrollState.viewportOffset = Math.min(
+      session.scrollState.viewportOffset + scrollbackDelta,
+      scrollbackLength
+    )
+  }
+
+  // Update last scrollback length for next comparison
+  session.scrollState.lastScrollbackLength = scrollbackLength
+
   return {
     viewportOffset: session.scrollState.viewportOffset,
     scrollbackLength,

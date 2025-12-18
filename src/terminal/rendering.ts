@@ -63,11 +63,11 @@ export const ATTR_STRIKETHROUGH = 128;
 // UI Colors (Scrollbar, Selection, Search)
 // =============================================================================
 
-/** Scrollbar track color */
-export const SCROLLBAR_TRACK = RGBA.fromInts(40, 40, 40);
+/** Scrollbar track color (semi-transparent for content visibility) */
+export const SCROLLBAR_TRACK = RGBA.fromInts(40, 40, 40, 160);
 
-/** Scrollbar thumb color */
-export const SCROLLBAR_THUMB = RGBA.fromInts(100, 100, 100);
+/** Scrollbar thumb color (semi-transparent for content visibility) */
+export const SCROLLBAR_THUMB = RGBA.fromInts(100, 100, 100, 200);
 
 /** Selection background color */
 export const SELECTION_BG = RGBA.fromInts(80, 120, 200);
