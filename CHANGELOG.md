@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.16](https://github.com/monotykamary/openmux/compare/v0.2.15...v0.2.16) (2025-12-18)
+
+
+### Bug Fixes
+
+* **terminal:** prevent black flash on title updates ([57b6d5d](https://github.com/monotykamary/openmux/commit/57b6d5d2ca522798001abdc322c758f92f7a13d9))
+
 ### [0.2.15](https://github.com/monotykamary/openmux/compare/v0.2.14...v0.2.15) (2025-12-17)
 
 
