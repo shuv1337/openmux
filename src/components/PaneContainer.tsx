@@ -188,6 +188,7 @@ interface StackedPanesRendererProps {
 }
 
 function StackedPanesRenderer(props: StackedPanesRendererProps) {
+  const theme = useTheme();
   const titleCtx = useTitle();
   const activePane = () => props.stackPanes[props.activeStackIndex];
   const rect = () => activePane()?.rectangle ?? { x: 0, y: 0, width: 40, height: 12 };
@@ -214,16 +215,15 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
   const visibleTabs = createMemo(() => {
     // Access titleVersion to create reactive dependency on title changes
     titleCtx.titleVersion();
-    const visibleWidth = rect().width;
+    const visibleWidth = rect().width - 1; // Account for tab bar offset from pane edge
 
     // Build tab info with positions
     const tabItems = props.stackPanes.map((pane, index) => {
       const isActive = index === props.activeStackIndex;
       // Get title from TitleContext (avoids layout store re-renders)
       const title = titleCtx.getTitle(pane.id) ?? pane.title ?? 'pane';
-      const label = isActive
-        ? `[${title}]`
-        : ` ${title} `;
+      // Use consistent space padding for all tabs (background fill indicates active)
+      const label = ` ${title} `;
       return { pane, label, width: label.length, isActive, index };
     });
 
@@ -264,8 +264,27 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
         result.push({ pane: tab.pane, label: visibleLabel, isActive: tab.isActive });
       }
     }
-    return result;
+
+    // Calculate active tab's visual position for the connector
+    const activeTabVisualX = activeTab ? Math.max(0, activeTab.start - scrollOffset) : 0;
+    const activeTabVisualWidth = activeTab ? Math.min(activeTab.width, visibleWidth - activeTabVisualX) : 0;
+
+    return { tabs: result, activeTabVisualX, activeTabVisualWidth };
   });
+
+  // Extract just the tabs for rendering
+  const tabs = () => visibleTabs().tabs;
+
+  // Get active tab info for connector
+  const activeTabInfo = () => {
+    const { activeTabVisualX, activeTabVisualWidth } = visibleTabs();
+    return activeTabVisualWidth > 0 ? { x: activeTabVisualX, width: activeTabVisualWidth } : null;
+  };
+
+  // Whether the stacked pane area is focused (vs main pane)
+  const isPaneFocused = () => props.focusedPaneId === activePane()?.id;
+  // Active tab background color based on focus state
+  const activeTabBg = () => isPaneFocused() ? theme.pane.focusedBorderColor : theme.pane.borderColor;
 
   return (
     <Show when={activePane()}>
@@ -273,22 +292,27 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
       <box
         style={{
           position: 'absolute',
-          left: rect().x,
+          left: rect().x + 1,
           top: rect().y - 1,
-          width: rect().width,
+          width: rect().width - 1,
           height: 1,
           flexDirection: 'row',
         }}
       >
-        <For each={visibleTabs()}>
-          {({ pane, label, isActive }) => (
-            <text
-              fg={isActive ? '#00AAFF' : '#666666'}
-              onMouseDown={() => handleTabClick(pane.id)}
-            >
-              {label}
-            </text>
-          )}
+        <For each={tabs()}>
+          {({ pane, label, isActive }) => {
+            // Active tab: use computed bg color, inactive: no background
+            const bg = isActive ? activeTabBg() : undefined;
+            return (
+              <text
+                fg={isActive ? '#FFFFFF' : '#666666'}
+                bg={bg}
+                onMouseDown={() => handleTabClick(pane.id)}
+              >
+                {label}
+              </text>
+            );
+          }}
         </For>
       </box>
 
@@ -306,6 +330,22 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
         onClick={handleClick}
         onMouseInput={handleMouseInput}
       />
+
+      {/* Connector: fills the gap between active tab and pane border using upper half block */}
+      <Show when={activeTabInfo()}>
+        {(info: () => { x: number; width: number }) => (
+          <text
+            style={{
+              position: 'absolute',
+              left: rect().x + 1 + info().x,
+              top: rect().y,
+            }}
+            fg={activeTabBg()}
+          >
+            {'▀'.repeat(info().width)}
+          </text>
+        )}
+      </Show>
     </Show>
   );
 }
