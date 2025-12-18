@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.19](https://github.com/monotykamary/openmux/compare/v0.2.18...v0.2.19) (2025-12-18)
+
+
+### Bug Fixes
+
+* **terminal:** clear buffer on init to prevent smearing artifacts ([12919ba](https://github.com/monotykamary/openmux/commit/12919bafc8d7149359f550d40ecbf144c17152dd))
+
 ### [0.2.18](https://github.com/monotykamary/openmux/compare/v0.2.17...v0.2.18) (2025-12-18)
 
 
