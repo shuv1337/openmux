@@ -302,6 +302,7 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
         width={rect().width}
         height={rect().height}
         ptyId={activePane()!.ptyId}
+        hideTitle={true}
         onClick={handleClick}
         onMouseInput={handleMouseInput}
       />

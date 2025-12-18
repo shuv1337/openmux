@@ -277,7 +277,7 @@ export function AggregateView(props: AggregateViewProps) {
               borderStyle: borderStyleMap[theme.pane.borderStyle] ?? 'single',
               borderColor: state.previewMode ? theme.pane.borderColor : theme.pane.focusedBorderColor,
             }}
-            title={`PTYs (${state.matchedPtys.length})`}
+            title={` PTYs (${state.matchedPtys.length}) `}
             titleAlignment="left"
             onMouseDown={(e: { preventDefault: () => void }) => {
               e.preventDefault();

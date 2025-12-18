@@ -33,6 +33,7 @@ interface PaneProps {
   width: number;
   height: number;
   ptyId?: string;
+  hideTitle?: boolean;
   children?: JSX.Element;
   onClick?: () => void;
   onMouseInput?: (data: string) => void;
@@ -111,12 +112,14 @@ export function Pane(props: PaneProps) {
   // Title with focus indicator
   // Read from TitleContext (non-reactive Map + version signal) to avoid layout store re-renders
   const displayTitle = createMemo(() => {
+    // Hide title when rendering as a stacked tab (title shown in tab bar instead)
+    if (props.hideTitle) return undefined;
     // Access titleVersion to create reactive dependency on title changes
     titleCtx.titleVersion();
     // Get title from TitleContext, fall back to prop for backwards compatibility
     const title = titleCtx.getTitle(props.id) ?? props.title;
     if (!title) return undefined;
-    return props.isFocused ? `● ${title}` : title;
+    return ` ${title} `;
   });
 
   // Calculate relative coordinates
