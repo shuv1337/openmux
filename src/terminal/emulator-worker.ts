@@ -314,6 +314,17 @@ async function handleInit(
     };
 
     sessions.set(sessionId, session);
+
+    // IMPORTANT: Clear the terminal buffer before reading initial state.
+    // When WASM memory is reused after a terminal is freed, the new terminal's
+    // buffer may contain stale data from the previous terminal. This causes
+    // "smearing" artifacts where text from closed panes appears in new ones.
+    // Writing a clear sequence ensures we start with a clean slate.
+    // Using ED2 (clear entire screen) + CUP (cursor home) instead of RIS
+    // to avoid side effects like resetting modes.
+    terminal.write(new TextEncoder().encode('\x1b[2J\x1b[H'));
+    terminal.clearDirty(); // Clear dirty flags from the clear operation
+
     sendMessage({ type: 'initialized', sessionId });
 
     // Send initial full state so main thread has valid state immediately
