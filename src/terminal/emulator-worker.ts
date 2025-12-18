@@ -48,6 +48,8 @@ interface WorkerSession {
   lastModes: TerminalModes;
   // Scrollback cache (LRU would be better, but Map is simpler for now)
   scrollbackCache: Map<number, ArrayBuffer>;
+  // Track scrollback length for cache invalidation
+  lastScrollbackLength: number;
 }
 
 // ============================================================================
@@ -308,6 +310,7 @@ async function handleInit(
       currentTitle: '',
       lastModes: getModes(terminal),
       scrollbackCache: new Map(),
+      lastScrollbackLength: 0,
     };
 
     sessions.set(sessionId, session);
@@ -438,6 +441,14 @@ function handleWrite(sessionId: string, data: ArrayBuffer): void {
 
     // Check for mode changes
     checkModeChanges(sessionId, session);
+
+    // HYBRID FIX: Clear worker cache when scrollback length changes
+    // This ensures the worker-side cache doesn't serve stale content
+    const currentScrollbackLength = session.terminal.getScrollbackLength();
+    if (currentScrollbackLength !== session.lastScrollbackLength) {
+      session.scrollbackCache.clear();
+      session.lastScrollbackLength = currentScrollbackLength;
+    }
 
     // Send dirty update
     sendDirtyUpdate(sessionId, session);

@@ -66,6 +66,9 @@ export class WorkerEmulator implements ITerminalEmulator {
   private scrollbackCache = new Map<number, TerminalCell[]>();
   private maxScrollbackCacheSize = 1000;
 
+  // Track scrollback length for cache invalidation
+  private lastScrollbackLength = 0;
+
   // Unsubscribe functions
   private unsubUpdate: (() => void) | null = null;
   private unsubTitle: (() => void) | null = null;
@@ -115,6 +118,24 @@ export class WorkerEmulator implements ITerminalEmulator {
 
   private handleUpdate(update: DirtyTerminalUpdate): void {
     this.cachedUpdate = update;
+
+    // HYBRID FIX: Clear scrollback cache when scrollback length changes
+    // This handles content shifting when new lines push old ones up
+    const scrollbackLengthChanged =
+      update.scrollState.scrollbackLength !== this.lastScrollbackLength;
+
+    if (scrollbackLengthChanged) {
+      this.scrollbackCache.clear();
+      this.lastScrollbackLength = update.scrollState.scrollbackLength;
+    }
+
+    // HYBRID FIX (part B): Also clear when at bottom receiving updates
+    // Extra safety - ensures cache is fresh when viewing live terminal
+    // This handles edge case where scrollback is at limit (10k lines) and
+    // length doesn't change but content still shifts as old lines are evicted
+    if (this.scrollState.isAtBottom) {
+      this.scrollbackCache.clear();
+    }
 
     // Update scroll state
     this.scrollState = {
