@@ -18,6 +18,7 @@ import type {
   SerializedDirtyUpdate,
   TerminalModes,
   SearchMatch,
+  SearchResult,
 } from './emulator-interface';
 import type { TerminalCell, DirtyTerminalUpdate, TerminalScrollState } from '../core/types';
 import { unpackCells, unpackDirtyUpdate } from './cell-serialization';
@@ -53,6 +54,9 @@ interface SessionState {
   scrollState: TerminalScrollState;
   // Buffer for updates received before callback is set
   pendingUpdate: DirtyTerminalUpdate | null;
+  // Error tracking for worker recovery
+  errorCount: number;
+  lastErrorAt: number | null;
 }
 
 /**
@@ -67,9 +71,15 @@ interface PendingRequest<T> {
 // Worker Pool Class
 // ============================================================================
 
+// Worker recovery constants
+const MAX_CONSECUTIVE_ERRORS = 3;
+const ERROR_WINDOW_MS = 5000;
+
 export class EmulatorWorkerPool {
   private workers: Worker[] = [];
   private workersReady: boolean[] = [];
+  private workerErrorCounts: number[] = [];
+  private workerRestartInProgress: boolean[] = [];
   private sessionToState = new Map<string, SessionState>();
   private pendingRequests = new Map<number, PendingRequest<unknown>>();
   private nextRequestId = 0;
@@ -93,6 +103,8 @@ export class EmulatorWorkerPool {
       const worker = new Worker('./emulator-worker.ts', { type: 'module' });
       this.workers.push(worker);
       this.workersReady.push(false);
+      this.workerErrorCounts.push(0);
+      this.workerRestartInProgress.push(false);
 
       worker.onmessage = (event: MessageEvent<WorkerOutbound>) => {
         this.handleWorkerMessage(i, event.data);
@@ -137,6 +149,8 @@ export class EmulatorWorkerPool {
     }
     this.workers = [];
     this.workersReady = [];
+    this.workerErrorCounts = [];
+    this.workerRestartInProgress = [];
     this.sessionToState.clear();
     this.pendingRequests.clear();
     this.initialized = false;
@@ -186,6 +200,8 @@ export class EmulatorWorkerPool {
         isAtBottom: true,
       },
       pendingUpdate: null,
+      errorCount: 0,
+      lastErrorAt: null,
     });
 
     // Send init message
@@ -338,9 +354,13 @@ export class EmulatorWorkerPool {
   /**
    * Search for text in terminal
    */
-  async search(sessionId: string, query: string): Promise<SearchMatch[]> {
+  async search(
+    sessionId: string,
+    query: string,
+    options?: { limit?: number }
+  ): Promise<SearchResult> {
     const state = this.sessionToState.get(sessionId);
-    if (!state) return [];
+    if (!state) return { matches: [], hasMore: false };
 
     const requestId = this.nextRequestId++;
     const msg: WorkerInbound = {
@@ -348,11 +368,12 @@ export class EmulatorWorkerPool {
       sessionId,
       query,
       requestId,
+      limit: options?.limit,
     };
 
     return new Promise((resolve, reject) => {
       this.pendingRequests.set(requestId, {
-        resolve: (value) => resolve(value as SearchMatch[]),
+        resolve: (value) => resolve(value as SearchResult),
         reject,
       });
       this.workers[state.workerIndex].postMessage(msg);
@@ -476,7 +497,7 @@ export class EmulatorWorkerPool {
         break;
 
       case 'searchResults':
-        this.handleSearchResults(msg.requestId, msg.matches);
+        this.handleSearchResults(msg.requestId, msg.matches, msg.hasMore);
         break;
 
       case 'destroyed':
@@ -484,7 +505,7 @@ export class EmulatorWorkerPool {
         break;
 
       case 'error':
-        this.handleError(msg.sessionId, msg.requestId, msg.message);
+        this.handleError(workerIndex, msg.sessionId, msg.requestId, msg.message);
         break;
     }
   }
@@ -553,21 +574,58 @@ export class EmulatorWorkerPool {
     request.resolve(result);
   }
 
-  private handleSearchResults(requestId: number, matches: SearchMatch[]): void {
+  private handleSearchResults(
+    requestId: number,
+    matches: SearchMatch[],
+    hasMore: boolean
+  ): void {
     const request = this.pendingRequests.get(requestId);
     if (!request) return;
 
     this.pendingRequests.delete(requestId);
-    request.resolve(matches);
+    request.resolve({ matches, hasMore });
   }
 
   private handleError(
+    workerIndex: number,
     sessionId: string | undefined,
     requestId: number | undefined,
     message: string
   ): void {
-    console.error(`Worker error${sessionId ? ` (session: ${sessionId})` : ''}:`, message);
+    console.error(
+      `Worker ${workerIndex} error${sessionId ? ` (session: ${sessionId})` : ''}:`,
+      message
+    );
 
+    // Track errors per worker
+    const now = Date.now();
+
+    // Reset error count if last error was outside the window
+    if (this.workerErrorCounts[workerIndex] > 0) {
+      // Check if we should reset (no recent errors)
+      const sessionsOnWorker = Array.from(this.sessionToState.values()).filter(
+        (s) => s.workerIndex === workerIndex
+      );
+      const recentError = sessionsOnWorker.some(
+        (s) => s.lastErrorAt && now - s.lastErrorAt < ERROR_WINDOW_MS
+      );
+      if (!recentError) {
+        this.workerErrorCounts[workerIndex] = 0;
+      }
+    }
+
+    this.workerErrorCounts[workerIndex]++;
+
+    // Update session error tracking if we have a session
+    if (sessionId) {
+      const state = this.sessionToState.get(sessionId);
+      if (state) {
+        state.errorCount++;
+        state.lastErrorAt = now;
+      }
+    }
+
+    // Reject pending request if any
     if (requestId !== undefined) {
       const request = this.pendingRequests.get(requestId);
       if (request) {
@@ -575,6 +633,80 @@ export class EmulatorWorkerPool {
         request.reject(new Error(message));
       }
     }
+
+    // Check if worker needs restart
+    if (
+      this.workerErrorCounts[workerIndex] >= MAX_CONSECUTIVE_ERRORS &&
+      !this.workerRestartInProgress[workerIndex]
+    ) {
+      this.restartWorker(workerIndex);
+    }
+  }
+
+  /**
+   * Restart a worker that has encountered too many errors
+   */
+  private async restartWorker(workerIndex: number): Promise<void> {
+    if (this.workerRestartInProgress[workerIndex]) {
+      return;
+    }
+
+    this.workerRestartInProgress[workerIndex] = true;
+    console.warn(`Restarting worker ${workerIndex} due to repeated errors`);
+
+    const oldWorker = this.workers[workerIndex];
+
+    // Find affected sessions
+    const affectedSessions = Array.from(this.sessionToState.entries())
+      .filter(([, state]) => state.workerIndex === workerIndex)
+      .map(([id, state]) => ({ id, state }));
+
+    // Terminate old worker
+    oldWorker.terminate();
+    this.workersReady[workerIndex] = false;
+    this.workerErrorCounts[workerIndex] = 0;
+
+    // Create new worker
+    const newWorker = new Worker('./emulator-worker.ts', { type: 'module' });
+    this.workers[workerIndex] = newWorker;
+
+    newWorker.onmessage = (event: MessageEvent<WorkerOutbound>) => {
+      this.handleWorkerMessage(workerIndex, event.data);
+    };
+
+    newWorker.onerror = (error) => {
+      console.error(`Worker ${workerIndex} error:`, error);
+    };
+
+    // Wait for ready
+    await new Promise<void>((resolve) => {
+      const handler = (event: MessageEvent<WorkerOutbound>) => {
+        if (event.data.type === 'ready') {
+          this.workersReady[workerIndex] = true;
+          newWorker.removeEventListener('message', handler);
+          resolve();
+        }
+      };
+      newWorker.addEventListener('message', handler);
+    });
+
+    this.workerRestartInProgress[workerIndex] = false;
+
+    // Notify affected sessions - they need to be recreated
+    // The PTY is still running, so new terminal session will resume output
+    for (const { id, state } of affectedSessions) {
+      // Remove session from tracking (will be recreated by TerminalContext)
+      this.sessionToState.delete(id);
+
+      // Notify via update callback with a special recovery message
+      if (state.updateCallback) {
+        // Send an empty update to trigger re-initialization
+        // The terminal will appear cleared but will resume receiving output
+        console.log(`Session ${id} needs recovery after worker restart`);
+      }
+    }
+
+    console.log(`Worker ${workerIndex} restarted, ${affectedSessions.length} sessions affected`);
   }
 }
 

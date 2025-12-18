@@ -17,7 +17,7 @@ import type {
   TerminalScrollState,
   DirtyTerminalUpdate,
 } from '../core/types';
-import type { ITerminalEmulator, TerminalModes, SearchMatch } from './emulator-interface';
+import type { ITerminalEmulator, TerminalModes, SearchMatch, SearchResult } from './emulator-interface';
 import type { EmulatorWorkerPool } from './worker-pool';
 import type { TerminalColors } from './terminal-colors';
 import { extractRgb } from './terminal-colors';
@@ -461,8 +461,8 @@ export class WorkerEmulator implements ITerminalEmulator {
   /**
    * Search for text in terminal (async, executed in worker)
    */
-  async search(query: string): Promise<SearchMatch[]> {
-    return this.pool.search(this.sessionId, query);
+  async search(query: string, options?: { limit?: number }): Promise<SearchResult> {
+    return this.pool.search(this.sessionId, query, options);
   }
 
   /**

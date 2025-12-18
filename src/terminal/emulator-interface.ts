@@ -156,8 +156,10 @@ export interface ITerminalEmulator {
   /**
    * Search for text in terminal (scrollback + visible area)
    * Returns matches sorted from oldest to newest
+   * @param query Search string
+   * @param options.limit Maximum number of matches to return (default: 500)
    */
-  search(query: string): Promise<SearchMatch[]>;
+  search(query: string, options?: { limit?: number }): Promise<SearchResult>;
 }
 
 /**
@@ -215,7 +217,7 @@ export type WorkerInbound =
   | { type: 'getScrollbackLine'; sessionId: string; offset: number; requestId: number }
   | { type: 'getScrollbackLines'; sessionId: string; startOffset: number; count: number; requestId: number }
   | { type: 'getTerminalState'; sessionId: string; requestId: number }
-  | { type: 'search'; sessionId: string; query: string; requestId: number }
+  | { type: 'search'; sessionId: string; query: string; requestId: number; limit?: number }
   | { type: 'destroy'; sessionId: string };
 
 /**
@@ -230,7 +232,7 @@ export type WorkerOutbound =
   | { type: 'scrollbackLine'; requestId: number; cells: ArrayBuffer | null }
   | { type: 'scrollbackLines'; requestId: number; cells: ArrayBuffer[]; offsets: number[] }
   | { type: 'terminalState'; requestId: number; state: ArrayBuffer }
-  | { type: 'searchResults'; requestId: number; matches: SearchMatch[] }
+  | { type: 'searchResults'; requestId: number; matches: SearchMatch[]; hasMore: boolean }
   | { type: 'destroyed'; sessionId: string }
   | { type: 'error'; sessionId?: string; requestId?: number; message: string };
 
@@ -253,4 +255,14 @@ export interface SearchMatch {
   startCol: number;
   /** Column where match ends (exclusive) */
   endCol: number;
+}
+
+/**
+ * Search result with pagination info
+ */
+export interface SearchResult {
+  /** Matches found (up to limit) */
+  matches: SearchMatch[];
+  /** Whether more matches exist beyond the limit */
+  hasMore: boolean;
 }

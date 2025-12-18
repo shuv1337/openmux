@@ -91,6 +91,7 @@ export function SearchProvider(props: SearchProviderProps) {
     updateSearchState({
       query: '',
       matches: [],
+      hasMore: false,
       currentMatchIndex: -1,
       ptyId,
       emulator,
@@ -145,7 +146,7 @@ export function SearchProvider(props: SearchProviderProps) {
       if (pendingQuery !== query) return; // Query changed, skip
 
       // Perform search via emulator (async - may run in worker)
-      const matches = await currentState.emulator.search(query);
+      const { matches, hasMore } = await currentState.emulator.search(query);
 
       // Check again after async search in case state changed
       if (pendingQuery !== query) return;
@@ -158,6 +159,7 @@ export function SearchProvider(props: SearchProviderProps) {
         ...currentState,
         query,
         matches,
+        hasMore,
         currentMatchIndex: initialIndex,
       });
 

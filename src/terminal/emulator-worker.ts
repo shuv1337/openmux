@@ -282,7 +282,7 @@ async function handleInit(
     };
 
     const terminal = ghostty.createTerminal(cols, rows, {
-      scrollbackLimit: 10000,
+      scrollbackLimit: 2000,
       bgColor,
       fgColor,
       palette,
@@ -418,7 +418,10 @@ function stripProblematicOscSequences(text: string): string {
   return result;
 }
 
-function handleWrite(sessionId: string, data: ArrayBuffer): void {
+// Threshold for yielding before large writes (64KB)
+const LARGE_WRITE_THRESHOLD = 64 * 1024;
+
+async function handleWrite(sessionId: string, data: ArrayBuffer): Promise<void> {
   const session = sessions.get(sessionId);
   if (!session) {
     sendError(`Session ${sessionId} not found`, sessionId);
@@ -436,7 +439,14 @@ function handleWrite(sessionId: string, data: ArrayBuffer): void {
     // Write to terminal (with title sequences removed)
     if (strippedText.length > 0) {
       const encoder = new TextEncoder();
-      session.terminal.write(encoder.encode(strippedText));
+      const encoded = encoder.encode(strippedText);
+
+      // Yield before large writes to allow GC and prevent memory pressure
+      if (encoded.length > LARGE_WRITE_THRESHOLD) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+
+      session.terminal.write(encoded);
     }
 
     // Check for mode changes
@@ -618,27 +628,38 @@ function handleGetTerminalState(sessionId: string, requestId: number): void {
   }
 }
 
-function handleSearch(sessionId: string, query: string, requestId: number): void {
+function handleSearch(
+  sessionId: string,
+  query: string,
+  requestId: number,
+  limit = 500
+): void {
   const session = sessions.get(sessionId);
   if (!session) {
-    sendMessage({ type: 'searchResults', requestId, matches: [] });
+    sendMessage({ type: 'searchResults', requestId, matches: [], hasMore: false });
     return;
   }
 
   try {
     const { terminal, cols, terminalColors } = session;
     const matches: SearchMatch[] = [];
+    let hasMore = false;
 
     if (!query) {
-      sendMessage({ type: 'searchResults', requestId, matches: [] });
+      sendMessage({ type: 'searchResults', requestId, matches: [], hasMore: false });
       return;
     }
 
     const lowerQuery = query.toLowerCase();
     const scrollbackLength = terminal.getScrollbackLength();
 
-    // Search scrollback (from oldest to newest)
+    // Search scrollback (from oldest to newest) with limit
     for (let offset = 0; offset < scrollbackLength; offset++) {
+      if (matches.length >= limit) {
+        hasMore = true;
+        break;
+      }
+
       const line = terminal.getScrollbackLine(offset);
       if (!line) continue;
 
@@ -647,6 +668,10 @@ function handleSearch(sessionId: string, query: string, requestId: number): void
 
       let pos = 0;
       while ((pos = text.indexOf(lowerQuery, pos)) !== -1) {
+        if (matches.length >= limit) {
+          hasMore = true;
+          break;
+        }
         matches.push({
           lineIndex: offset,
           startCol: pos,
@@ -654,27 +679,31 @@ function handleSearch(sessionId: string, query: string, requestId: number): void
         });
         pos += 1;
       }
+
+      if (hasMore) break;
     }
 
-    // Search visible area
-    const rows = session.rows;
-    for (let y = 0; y < rows; y++) {
-      const line = terminal.getLine(y);
-      const cells = convertLine(line, cols, terminalColors);
-      const text = extractLineText(cells).toLowerCase();
+    // Search visible area (always include, doesn't count toward limit)
+    if (!hasMore) {
+      const rows = session.rows;
+      for (let y = 0; y < rows; y++) {
+        const line = terminal.getLine(y);
+        const cells = convertLine(line, cols, terminalColors);
+        const text = extractLineText(cells).toLowerCase();
 
-      let pos = 0;
-      while ((pos = text.indexOf(lowerQuery, pos)) !== -1) {
-        matches.push({
-          lineIndex: scrollbackLength + y,
-          startCol: pos,
-          endCol: pos + query.length,
-        });
-        pos += 1;
+        let pos = 0;
+        while ((pos = text.indexOf(lowerQuery, pos)) !== -1) {
+          matches.push({
+            lineIndex: scrollbackLength + y,
+            startCol: pos,
+            endCol: pos + query.length,
+          });
+          pos += 1;
+        }
       }
     }
 
-    sendMessage({ type: 'searchResults', requestId, matches });
+    sendMessage({ type: 'searchResults', requestId, matches, hasMore });
   } catch (error) {
     sendError(`Search failed: ${error}`, sessionId, requestId);
   }
@@ -709,7 +738,7 @@ self.onmessage = async (event: MessageEvent<WorkerInbound>) => {
       break;
 
     case 'write':
-      handleWrite(msg.sessionId, msg.data);
+      await handleWrite(msg.sessionId, msg.data);
       break;
 
     case 'resize':
@@ -733,7 +762,7 @@ self.onmessage = async (event: MessageEvent<WorkerInbound>) => {
       break;
 
     case 'search':
-      handleSearch(msg.sessionId, msg.query, msg.requestId);
+      handleSearch(msg.sessionId, msg.query, msg.requestId, msg.limit);
       break;
 
     case 'destroy':

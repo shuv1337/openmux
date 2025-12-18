@@ -22,8 +22,10 @@ export interface SearchMatch {
 export interface SearchState {
   /** Current search query */
   query: string;
-  /** All matches found */
+  /** All matches found (up to limit) */
   matches: SearchMatch[];
+  /** Whether more matches exist beyond the limit */
+  hasMore: boolean;
   /** Index of currently highlighted match (-1 if no matches) */
   currentMatchIndex: number;
   /** The ptyId being searched */
