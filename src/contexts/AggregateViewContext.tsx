@@ -17,11 +17,18 @@ import { listAllPtysWithMetadata, subscribeToPtyLifecycle, subscribeToAllTitleCh
 // State Types
 // =============================================================================
 
+/** Git diff statistics */
+export interface GitDiffStats {
+  added: number;
+  removed: number;
+}
+
 /** PTY info for the aggregate view */
 export interface PtyInfo {
   ptyId: string;
   cwd: string;
   gitBranch: string | undefined;
+  gitDiffStats: GitDiffStats | undefined;
   foregroundProcess: string | undefined;
   /** Workspace ID where this PTY is located (if found in current session) */
   workspaceId: number | undefined;

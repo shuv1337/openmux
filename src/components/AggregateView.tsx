@@ -301,6 +301,8 @@ export function AggregateView(props: AggregateViewProps) {
                       pty={pty}
                       isSelected={index() === state.selectedIndex}
                       maxWidth={layout().listInnerWidth}
+                      index={index()}
+                      totalCount={state.matchedPtys.length}
                       onClick={() => {
                         // Select this PTY and exit preview mode if active
                         selectPty(pty.ptyId);

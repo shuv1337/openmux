@@ -7,11 +7,13 @@ import { Effect, Option } from "effect"
 import { runEffect } from "../runtime"
 import { Pty } from "../services"
 import type { PtyId } from "../types"
+import { getGitDiffStats, type GitDiffStats } from "../services/pty/helpers"
 
 interface PtyMetadata {
   ptyId: string
   cwd: string
   gitBranch: string | undefined
+  gitDiffStats: GitDiffStats | undefined
   foregroundProcess: string | undefined
   workspaceId: number | undefined
   paneId: string | undefined
@@ -47,10 +49,16 @@ const fetchPtyMetadata = (ptyId: PtyId) =>
       return Option.none<PtyMetadata>()
     }
 
+    // Fetch git diff stats (only if we have a cwd)
+    const gitDiffStats = yield* getGitDiffStats(cwd).pipe(
+      Effect.orElseSucceed(() => undefined)
+    )
+
     return Option.some<PtyMetadata>({
       ptyId,
       cwd,
       gitBranch,
+      gitDiffStats,
       foregroundProcess,
       workspaceId: undefined, // Will be enriched by AggregateView
       paneId: undefined,      // Will be enriched by AggregateView
