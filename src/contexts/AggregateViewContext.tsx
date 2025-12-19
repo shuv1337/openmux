@@ -95,12 +95,17 @@ function debounce<T extends (...args: unknown[]) => void>(
 function filterPtys(ptys: PtyInfo[], query: string): PtyInfo[] {
   if (!query.trim()) return ptys;
 
-  const lowerQuery = query.toLowerCase();
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return ptys;
+
   return ptys.filter((pty) => {
     const cwd = pty.cwd.toLowerCase();
     const branch = pty.gitBranch?.toLowerCase() ?? '';
     const process = pty.foregroundProcess?.toLowerCase() ?? '';
-    return cwd.includes(lowerQuery) || branch.includes(lowerQuery) || process.includes(lowerQuery);
+    // OR logic: match if ANY term matches ANY field
+    return terms.some((term) =>
+      cwd.includes(term) || branch.includes(term) || process.includes(term)
+    );
   });
 }
 
