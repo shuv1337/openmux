@@ -3,11 +3,10 @@
  * Verifies Effect-based subscription management with synchronous cleanup
  */
 import { describe, test, expect, vi } from 'vitest'
-import { Effect, Scope, Logger, LogLevel } from 'effect'
+import { Effect, Logger, LogLevel } from 'effect'
 import {
   makeSubscriptionRegistry,
   makeSubscriptionId,
-  type SubscriptionId
 } from '../../../src/effect/services/pty/subscription-manager'
 
 describe('SubscriptionRegistry', () => {
@@ -103,38 +102,6 @@ describe('SubscriptionRegistry', () => {
           expect(callback2).toHaveBeenCalledWith('message')
         })
       )
-    })
-  })
-
-  describe('subscribeScoped', () => {
-    test('should auto-cleanup when scope closes', async () => {
-      const callback = vi.fn()
-      let registryRef: Awaited<ReturnType<typeof Effect.runPromise<ReturnType<typeof makeSubscriptionRegistry<string>>>>> | null = null
-
-      // Create registry outside scope so we can notify after scope closes
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          registryRef = yield* makeSubscriptionRegistry<string>()
-        })
-      )
-
-      // Subscribe in a scope
-      await Effect.runPromise(
-        Effect.scoped(
-          Effect.gen(function* () {
-            yield* registryRef!.subscribeScoped(callback)
-
-            // Should receive notifications while scope is open
-            yield* registryRef!.notify('in scope')
-            expect(callback).toHaveBeenCalledWith('in scope')
-          })
-        )
-      )
-
-      // After scope closes, subscription should be cleaned up
-      callback.mockClear()
-      await Effect.runPromise(registryRef!.notify('after scope'))
-      expect(callback).not.toHaveBeenCalled()
     })
   })
 

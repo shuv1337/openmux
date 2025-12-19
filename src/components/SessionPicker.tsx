@@ -167,22 +167,8 @@ export function SessionPicker(props: SessionPickerProps) {
 
   // Register keyboard handler with KeyboardRouter
   createEffect(() => {
-    let unsubscribe: (() => void) | null = null;
-    let mounted = true;
-
-    registerKeyboardHandler('sessionPicker', handleKeyDown).then((unsub) => {
-      if (mounted) {
-        unsubscribe = unsub;
-      } else {
-        // Component unmounted before registration completed - cleanup immediately
-        unsub();
-      }
-    });
-
-    onCleanup(() => {
-      mounted = false;
-      if (unsubscribe) unsubscribe();
-    });
+    const unsubscribe = registerKeyboardHandler('sessionPicker', handleKeyDown);
+    onCleanup(() => unsubscribe());
   });
 
   // Calculate overlay dimensions

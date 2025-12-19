@@ -6,5 +6,4 @@ export * from "./FileSystem"
 export * from "./Pty"
 export * from "./SessionStorage"
 export * from "./SessionManager"
-export * from "./KeyboardRouter"
-export * from "./AppCoordinator"
+// KeyboardRouter is a plain TypeScript module, exported via bridge instead

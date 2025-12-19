@@ -89,22 +89,8 @@ export function ConfirmationDialog(props: ConfirmationDialogProps) {
 
   // Register keyboard handler with KeyboardRouter
   createEffect(() => {
-    let unsubscribe: (() => void) | null = null;
-    let mounted = true;
-
-    registerKeyboardHandler('confirmationDialog', handleKeyDown).then((unsub) => {
-      if (mounted) {
-        unsubscribe = unsub;
-      } else {
-        // Component unmounted before registration completed - cleanup immediately
-        unsub();
-      }
-    });
-
-    onCleanup(() => {
-      mounted = false;
-      if (unsubscribe) unsubscribe();
-    });
+    const unsubscribe = registerKeyboardHandler('confirmationDialog', handleKeyDown);
+    onCleanup(() => unsubscribe());
   });
 
   const config = () => MESSAGES[props.type];

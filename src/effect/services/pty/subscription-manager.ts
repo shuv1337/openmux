@@ -1,11 +1,10 @@
 /**
  * Subscription management utilities for PTY service.
- * Provides Effect-based subscription tracking with synchronous cleanup support.
+ * Provides subscription tracking with synchronous cleanup support.
  *
  * Uses a mutable Map as the source of truth for subscriptions. This enables:
  * - Synchronous cleanup (required for SolidJS onCleanup)
  * - Synchronous notifications (for non-Effect contexts)
- * - Effect-based API for consistency with the rest of the codebase
  */
 
 import { Effect } from "effect"
@@ -33,9 +32,8 @@ export interface Subscription<T> {
 /**
  * Create a subscription registry for a specific event type.
  *
- * Provides three subscription modes:
+ * Provides:
  * - `subscribe`: Returns manual cleanup function (for SolidJS bridge)
- * - `subscribeScoped`: Uses acquireRelease (for Effect-pure code)
  * - `notify`/`notifySync`: Event broadcasting
  */
 export const makeSubscriptionRegistry = <T>() =>
@@ -63,29 +61,6 @@ export const makeSubscriptionRegistry = <T>() =>
           subscriptions.delete(id)
         }
       })
-
-    /**
-     * Subscribe using acquireRelease - cleanup happens automatically when Scope closes.
-     * Use this for Effect-pure code paths.
-     */
-    const subscribeScoped = (callback: (value: T) => void) =>
-      Effect.acquireRelease(
-        // Acquire: add subscription
-        Effect.sync(() => {
-          const id = makeSubscriptionId()
-          const sub: Subscription<T> = {
-            id,
-            callback,
-            createdAt: Date.now(),
-          }
-          subscriptions.set(id, sub)
-          return id
-        }),
-        // Release: remove subscription (runs when Scope closes)
-        (id) => Effect.sync(() => {
-          subscriptions.delete(id)
-        })
-      )
 
     /**
      * Notify all subscribers asynchronously (for Effect contexts).
@@ -124,7 +99,6 @@ export const makeSubscriptionRegistry = <T>() =>
 
     return {
       subscribe,
-      subscribeScoped,
       notify,
       notifySync,
       getSubscriberCount,

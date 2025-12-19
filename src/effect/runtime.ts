@@ -4,7 +4,7 @@
  */
 import { Effect, Layer, ManagedRuntime, Runtime } from "effect"
 import { AppConfig, ThemeConfig } from "./Config"
-import { Clipboard, FileSystem, Pty, SessionStorage, SessionManager, KeyboardRouter, AppCoordinator } from "./services"
+import { Clipboard, FileSystem, Pty, SessionStorage, SessionManager } from "./services"
 
 // =============================================================================
 // Layer Composition
@@ -32,20 +32,13 @@ const SessionManagerLayer = SessionManager.layer.pipe(
   Layer.provide(Layer.merge(SessionLayer, PtyLayer))
 )
 
-/** Coordination services layer (no dependencies) */
-const CoordinationLayer = Layer.mergeAll(
-  KeyboardRouter.layer,
-  AppCoordinator.layer
-)
-
 /** Full application layer */
 export const AppLayer = Layer.mergeAll(
   ConfigLayer,
   IoLayer,
   PtyLayer,
   SessionLayer,
-  SessionManagerLayer,
-  CoordinationLayer
+  SessionManagerLayer
 )
 
 /** Test layer composition */
@@ -62,19 +55,12 @@ const TestSessionLayer = SessionStorage.testLayer
 
 const TestSessionManagerLayer = SessionManager.testLayer
 
-/** Test coordination layer (same as production - stateless) */
-const TestCoordinationLayer = Layer.mergeAll(
-  KeyboardRouter.layer,
-  AppCoordinator.layer
-)
-
 export const TestAppLayer = Layer.mergeAll(
   TestConfigLayer,
   TestIoLayer,
   TestPtyLayer,
   TestSessionLayer,
-  TestSessionManagerLayer,
-  TestCoordinationLayer
+  TestSessionManagerLayer
 )
 
 // =============================================================================
@@ -90,8 +76,6 @@ export type AppServices =
   | Pty
   | SessionStorage
   | SessionManager
-  | KeyboardRouter
-  | AppCoordinator
 
 // =============================================================================
 // Managed Runtime
