@@ -66,18 +66,18 @@
     "@vitest/coverage-v8": "^4.0.16",
     "eslint": "^9.39.2",
     "standard-version": "^9.5.0",
-    "vitest": "^4.0.15"
+    "vitest": "^4.0.16"
   },
   "peerDependencies": {
     "typescript": "^5.9.3"
   },
   "dependencies": {
     "@effect/cli": "^0.72.1",
-    "@effect/platform": "^0.93.7",
-    "@opentui/core": "^0.1.60",
-    "@opentui/solid": "^0.1.60",
-    "effect": "^3.19.11",
+    "@effect/platform": "^0.93.8",
+    "@opentui/core": "^0.1.62",
+    "@opentui/solid": "^0.1.62",
+    "effect": "^3.19.13",
     "ghostty-web": "^0.3.0",
-    "solid-js": "^1.9.9"
+    "solid-js": "^1.9.10"
   }
 }
