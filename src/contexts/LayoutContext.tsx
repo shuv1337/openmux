@@ -17,7 +17,6 @@ import {
   getWorkspacePaneCount,
   calculateMasterStackLayout,
 } from '../core/operations/master-stack-layout';
-import { notifyTerminalViewMount } from '../components/TerminalView';
 import {
   layoutReducer,
   getActiveWorkspace,
@@ -162,8 +161,6 @@ export function LayoutProvider(props: LayoutProviderProps) {
   // This avoids diffing the entire workspaces object for a single property change
   const applySetPanePty = (paneId: string, ptyId: string) => {
     const start = DEBUG_ACTION_TIMING ? performance.now() : 0;
-    // Notify TerminalView for timing measurement
-    notifyTerminalViewMount();
 
     const wsId = state.activeWorkspaceId;
     const workspace = state.workspaces[wsId];

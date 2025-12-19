@@ -137,18 +137,14 @@ function AppContent() {
 
   // Create new pane handler - instant feedback, CWD retrieval in background
   const handleNewPane = () => {
-    const start = performance.now();
-
-    // Fire off CWD retrieval in background (don't await - takes ~21ms)
+    // Fire off CWD retrieval in background (don't await)
     getFocusedCwd().then(cwd => {
       if (cwd) pendingCwdRef = cwd;
     });
 
     // Create pane immediately (shows border instantly)
-    newPane();
-    console.log(`[NEW_PANE] pane created: ${(performance.now() - start).toFixed(2)}ms`);
     // PTY will be created by the effect with CWD when available
-    // Session save is triggered automatically via layoutVersion change
+    newPane();
   };
 
   // Ref for passing CWD to effect (avoids closure issues)
@@ -280,7 +276,6 @@ function AppContent() {
         if (isSwitching) return;
 
         const createPtyForPane = (pane: typeof panes[number]) => {
-          const ptyStart = performance.now();
           try {
             // SYNC check: verify PTY wasn't created in a previous session/effect run
             const alreadyCreated = isPtyCreated(pane.id);
@@ -299,20 +294,14 @@ function AppContent() {
             let cwd = sessionCwd ?? pendingCwdRef ?? process.env.OPENMUX_ORIGINAL_CWD ?? undefined;
             pendingCwdRef = null; // Clear after use
 
-            const beforeMark = performance.now();
             // Mark as created BEFORE calling createPTY (persistent marker)
             markPtyCreated(pane.id);
-            const afterMark = performance.now();
 
             // Fire-and-forget PTY creation - don't await to avoid blocking
-            const ptyCreateStart = performance.now();
-            createPTY(pane.id, cols, rows, cwd).then(() => {
-              console.log(`[PTY] createPTY async completed: ${(performance.now() - ptyCreateStart).toFixed(2)}ms`);
-            }).catch(err => {
+            createPTY(pane.id, cols, rows, cwd).catch(err => {
               console.error(`PTY creation failed for ${pane.id}:`, err);
             });
 
-            console.log(`[PTY] createPtyForPane setup: total=${(performance.now() - ptyStart).toFixed(2)}ms, mark=${(afterMark - beforeMark).toFixed(2)}ms`);
             return true;
           } catch (err) {
             console.error(`Failed to create PTY for pane ${pane.id}:`, err);

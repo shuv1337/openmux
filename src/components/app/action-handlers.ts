@@ -53,16 +53,13 @@ export function createActionHandlers(deps: ActionHandlersDeps): ActionHandlers {
   let pendingCwdRef: string | null = null
 
   const handleNewPane = () => {
-    const start = performance.now()
-
-    // Fire off CWD retrieval in background (don't await - takes ~21ms)
+    // Fire off CWD retrieval in background (don't await)
     deps.getFocusedCwd().then(cwd => {
       if (cwd) pendingCwdRef = cwd
     })
 
     // Create pane immediately (shows border instantly)
     deps.newPane()
-    console.log(`[NEW_PANE] pane created: ${(performance.now() - start).toFixed(2)}ms`)
   }
 
   const handlePaste = () => {

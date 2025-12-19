@@ -126,18 +126,14 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
    * @param title - Optional title for the pane
    */
   const createPaneWithPTY = async (cwd?: string, title?: string): Promise<string> => {
-    const start = performance.now();
-
     // Get estimated dimensions for the new pane
     const { cols, rows } = getNewPaneDimensions();
 
     // Create PTY first (async - this is the expensive part)
     const ptyId = await createPtySession({ cols, rows, cwd });
-    const ptyDone = performance.now();
 
     // Create pane with PTY already attached - SINGLE render!
     const paneId = newPaneWithPty(ptyId, title);
-    const paneDone = performance.now();
 
     // Track the mapping
     ptyToPaneMap.set(ptyId, paneId);
@@ -153,8 +149,6 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
       unsubscribeFns.set(ptyId, unsub);
     }, 0);
 
-    console.log(`[PTY] createPaneWithPTY: pty=${(ptyDone - start).toFixed(2)}ms, pane=${(paneDone - ptyDone).toFixed(2)}ms, total=${(paneDone - start).toFixed(2)}ms`);
-
     return paneId;
   };
 
@@ -163,31 +157,23 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
    * @param options.skipPaneClose - Skip closing the pane (use when pane is already closed)
    */
   const handleDestroyPTY = (ptyId: string, options?: { skipPaneClose?: boolean }): void => {
-    const start = performance.now();
-
     // Close associated pane if this PTY is in the current session
     // Skip if caller already closed the pane (avoids redundant layout update)
     const paneId = ptyToPaneMap.get(ptyId);
     if (paneId && !options?.skipPaneClose) {
-      const closeStart = performance.now();
       closePaneById(paneId);
-      console.log(`[DESTROY] closePaneById: ${(performance.now() - closeStart).toFixed(2)}ms`);
     }
 
     // Unsubscribe from updates
     const unsub = unsubscribeFns.get(ptyId);
     if (unsub) {
-      const unsubStart = performance.now();
       unsub();
       unsubscribeFns.delete(ptyId);
-      console.log(`[DESTROY] unsub: ${(performance.now() - unsubStart).toFixed(2)}ms`);
     }
 
     // Clear caches
-    const cacheStart = performance.now();
     clearPtyCaches(ptyId, ptyCaches);
     ptyToPaneMap.delete(ptyId);
-    console.log(`[DESTROY] clearCaches: ${(performance.now() - cacheStart).toFixed(2)}ms`);
 
     // O(1) removal from session mappings using reverse index
     const sessionInfo = ptyToSessionMap.get(ptyId);
@@ -200,10 +186,7 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     }
 
     // Destroy the PTY (fire and forget)
-    const effectStart = performance.now();
     destroyPty(ptyId);
-    console.log(`[DESTROY] destroyPty (fire-and-forget): ${(performance.now() - effectStart).toFixed(2)}ms`);
-    console.log(`[DESTROY] handleDestroyPTY total: ${(performance.now() - start).toFixed(2)}ms`);
   };
 
   /**

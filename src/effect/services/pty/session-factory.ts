@@ -17,8 +17,6 @@ import { notifySubscribers } from "./notification"
 import { createDataHandler } from "./data-handler"
 import { setupQueryPassthrough } from "./query-setup"
 
-// Debug timing flag - set to true to see PTY creation timing
-const DEBUG_PTY_TIMING = false
 
 export interface SessionFactoryDeps {
   workerPool: EmulatorWorkerPool
@@ -43,15 +41,11 @@ export function createSession(
   options: CreateSessionOptions
 ): Effect.Effect<{ id: PtyId; session: InternalPtySession }, PtySpawnError> {
   return Effect.gen(function* () {
-    const startTime = DEBUG_PTY_TIMING ? performance.now() : 0
-
     const id = makePtyId()
     const cols = options.cols
     const rows = options.rows
     const cwd = options.cwd ?? process.cwd()
     const shell = deps.defaultShell
-
-    const afterColors = DEBUG_PTY_TIMING ? performance.now() : 0
 
     // Create worker-based emulator (non-blocking - worker buffers until initialized)
     const emulator = yield* Effect.try({
@@ -59,8 +53,6 @@ export function createSession(
       catch: (error) =>
         PtySpawnError.make({ shell, cwd, cause: error }),
     })
-
-    const afterEmulator = DEBUG_PTY_TIMING ? performance.now() : 0
 
     // Create graphics passthrough
     const graphicsPassthrough = new GraphicsPassthrough()
@@ -90,8 +82,6 @@ export function createSession(
       catch: (error) =>
         PtySpawnError.make({ shell, cwd, cause: error }),
     })
-
-    const afterSpawn = DEBUG_PTY_TIMING ? performance.now() : 0
 
     const session: InternalPtySession = {
       id,
@@ -166,12 +156,6 @@ export function createSession(
         callback(exitCode)
       }
     })
-
-    const afterSetup = DEBUG_PTY_TIMING ? performance.now() : 0
-
-    if (DEBUG_PTY_TIMING) {
-      console.log(`[PTY.create] Colors: ${(afterColors - startTime).toFixed(2)}ms, Emulator: ${(afterEmulator - afterColors).toFixed(2)}ms, Spawn: ${(afterSpawn - afterEmulator).toFixed(2)}ms, Setup: ${(afterSetup - afterSpawn).toFixed(2)}ms, Total: ${(afterSetup - startTime).toFixed(2)}ms`)
-    }
 
     return { id, session }
   })
