@@ -19,11 +19,6 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Setup Zig
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
-
       - name: Install dependencies
         run: bun install
 
@@ -36,9 +31,6 @@ jobs:
       - name: Run TypeScript tests with coverage
         run: bun run test:ts --coverage
 
-      - name: Run Zig tests
-        run: bun run test:zig
-
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
@@ -46,3 +38,18 @@ jobs:
           files: ./coverage/coverage-final.json
           fail_ci_if_error: false
           verbose: true
+
+  test-zig:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Run Zig tests
+        run: cd zig-pty && zig build test --summary all
