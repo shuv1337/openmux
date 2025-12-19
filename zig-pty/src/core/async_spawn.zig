@@ -4,11 +4,13 @@
 const std = @import("std");
 const constants = @import("../util/constants.zig");
 const spawn_module = @import("spawn.zig");
+const handle_registry = @import("handle_registry.zig");
 
 pub const SpawnState = enum(u8) {
     pending,
     complete,
     failed,
+    cancelled,
 };
 
 pub const SpawnRequest = struct {
@@ -102,12 +104,21 @@ fn spawnThreadLoop() void {
 
             const result = spawn_module.spawnPty(cmd_ptr, cwd_ptr, env_ptr, req.cols, req.rows);
 
-            if (result >= 0) {
-                req.result_handle.store(result, .release);
-                req.state.store(.complete, .release);
+            // Atomically try to transition from pending to complete/failed.
+            // If this fails, spawnCancel already set state to cancelled.
+            const new_state: SpawnState = if (result >= 0) .complete else .failed;
+
+            if (req.state.cmpxchgStrong(.pending, new_state, .acq_rel, .acquire)) |_| {
+                // CAS failed - request was cancelled while we were spawning.
+                // Clean up the PTY handle if spawn succeeded, then free the slot.
+                // (Cancel doesn't free pending slots - we do it here after noticing cancelled)
+                if (result >= 0) {
+                    handle_registry.removeHandle(@intCast(result));
+                }
+                freeSpawnRequest(@intCast(i));
             } else {
+                // CAS succeeded - store result for caller to retrieve via spawnPoll
                 req.result_handle.store(result, .release);
-                req.state.store(.failed, .release);
             }
 
             _ = spawn_queue_count.fetchSub(1, .release);

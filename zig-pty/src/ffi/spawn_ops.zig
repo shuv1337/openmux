@@ -129,6 +129,10 @@ pub fn spawnPoll(request_id: c_int) c_int {
             async_spawn.freeSpawnRequest(@intCast(request_id));
             return constants.SPAWN_ERROR;
         },
+        .cancelled => {
+            // Request was cancelled - treat as error
+            return constants.SPAWN_ERROR;
+        },
     }
 }
 
@@ -139,15 +143,31 @@ pub fn spawnCancel(request_id: c_int) void {
     if (request_id < 0) return;
 
     const req = async_spawn.getSpawnRequest(@intCast(request_id)) orelse return;
-    const state = req.state.load(.acquire);
 
-    if (state == .complete) {
-        // Spawn completed - close the handle to avoid leaking
-        const handle = req.result_handle.load(.acquire);
-        if (handle > 0) {
-            handle_registry.removeHandle(@intCast(handle));
+    // Try to atomically transition from pending to cancelled.
+    // This prevents the race where we free the slot while spawn thread is still using it.
+    if (req.state.cmpxchgStrong(.pending, .cancelled, .acq_rel, .acquire)) |old_state| {
+        // CAS failed - request already transitioned to complete/failed/cancelled.
+        // Handle based on what state it's in.
+        switch (old_state) {
+            .complete => {
+                // Spawn completed - close the handle to avoid leaking
+                const handle = req.result_handle.load(.acquire);
+                if (handle > 0) {
+                    handle_registry.removeHandle(@intCast(handle));
+                }
+                async_spawn.freeSpawnRequest(@intCast(request_id));
+            },
+            .failed => {
+                // Spawn failed - just free the slot
+                async_spawn.freeSpawnRequest(@intCast(request_id));
+            },
+            .cancelled => {
+                // Already cancelled - nothing to do
+            },
+            .pending => unreachable, // CAS would have succeeded
         }
     }
-
-    async_spawn.freeSpawnRequest(@intCast(request_id));
+    // If CAS succeeded (pending -> cancelled), DON'T free the slot here.
+    // The spawn thread will free it after noticing the cancelled state.
 }
