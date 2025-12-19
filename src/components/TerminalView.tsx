@@ -49,7 +49,17 @@ interface TerminalViewProps {
 /**
  * TerminalView component - uses direct buffer rendering for maximum performance
  */
+// Track when SET_PANE_PTY happens for timing measurement
+let setPanePtyTime = 0;
+export function notifyTerminalViewMount() {
+  setPanePtyTime = performance.now();
+}
+
 export function TerminalView(props: TerminalViewProps) {
+  // Log component creation time
+  if (setPanePtyTime > 0) {
+    console.log(`[TERMINAL] component created: ${(performance.now() - setPanePtyTime).toFixed(2)}ms after SET_PANE_PTY`);
+  }
   const renderer = useRenderer();
   // Get selection state - keep full context to access selectionVersion reactively
   const selection = useSelection();
@@ -98,16 +108,18 @@ export function TerminalView(props: TerminalViewProps) {
         let cachedRows: TerminalCell[][] = [];
 
         // Batched render request - coalesces multiple updates into one render
+        // Use setTimeout instead of queueMicrotask to defer after current frame
+        // queueMicrotask runs before render (blocking), setTimeout runs after
         const requestRenderFrame = () => {
           if (!renderRequested && mounted) {
             renderRequested = true;
-            queueMicrotask(() => {
+            setTimeout(() => {
               if (mounted) {
                 renderRequested = false;
                 setVersion(v => v + 1);
                 renderer.requestRender();
               }
-            });
+            }, 0);
           }
         };
 
@@ -139,13 +151,18 @@ export function TerminalView(props: TerminalViewProps) {
 
         // Initialize async resources
         const init = async () => {
+          const initStart = performance.now();
+
           // Get emulator for scrollback access
+          const emulatorStart = performance.now();
           const em = await getEmulator(ptyId);
+          console.log(`[TERMINAL] getEmulator: ${(performance.now() - emulatorStart).toFixed(2)}ms`);
           if (!mounted) return;
           emulator = em;
 
           // Subscribe to unified updates (terminal + scroll combined)
           // This replaces separate subscribeToPty + subscribeToScroll with single subscription
+          const subscribeStart = performance.now();
           unsubscribe = await subscribeUnifiedToPty(ptyId, (update: UnifiedTerminalUpdate) => {
             if (!mounted) return;
 
@@ -215,9 +232,11 @@ export function TerminalView(props: TerminalViewProps) {
             // Request batched render
             requestRenderFrame();
           });
+          console.log(`[TERMINAL] subscribeUnifiedToPty: ${(performance.now() - subscribeStart).toFixed(2)}ms`);
 
           // Trigger initial render
           requestRenderFrame();
+          console.log(`[TERMINAL] init total: ${(performance.now() - initStart).toFixed(2)}ms`);
         };
 
         init();

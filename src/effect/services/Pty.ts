@@ -393,6 +393,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
       })
 
       const destroy = Effect.fn("Pty.destroy")(function* (id: PtyId) {
+        const destroyStart = performance.now();
         const sessions = yield* Ref.get(sessionsRef)
         const sessionOpt = HashMap.get(sessions, id)
 
@@ -400,23 +401,38 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           const session = sessionOpt.value
 
           // Clear subscribers
+          const subStart = performance.now();
           for (const callback of session.subscribers) {
             callback(null as unknown as TerminalState)
           }
           session.subscribers.clear()
+          console.log(`[PTY.destroy] clearSubscribers: ${(performance.now() - subStart).toFixed(2)}ms`);
 
           // Kill PTY and dispose emulator (cleans up worker session)
+          const killStart = performance.now();
           session.pty.kill()
+          console.log(`[PTY.destroy] pty.kill: ${(performance.now() - killStart).toFixed(2)}ms`);
+
+          const disposeStart = performance.now();
           session.emulator.dispose()
+          console.log(`[PTY.destroy] emulator.dispose: ${(performance.now() - disposeStart).toFixed(2)}ms`);
+
+          const queryStart = performance.now();
           session.queryPassthrough.dispose()
+          console.log(`[PTY.destroy] queryPassthrough.dispose: ${(performance.now() - queryStart).toFixed(2)}ms`);
 
           // Remove from map BEFORE emitting lifecycle event
           // This ensures refreshPtys() sees the updated list
+          const refStart = performance.now();
           yield* Ref.update(sessionsRef, HashMap.remove(id))
+          console.log(`[PTY.destroy] Ref.update: ${(performance.now() - refStart).toFixed(2)}ms`);
 
           // Emit lifecycle event AFTER removal so listeners see updated state
+          const notifyStart = performance.now();
           yield* lifecycleRegistry.notify({ type: 'destroyed', ptyId: id })
+          console.log(`[PTY.destroy] lifecycleRegistry.notify: ${(performance.now() - notifyStart).toFixed(2)}ms`);
         }
+        console.log(`[PTY.destroy] total: ${(performance.now() - destroyStart).toFixed(2)}ms`);
       })
 
       const getSession = Effect.fn("Pty.getSession")(function* (id: PtyId) {

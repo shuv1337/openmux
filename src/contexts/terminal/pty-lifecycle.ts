@@ -30,6 +30,10 @@ export interface PtyLifecycleDeps {
   closePaneById: (paneId: string) => void;
   /** Set PTY ID for a pane (from LayoutContext) */
   setPanePty: (paneId: string, ptyId: string) => void;
+  /** Create pane with PTY already attached (single render) */
+  newPaneWithPty: (ptyId: string, title?: string) => string;
+  /** Get estimated dimensions for a new pane */
+  getNewPaneDimensions: () => { cols: number; rows: number };
 }
 
 /**
@@ -44,6 +48,8 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     unsubscribeFns,
     closePaneById,
     setPanePty,
+    newPaneWithPty,
+    getNewPaneDimensions,
   } = deps;
 
   /**
@@ -91,46 +97,97 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     // Worker pool initializes Ghostty WASM in each worker on demand
     const ptyId = await createPtySession({ cols, rows, cwd });
 
-    // Track the mapping
+    // Track the mapping immediately
     ptyToPaneMap.set(ptyId, paneId);
 
-    // Subscribe to PTY with unified caches
-    const unsub = await subscribeToPtyWithCaches(
-      ptyId,
-      paneId,
-      ptyCaches,
-      handlePtyExit
-    );
-
-    // Store unsubscribe function
-    unsubscribeFns.set(ptyId, unsub);
-
-    // Update the pane with the PTY ID
+    // Update the pane with the PTY ID FIRST - this triggers TerminalView mounting
+    // TerminalView has its own subscription, so we can defer the context subscription
     setPanePty(paneId, ptyId);
+
+    // Defer subscription setup to next frame to avoid blocking the render
+    // This spreads out the work and prevents stutter
+    setTimeout(async () => {
+      const unsub = await subscribeToPtyWithCaches(
+        ptyId,
+        paneId,
+        ptyCaches,
+        handlePtyExit
+      );
+      unsubscribeFns.set(ptyId, unsub);
+    }, 0);
 
     return ptyId;
   };
 
   /**
-   * Destroy a PTY session (also closes associated pane if one exists)
+   * Create a new pane with PTY in a single render (no stutter)
+   * This creates the PTY first, then creates the pane with PTY already attached.
+   * @param cwd - Optional working directory for the PTY
+   * @param title - Optional title for the pane
    */
-  const handleDestroyPTY = (ptyId: string): void => {
+  const createPaneWithPTY = async (cwd?: string, title?: string): Promise<string> => {
+    const start = performance.now();
+
+    // Get estimated dimensions for the new pane
+    const { cols, rows } = getNewPaneDimensions();
+
+    // Create PTY first (async - this is the expensive part)
+    const ptyId = await createPtySession({ cols, rows, cwd });
+    const ptyDone = performance.now();
+
+    // Create pane with PTY already attached - SINGLE render!
+    const paneId = newPaneWithPty(ptyId, title);
+    const paneDone = performance.now();
+
+    // Track the mapping
+    ptyToPaneMap.set(ptyId, paneId);
+
+    // Defer subscription setup to next frame to avoid blocking the render
+    setTimeout(async () => {
+      const unsub = await subscribeToPtyWithCaches(
+        ptyId,
+        paneId,
+        ptyCaches,
+        handlePtyExit
+      );
+      unsubscribeFns.set(ptyId, unsub);
+    }, 0);
+
+    console.log(`[PTY] createPaneWithPTY: pty=${(ptyDone - start).toFixed(2)}ms, pane=${(paneDone - ptyDone).toFixed(2)}ms, total=${(paneDone - start).toFixed(2)}ms`);
+
+    return paneId;
+  };
+
+  /**
+   * Destroy a PTY session (also closes associated pane if one exists)
+   * @param options.skipPaneClose - Skip closing the pane (use when pane is already closed)
+   */
+  const handleDestroyPTY = (ptyId: string, options?: { skipPaneClose?: boolean }): void => {
+    const start = performance.now();
+
     // Close associated pane if this PTY is in the current session
+    // Skip if caller already closed the pane (avoids redundant layout update)
     const paneId = ptyToPaneMap.get(ptyId);
-    if (paneId) {
+    if (paneId && !options?.skipPaneClose) {
+      const closeStart = performance.now();
       closePaneById(paneId);
+      console.log(`[DESTROY] closePaneById: ${(performance.now() - closeStart).toFixed(2)}ms`);
     }
 
     // Unsubscribe from updates
     const unsub = unsubscribeFns.get(ptyId);
     if (unsub) {
+      const unsubStart = performance.now();
       unsub();
       unsubscribeFns.delete(ptyId);
+      console.log(`[DESTROY] unsub: ${(performance.now() - unsubStart).toFixed(2)}ms`);
     }
 
     // Clear caches
+    const cacheStart = performance.now();
     clearPtyCaches(ptyId, ptyCaches);
     ptyToPaneMap.delete(ptyId);
+    console.log(`[DESTROY] clearCaches: ${(performance.now() - cacheStart).toFixed(2)}ms`);
 
     // O(1) removal from session mappings using reverse index
     const sessionInfo = ptyToSessionMap.get(ptyId);
@@ -143,7 +200,10 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     }
 
     // Destroy the PTY (fire and forget)
+    const effectStart = performance.now();
     destroyPty(ptyId);
+    console.log(`[DESTROY] destroyPty (fire-and-forget): ${(performance.now() - effectStart).toFixed(2)}ms`);
+    console.log(`[DESTROY] handleDestroyPTY total: ${(performance.now() - start).toFixed(2)}ms`);
   };
 
   /**
@@ -167,6 +227,7 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
   return {
     handlePtyExit,
     createPTY,
+    createPaneWithPTY,
     handleDestroyPTY,
     handleDestroyAllPTYs,
   };

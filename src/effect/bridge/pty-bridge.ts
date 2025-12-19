@@ -77,26 +77,36 @@ export async function getPtyCwd(ptyId: string): Promise<string> {
 
 /**
  * Destroy a PTY session.
+ * This is fire-and-forget - deferred to next macrotask to avoid blocking animations.
+ * Using setTimeout(0) instead of queueMicrotask because microtasks run before
+ * the browser yields to rendering, so they can still cause frame drops.
  */
-export async function destroyPty(ptyId: string): Promise<void> {
-  await runEffectIgnore(
-    Effect.gen(function* () {
-      const pty = yield* Pty
-      yield* pty.destroy(PtyId.make(ptyId))
-    })
-  )
+export function destroyPty(ptyId: string): void {
+  // Defer to macrotask (setTimeout) for truly non-blocking behavior
+  // Microtasks still block the current frame, macrotasks run after rendering
+  setTimeout(() => {
+    runEffectIgnore(
+      Effect.gen(function* () {
+        const pty = yield* Pty
+        yield* pty.destroy(PtyId.make(ptyId))
+      })
+    )
+  }, 0)
 }
 
 /**
  * Destroy all PTY sessions.
+ * This is fire-and-forget - deferred to next macrotask to avoid blocking animations.
  */
-export async function destroyAllPtys(): Promise<void> {
-  await runEffectIgnore(
-    Effect.gen(function* () {
-      const pty = yield* Pty
-      yield* pty.destroyAll()
-    })
-  )
+export function destroyAllPtys(): void {
+  setTimeout(() => {
+    runEffectIgnore(
+      Effect.gen(function* () {
+        const pty = yield* Pty
+        yield* pty.destroyAll()
+      })
+    )
+  }, 0)
 }
 
 /**

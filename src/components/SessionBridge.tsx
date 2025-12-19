@@ -66,11 +66,11 @@ export function SessionBridge(props: SessionBridgeProps) {
     }
 
     // Clear PTY tracking to allow new PTYs to be created for panes without restored PTYs
-    await clearPtyTracking();
+    clearPtyTracking();
 
     // IMPORTANT: Store cwdMap BEFORE loading session
     // This ensures CWDs are available when PTY creation effect runs
-    await setSessionCwdMap(cwdMap);
+    setSessionCwdMap(cwdMap);
 
     // Load workspaces into layout (this triggers reactive effects)
     loadSession({ workspaces, activeWorkspaceId });
@@ -81,8 +81,8 @@ export function SessionBridge(props: SessionBridgeProps) {
     suspendSession(currentSessionId);
     clearAll();
     // Clear PTY tracking and CWD map to prevent stale state
-    await clearPtyTracking();
-    await clearSessionCwdMap();
+    clearPtyTracking();
+    clearSessionCwdMap();
   };
 
   const onDeleteSession = (sessionId: string) => {

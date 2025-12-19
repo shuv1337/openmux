@@ -1,93 +1,73 @@
 /**
- * AppCoordinator bridge functions
- * Wraps Effect AppCoordinator service for async/await usage
+ * App Coordinator bridge functions
+ * Provides fast synchronous operations for PTY tracking and session CWD management.
+ * Uses module-level state to avoid Effect runtime overhead for hot-path operations.
  */
 
-import { Effect } from "effect"
-import { runEffect, runEffectIgnore } from "../runtime"
-import { AppCoordinator } from "../services"
+// =============================================================================
+// Module-level state for fast synchronous access
+// These bypass Effect for performance-critical operations
+// =============================================================================
+
+/** Set of pane IDs that have had PTYs created (fast sync access) */
+const createdPtys = new Set<string>()
+
+/** Map of pane ID to CWD for session restoration (fast sync access) */
+const sessionCwdMap = new Map<string, string>()
 
 // =============================================================================
-// PTY Tracking
+// PTY Tracking (SYNCHRONOUS for performance)
 // =============================================================================
 
 /**
  * Clear PTY creation tracking state.
  * Called when switching sessions to reset tracking.
  */
-export async function clearPtyTracking(): Promise<void> {
-  await runEffectIgnore(
-    Effect.gen(function* () {
-      const coordinator = yield* AppCoordinator
-      yield* coordinator.clearPtyTracking()
-    })
-  )
+export function clearPtyTracking(): void {
+  createdPtys.clear()
 }
 
 /**
  * Mark a pane as having its PTY created.
+ * SYNCHRONOUS for performance - this is called in hot path during pane creation.
  */
-export async function markPtyCreated(paneId: string): Promise<void> {
-  await runEffectIgnore(
-    Effect.gen(function* () {
-      const coordinator = yield* AppCoordinator
-      yield* coordinator.markPtyCreated(paneId)
-    })
-  )
+export function markPtyCreated(paneId: string): void {
+  createdPtys.add(paneId)
 }
 
 /**
  * Check if a pane's PTY has been created.
+ * SYNCHRONOUS for performance - this is called in hot path during pane creation.
  */
-export async function isPtyCreated(paneId: string): Promise<boolean> {
-  return runEffect(
-    Effect.gen(function* () {
-      const coordinator = yield* AppCoordinator
-      return yield* coordinator.isPtyCreated(paneId)
-    })
-  )
+export function isPtyCreated(paneId: string): boolean {
+  return createdPtys.has(paneId)
 }
 
 // =============================================================================
-// Session CWD Map
+// Session CWD Map (SYNCHRONOUS for performance)
 // =============================================================================
 
 /**
  * Set the session CWD map for panes being restored.
  */
-export async function setSessionCwdMap(
-  cwdMap: Map<string, string>
-): Promise<void> {
-  await runEffectIgnore(
-    Effect.gen(function* () {
-      const coordinator = yield* AppCoordinator
-      yield* coordinator.setSessionCwdMap(cwdMap)
-    })
-  )
+export function setSessionCwdMap(cwdMap: Map<string, string>): void {
+  sessionCwdMap.clear()
+  for (const [key, value] of cwdMap) {
+    sessionCwdMap.set(key, value)
+  }
 }
 
 /**
  * Get the CWD for a pane from the session CWD map.
+ * SYNCHRONOUS for performance - this is called in hot path during pane creation.
  */
-export async function getSessionCwd(
-  paneId: string
-): Promise<string | undefined> {
-  return runEffect(
-    Effect.gen(function* () {
-      const coordinator = yield* AppCoordinator
-      return yield* coordinator.getSessionCwd(paneId)
-    })
-  )
+export function getSessionCwd(paneId: string): string | undefined {
+  return sessionCwdMap.get(paneId)
 }
 
 /**
  * Clear the session CWD map.
  */
-export async function clearSessionCwdMap(): Promise<void> {
-  await runEffectIgnore(
-    Effect.gen(function* () {
-      const coordinator = yield* AppCoordinator
-      yield* coordinator.clearSessionCwdMap()
-    })
-  )
+export function clearSessionCwdMap(): void {
+  sessionCwdMap.clear()
 }

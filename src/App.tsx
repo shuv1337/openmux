@@ -63,8 +63,6 @@ function AppContent() {
   const { enterConfirmMode, exitConfirmMode, exitSearchMode: keyboardExitSearchMode } = useKeyboardState();
   const renderer = useRenderer();
 
-  // Track pending CWD for new panes (captured before NEW_PANE dispatch)
-  let pendingCwd: string | null = null;
 
   // Confirmation dialog state
   const [confirmationState, setConfirmationState] = createSignal<{
@@ -136,14 +134,24 @@ function AppContent() {
     setFocusedPty(focusedPtyId ?? null);
   });
 
-  // Create new pane handler that captures CWD first
-  const handleNewPane = async () => {
-    // Capture the focused pane's CWD before creating the new pane
-    const cwd = await getFocusedCwd();
-    pendingCwd = cwd;
+  // Create new pane handler - instant feedback, CWD retrieval in background
+  const handleNewPane = () => {
+    const start = performance.now();
+
+    // Fire off CWD retrieval in background (don't await - takes ~21ms)
+    getFocusedCwd().then(cwd => {
+      if (cwd) pendingCwdRef = cwd;
+    });
+
+    // Create pane immediately (shows border instantly)
     newPane();
+    console.log(`[NEW_PANE] pane created: ${(performance.now() - start).toFixed(2)}ms`);
+    // PTY will be created by the effect with CWD when available
     // Session save is triggered automatically via layoutVersion change
   };
+
+  // Ref for passing CWD to effect (avoids closure issues)
+  let pendingCwdRef: string | null = null;
 
   // Create paste handler for manual paste (Ctrl+V, prefix+p/])
   const handlePaste = () => {
@@ -270,10 +278,11 @@ function AppContent() {
         if (!isSessionInit) return;
         if (isSwitching) return;
 
-        const createPtyForPane = async (pane: typeof panes[number]) => {
+        const createPtyForPane = (pane: typeof panes[number]) => {
+          const ptyStart = performance.now();
           try {
-            // ASYNC check: verify PTY wasn't created in a previous session/effect run
-            const alreadyCreated = await isPtyCreated(pane.id);
+            // SYNC check: verify PTY wasn't created in a previous session/effect run
+            const alreadyCreated = isPtyCreated(pane.id);
             if (alreadyCreated) {
               return true; // Already has a PTY
             }
@@ -283,18 +292,26 @@ function AppContent() {
             const cols = Math.max(1, rect.width - 2);
             const rows = Math.max(1, rect.height - 2);
 
-            // Check for session-restored CWD first, then pending CWD from new pane,
+            // Check for session-restored CWD first, then pending CWD from new pane handler,
             // then OPENMUX_ORIGINAL_CWD (set by wrapper to preserve user's cwd)
-            const sessionCwd = await getSessionCwdFromCoordinator(pane.id);
-            let cwd = sessionCwd ?? pendingCwd ?? process.env.OPENMUX_ORIGINAL_CWD ?? undefined;
-            pendingCwd = null; // Clear after use
+            const sessionCwd = getSessionCwdFromCoordinator(pane.id);
+            let cwd = sessionCwd ?? pendingCwdRef ?? process.env.OPENMUX_ORIGINAL_CWD ?? undefined;
+            pendingCwdRef = null; // Clear after use
 
+            const beforeMark = performance.now();
             // Mark as created BEFORE calling createPTY (persistent marker)
-            await markPtyCreated(pane.id);
+            markPtyCreated(pane.id);
+            const afterMark = performance.now();
+
             // Fire-and-forget PTY creation - don't await to avoid blocking
-            createPTY(pane.id, cols, rows, cwd).catch(err => {
+            const ptyCreateStart = performance.now();
+            createPTY(pane.id, cols, rows, cwd).then(() => {
+              console.log(`[PTY] createPTY async completed: ${(performance.now() - ptyCreateStart).toFixed(2)}ms`);
+            }).catch(err => {
               console.error(`PTY creation failed for ${pane.id}:`, err);
             });
+
+            console.log(`[PTY] createPtyForPane setup: total=${(performance.now() - ptyStart).toFixed(2)}ms, mark=${(afterMark - beforeMark).toFixed(2)}ms`);
             return true;
           } catch (err) {
             console.error(`Failed to create PTY for pane ${pane.id}:`, err);
@@ -314,11 +331,10 @@ function AppContent() {
 
           // Defer to next macrotask - allows animations to continue
           setTimeout(() => {
-            createPtyForPane(pane).then(success => {
-              if (!success) {
-                setTimeout(() => setPtyRetryCounter(c => c + 1), 100);
-              }
-            });
+            const success = createPtyForPane(pane);
+            if (!success) {
+              setTimeout(() => setPtyRetryCounter(c => c + 1), 100);
+            }
           }, 0);
         }
       }
@@ -333,8 +349,9 @@ function AppContent() {
     // Track structural changes (pane add/remove, layout mode) and viewport resize
     const _version = layout.layoutVersion;
     const _viewport = layout.state.viewport;
-    // Debounce via queueMicrotask to batch rapid structural changes
-    queueMicrotask(() => paneResizeHandlers.resizeAllPanes());
+    // Defer to macrotask (setTimeout) to allow animations to complete first
+    // queueMicrotask runs before render, setTimeout runs after
+    setTimeout(() => paneResizeHandlers.resizeAllPanes(), 0);
   });
 
   // Restore PTY sizes when aggregate view closes

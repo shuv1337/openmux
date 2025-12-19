@@ -42,8 +42,10 @@ import type { ITerminalEmulator } from '../terminal/emulator-interface';
 interface TerminalContextValue {
   /** Create a new PTY session for a pane */
   createPTY: (paneId: string, cols: number, rows: number, cwd?: string) => Promise<string>;
-  /** Destroy a PTY session */
-  destroyPTY: (ptyId: string) => void;
+  /** Create a new pane with PTY in single render (no stutter) */
+  createPaneWithPTY: (cwd?: string, title?: string) => Promise<string>;
+  /** Destroy a PTY session. Set skipPaneClose=true if pane is already closed. */
+  destroyPTY: (ptyId: string, options?: { skipPaneClose?: boolean }) => void;
   /** Destroy all PTY sessions */
   destroyAllPTYs: () => void;
   /** Suspend a session (save PTY mapping, unsubscribe without destroying) */
@@ -96,7 +98,7 @@ interface TerminalProviderProps extends ParentProps {}
 
 export function TerminalProvider(props: TerminalProviderProps) {
   const layout = useLayout();
-  const { setPanePty, closePaneById } = layout;
+  const { setPanePty, closePaneById, newPaneWithPty, getNewPaneDimensions } = layout;
   const titleContext = useTitle();
   let initialized = false;
   const [isInitialized, setIsInitialized] = createSignal(false);
@@ -141,6 +143,8 @@ export function TerminalProvider(props: TerminalProviderProps) {
     unsubscribeFns,
     closePaneById,
     setPanePty,
+    newPaneWithPty,
+    getNewPaneDimensions,
   });
 
   // Create cache accessors (extracted for reduced file size)
@@ -340,6 +344,7 @@ export function TerminalProvider(props: TerminalProviderProps) {
 
   const value: TerminalContextValue = {
     createPTY: ptyLifecycleHandlers.createPTY,
+    createPaneWithPTY: ptyLifecycleHandlers.createPaneWithPTY,
     destroyPTY: ptyLifecycleHandlers.handleDestroyPTY,
     destroyAllPTYs: ptyLifecycleHandlers.handleDestroyAllPTYs,
     suspendSession: handleSuspendSession,

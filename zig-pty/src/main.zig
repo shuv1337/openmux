@@ -333,24 +333,39 @@ const Pty = struct {
         // Wake up producer if waiting on condition
         self.ring.not_full.signal();
 
-        // Wait for reader thread
-        if (self.reader_thread) |thread| {
-            thread.join();
-        }
-
-        // Close fd
+        // Close fd FIRST to unblock the reader thread (it will get EBADF/0 and exit)
         if (self.master_fd >= 0) {
             _ = c.close(self.master_fd);
             self.master_fd = -1;
         }
 
-        // Reap child process to prevent zombies
-        // Use blocking waitpid since WNOHANG in checkChild may have missed it
+        // Detach reader thread instead of joining - let it clean up itself
+        // The thread will exit quickly now that stopping=true and fd is closed
+        if (self.reader_thread) |thread| {
+            thread.detach();
+            self.reader_thread = null;
+        }
+
+        // Try non-blocking reap first (WNOHANG)
+        // If process hasn't exited yet, spawn a reaper thread to prevent zombies
         if (self.pid > 0 and !self.exited.load(.acquire)) {
-            _ = c.waitpid(self.pid, null, 0);
+            const result = c.waitpid(self.pid, null, c.WNOHANG);
+            if (result == 0) {
+                // Process still running - spawn detached reaper thread
+                const pid = self.pid;
+                const reaper = std.Thread.spawn(.{}, reapZombie, .{pid}) catch null;
+                if (reaper) |t| t.detach();
+            }
         }
     }
 };
+
+// Reaper thread function - waits for zombie process in background
+fn reapZombie(pid: c.pid_t) void {
+    // Wait for process to exit (blocking, but in separate detached thread)
+    _ = c.waitpid(pid, null, 0);
+    // Thread exits automatically after reaping
+}
 
 // ============================================================================
 // Handle Registry

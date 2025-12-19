@@ -310,19 +310,15 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
         }}
       >
         <For each={tabs()}>
-          {({ pane, label, isActive }) => {
-            // Active tab: use computed bg color, inactive: no background
-            const bg = isActive ? activeTabBg() : undefined;
-            return (
-              <text
-                fg={isActive ? '#FFFFFF' : '#666666'}
-                bg={bg}
-                onMouseDown={() => handleTabClick(pane.id)}
-              >
-                {label}
-              </text>
-            );
-          }}
+          {({ pane, label, isActive }) => (
+            <text
+              fg={isActive ? '#FFFFFF' : '#666666'}
+              bg={isActive ? activeTabBg() : undefined}
+              onMouseDown={() => handleTabClick(pane.id)}
+            >
+              {label}
+            </text>
+          )}
         </For>
       </box>
 
