@@ -241,15 +241,15 @@ export function LayoutProvider(props: LayoutProviderProps) {
   // Helper to dispatch actions through the reducer
   // Uses reconcile for efficient diffing
   const dispatch = (action: LayoutAction) => {
-    // SET_PANE_PTY uses fast direct path update - run synchronously
+    // SET_PANE_PTY uses fast direct path update - defer to avoid blocking animations
     if (action.type === 'SET_PANE_PTY') {
-      applySetPanePty(action.paneId, action.ptyId);
+      setTimeout(() => applySetPanePty(action.paneId, action.ptyId), 0);
       return;
     }
 
-    // NEW_PANE uses fast produce path - run synchronously for instant feedback
+    // NEW_PANE uses fast produce path - defer to avoid blocking animations in other panes
     if (action.type === 'NEW_PANE') {
-      applyNewPane(action.title);
+      setTimeout(() => applyNewPane(action.title), 0);
       return;
     }
 
