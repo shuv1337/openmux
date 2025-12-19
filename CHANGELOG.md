@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.25](https://github.com/monotykamary/openmux/compare/v0.2.24...v0.2.25) (2025-12-19)
+
+
+### Features
+
+* **zig-pty:** add native process inspection APIs with argv[0] detection ([5ab0272](https://github.com/monotykamary/openmux/commit/5ab02720d83a3fd9609ed67d133604a3c93956e1))
+
+
+### Performance
+
+* **aggregate-view:** use native APIs for process inspection ([cc1848f](https://github.com/monotykamary/openmux/commit/cc1848f33e57155722a66cc4d1775ab091426570))
+
+
+### Refactoring
+
+* **effect:** remove dead code and simplify KeyboardRouter ([5ad8895](https://github.com/monotykamary/openmux/commit/5ad8895fc888a1d808c4d31759837fbf6c8355c8))
+* **zig-pty:** modularize tests into separate files by category ([de2955d](https://github.com/monotykamary/openmux/commit/de2955dec6e5d03a96a8c6c0e4074596455e3e1e))
+* **zig-pty:** organize source files into logical directories ([084e989](https://github.com/monotykamary/openmux/commit/084e9891ba3adc4c8a3299d59fed405a1aea25b4))
+
 ### [0.2.24](https://github.com/monotykamary/openmux/compare/v0.2.23...v0.2.24) (2025-12-19)
 
 
