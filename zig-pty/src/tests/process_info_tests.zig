@@ -5,6 +5,7 @@ const std = @import("std");
 const spawn_module = @import("../core/spawn.zig");
 const exports = @import("../ffi/exports.zig");
 const constants = @import("../util/constants.zig");
+const process_info = @import("../ffi/process_info.zig");
 
 // ============================================================================
 // Foreground PID Tests
@@ -131,4 +132,21 @@ test "small buffer for process name truncates safely" {
         try std.testing.expectEqual(@as(u8, 0), small_buf[@intCast(len)]);
     }
     // If len <= 0, that's also acceptable (graceful failure)
+}
+
+// ============================================================================
+// Child Process Detection Tests
+// ============================================================================
+
+test "findChildProcess returns parent when no children" {
+    const pid: c_int = @intCast(std.c.getpid());
+    // Test process likely has no children, should return self or a higher pid
+    const result = process_info.findChildProcess(pid);
+    try std.testing.expect(result == pid or result > pid);
+}
+
+test "findChildProcess with invalid pid returns same pid" {
+    // Invalid PIDs should return themselves (graceful handling)
+    try std.testing.expectEqual(@as(c_int, 0), process_info.findChildProcess(0));
+    try std.testing.expectEqual(@as(c_int, -1), process_info.findChildProcess(-1));
 }
