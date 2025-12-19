@@ -2,7 +2,8 @@
  * Utility functions for AggregateView
  */
 
-import type { WorkspaceId, Workspace } from '../../core/types';
+import type { WorkspaceId } from '../../core/types';
+import type { Workspaces } from '../../core/operations/layout-actions';
 
 /**
  * Get the last segment of a path (directory name)
@@ -17,9 +18,11 @@ export function getDirectoryName(path: string): string {
  */
 export function findPtyLocation(
   ptyId: string,
-  workspaces: Map<WorkspaceId, Workspace>
+  workspaces: Workspaces
 ): { workspaceId: WorkspaceId; paneId: string } | null {
-  for (const [workspaceId, workspace] of workspaces) {
+  for (const [idStr, workspace] of Object.entries(workspaces)) {
+    if (!workspace) continue;
+    const workspaceId = Number(idStr) as WorkspaceId;
     // Check main pane
     if (workspace.mainPane?.ptyId === ptyId) {
       return { workspaceId, paneId: workspace.mainPane.id };
@@ -39,9 +42,11 @@ export function findPtyLocation(
  */
 export function findPaneLocation(
   paneId: string,
-  workspaces: Map<WorkspaceId, Workspace>
+  workspaces: Workspaces
 ): { workspaceId: WorkspaceId } | null {
-  for (const [workspaceId, workspace] of workspaces) {
+  for (const [idStr, workspace] of Object.entries(workspaces)) {
+    if (!workspace) continue;
+    const workspaceId = Number(idStr) as WorkspaceId;
     if (workspace.mainPane?.id === paneId) {
       return { workspaceId };
     }

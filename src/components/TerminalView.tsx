@@ -62,6 +62,11 @@ export function TerminalView(props: TerminalViewProps) {
   // Store scroll state locally from unified updates to avoid race conditions
   // This ensures scroll state and terminal state are always in sync
   let scrollState: TerminalScrollState = { viewportOffset: 0, scrollbackLength: 0, isAtBottom: true };
+  // Track last render time to throttle expensive renders during rapid layout changes
+  let lastRenderTime = 0;
+  let pendingRender = false;
+  // Track if content changed (vs just position change)
+  let contentDirty = true;
   // Cache for lines transitioning from live terminal to scrollback
   // When scrollback grows, the top rows of the terminal move to scrollback.
   // We capture them before the state update so we can render them immediately
@@ -203,6 +208,9 @@ export function TerminalView(props: TerminalViewProps) {
             // Update scroll state from unified update to ensure it's in sync with terminal state
             // This prevents race conditions where render uses stale scroll state from cache
             scrollState = update.scrollState;
+
+            // Mark content as dirty (actual terminal data changed)
+            contentDirty = true;
 
             // Request batched render
             requestRenderFrame();

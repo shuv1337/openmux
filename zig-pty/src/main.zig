@@ -50,9 +50,15 @@ fn getEnviron() ?[*:null]?[*:0]u8 {
 const SUCCESS: c_int = 0;
 const ERROR: c_int = -1;
 const CHILD_EXITED: c_int = -2;
+const SPAWN_PENDING: c_int = -3;
+const SPAWN_ERROR: c_int = -4;
 
 const MAX_HANDLES: usize = 256;
+const MAX_SPAWN_REQUESTS: usize = 64;
 const RING_BUFFER_SIZE: usize = 256 * 1024; // 256KB ring buffer
+const MAX_CMD_LEN: usize = 8192;
+const MAX_CWD_LEN: usize = 4096;
+const MAX_ENV_LEN: usize = 65536;
 
 // ============================================================================
 // Ring Buffer - Single producer single consumer with backpressure
@@ -398,6 +404,108 @@ fn removeHandle(h: u32) void {
 }
 
 // ============================================================================
+// Async Spawn Infrastructure
+// ============================================================================
+
+const SpawnState = enum(u8) {
+    pending,
+    complete,
+    failed,
+};
+
+const SpawnRequest = struct {
+    // Input parameters (copied to owned buffers)
+    cmd: [MAX_CMD_LEN]u8,
+    cmd_len: usize,
+    cwd: [MAX_CWD_LEN]u8,
+    cwd_len: usize,
+    env: [MAX_ENV_LEN]u8,
+    env_len: usize,
+    cols: u16,
+    rows: u16,
+    // Output
+    state: std.atomic.Value(SpawnState),
+    result_handle: std.atomic.Value(c_int),
+};
+
+// Spawn request slots
+var spawn_requests: [MAX_SPAWN_REQUESTS]SpawnRequest = undefined;
+var spawn_request_used: [MAX_SPAWN_REQUESTS]std.atomic.Value(bool) = [_]std.atomic.Value(bool){std.atomic.Value(bool).init(false)} ** MAX_SPAWN_REQUESTS;
+
+// Spawn thread state
+var spawn_thread: ?std.Thread = null;
+var spawn_thread_running: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
+var spawn_queue_mutex: std.Thread.Mutex = .{};
+var spawn_queue_cond: std.Thread.Condition = .{};
+var spawn_queue_count: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
+
+fn initSpawnThread() bool {
+    if (spawn_thread_running.load(.acquire)) return true;
+
+    spawn_thread = std.Thread.spawn(.{}, spawnThreadLoop, .{}) catch return false;
+    spawn_thread_running.store(true, .release);
+    return true;
+}
+
+fn spawnThreadLoop() void {
+    while (spawn_thread_running.load(.acquire)) {
+        // Wait for work
+        spawn_queue_mutex.lock();
+        while (spawn_queue_count.load(.acquire) == 0 and spawn_thread_running.load(.acquire)) {
+            spawn_queue_cond.timedWait(&spawn_queue_mutex, 100 * std.time.ns_per_ms) catch {};
+        }
+        spawn_queue_mutex.unlock();
+
+        if (!spawn_thread_running.load(.acquire)) break;
+
+        // Process all pending requests
+        for (&spawn_requests, 0..) |*req, i| {
+            if (!spawn_request_used[i].load(.acquire)) continue;
+            if (req.state.load(.acquire) != .pending) continue;
+
+            // Do the actual spawn (this is the slow part we moved off main thread)
+            const cmd_ptr: [*:0]const u8 = @ptrCast(req.cmd[0..req.cmd_len]);
+            const cwd_ptr: [*:0]const u8 = @ptrCast(req.cwd[0..req.cwd_len]);
+            const env_ptr: [*:0]const u8 = @ptrCast(req.env[0..req.env_len]);
+
+            const result = spawnPty(cmd_ptr, cwd_ptr, env_ptr, req.cols, req.rows);
+
+            if (result >= 0) {
+                req.result_handle.store(result, .release);
+                req.state.store(.complete, .release);
+            } else {
+                req.result_handle.store(result, .release);
+                req.state.store(.failed, .release);
+            }
+
+            _ = spawn_queue_count.fetchSub(1, .release);
+        }
+    }
+}
+
+fn allocSpawnRequest() ?u32 {
+    for (&spawn_request_used, 0..) |*used, i| {
+        if (!used.load(.acquire)) {
+            if (used.cmpxchgStrong(false, true, .acq_rel, .acquire) == null) {
+                return @intCast(i);
+            }
+        }
+    }
+    return null;
+}
+
+fn freeSpawnRequest(id: u32) void {
+    if (id >= MAX_SPAWN_REQUESTS) return;
+    spawn_request_used[id].store(false, .release);
+}
+
+fn getSpawnRequest(id: u32) ?*SpawnRequest {
+    if (id >= MAX_SPAWN_REQUESTS) return null;
+    if (!spawn_request_used[id].load(.acquire)) return null;
+    return &spawn_requests[id];
+}
+
+// ============================================================================
 // PTY Creation
 // ============================================================================
 
@@ -577,6 +685,122 @@ export fn bun_pty_spawn(
         return ERROR;
     }
     return spawnPty(cmd, cwd, env, @intCast(cols), @intCast(rows));
+}
+
+/// Queue an async spawn request. Returns a request ID (>= 0) or ERROR.
+/// Use bun_pty_spawn_poll to check status and get the handle when ready.
+export fn bun_pty_spawn_async(
+    cmd: [*:0]const u8,
+    cwd: [*:0]const u8,
+    env: [*:0]const u8,
+    cols: c_int,
+    rows: c_int,
+) c_int {
+    if (cols <= 0 or rows <= 0) {
+        return ERROR;
+    }
+    if (cols > 65535 or rows > 65535) {
+        return ERROR;
+    }
+
+    // Ensure spawn thread is running
+    if (!initSpawnThread()) {
+        return ERROR;
+    }
+
+    // Allocate a request slot
+    const req_id = allocSpawnRequest() orelse return ERROR;
+    const req = &spawn_requests[req_id];
+
+    // Copy command string
+    var cmd_len: usize = 0;
+    while (cmd[cmd_len] != 0 and cmd_len < MAX_CMD_LEN - 1) : (cmd_len += 1) {
+        req.cmd[cmd_len] = cmd[cmd_len];
+    }
+    req.cmd[cmd_len] = 0;
+    req.cmd_len = cmd_len + 1;
+
+    // Copy cwd string
+    var cwd_len: usize = 0;
+    while (cwd[cwd_len] != 0 and cwd_len < MAX_CWD_LEN - 1) : (cwd_len += 1) {
+        req.cwd[cwd_len] = cwd[cwd_len];
+    }
+    req.cwd[cwd_len] = 0;
+    req.cwd_len = cwd_len + 1;
+
+    // Copy env string (null-separated, double-null terminated)
+    var env_len: usize = 0;
+    var consecutive_nulls: u8 = 0;
+    while (env_len < MAX_ENV_LEN - 1) {
+        req.env[env_len] = env[env_len];
+        if (env[env_len] == 0) {
+            consecutive_nulls += 1;
+            if (consecutive_nulls >= 2) {
+                env_len += 1;
+                break;
+            }
+        } else {
+            consecutive_nulls = 0;
+        }
+        env_len += 1;
+    }
+    req.env[env_len] = 0;
+    req.env_len = env_len + 1;
+
+    req.cols = @intCast(cols);
+    req.rows = @intCast(rows);
+    req.state.store(.pending, .release);
+    req.result_handle.store(0, .release);
+
+    // Signal the spawn thread
+    _ = spawn_queue_count.fetchAdd(1, .release);
+    spawn_queue_cond.signal();
+
+    return @intCast(req_id);
+}
+
+/// Poll an async spawn request.
+/// Returns: SPAWN_PENDING (-3) if still in progress,
+///          handle (>= 0) if complete,
+///          SPAWN_ERROR (-4) if failed.
+/// After getting a non-pending result, the request slot is freed.
+export fn bun_pty_spawn_poll(request_id: c_int) c_int {
+    if (request_id < 0) return SPAWN_ERROR;
+
+    const req = getSpawnRequest(@intCast(request_id)) orelse return SPAWN_ERROR;
+    const state = req.state.load(.acquire);
+
+    switch (state) {
+        .pending => return SPAWN_PENDING,
+        .complete => {
+            const handle = req.result_handle.load(.acquire);
+            freeSpawnRequest(@intCast(request_id));
+            return handle;
+        },
+        .failed => {
+            freeSpawnRequest(@intCast(request_id));
+            return SPAWN_ERROR;
+        },
+    }
+}
+
+/// Cancel a pending async spawn request.
+/// If spawn already completed, the PTY handle is closed.
+export fn bun_pty_spawn_cancel(request_id: c_int) void {
+    if (request_id < 0) return;
+
+    const req = getSpawnRequest(@intCast(request_id)) orelse return;
+    const state = req.state.load(.acquire);
+
+    if (state == .complete) {
+        // Spawn completed - close the handle
+        const handle = req.result_handle.load(.acquire);
+        if (handle > 0) {
+            removeHandle(@intCast(handle));
+        }
+    }
+
+    freeSpawnRequest(@intCast(request_id));
 }
 
 export fn bun_pty_read(handle: c_int, buf: [*]u8, len: c_int) c_int {

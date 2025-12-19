@@ -499,15 +499,19 @@ export class WorkerEmulator implements ITerminalEmulator {
 
 /**
  * Create a new WorkerEmulator
+ *
+ * This function is non-blocking - session creation happens asynchronously
+ * in the worker pool. The worker buffers any incoming writes until the
+ * session is fully initialized.
  */
-export async function createWorkerEmulator(
+export function createWorkerEmulator(
   pool: EmulatorWorkerPool,
   cols: number,
   rows: number,
   colors: TerminalColors
-): Promise<WorkerEmulator> {
+): WorkerEmulator {
   const sessionId = generateSessionId();
-  await pool.createSession(sessionId, cols, rows, colors);
+  pool.createSession(sessionId, cols, rows, colors);
   return new WorkerEmulator(pool, sessionId, cols, rows, colors);
 }
 

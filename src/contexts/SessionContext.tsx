@@ -13,7 +13,8 @@ import {
   type Accessor,
 } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
-import type { SessionId, SessionMetadata, Workspace, WorkspaceId } from '../core/types';
+import type { SessionId, SessionMetadata, WorkspaceId } from '../core/types';
+import type { Workspaces } from '../core/operations/layout-actions';
 import { DEFAULT_CONFIG } from '../core/config';
 import {
   createSessionLegacy as createSessionOnDisk,
@@ -85,12 +86,12 @@ interface SessionProviderProps extends ParentProps {
   /** Function to get CWD for a PTY ID */
   getCwd: (ptyId: string) => Promise<string>;
   /** Function to get current workspaces */
-  getWorkspaces: () => Map<WorkspaceId, Workspace>;
+  getWorkspaces: () => Workspaces;
   /** Function to get active workspace ID */
   getActiveWorkspaceId: () => WorkspaceId;
   /** Callback when session is loaded */
   onSessionLoad: (
-    workspaces: Map<WorkspaceId, Workspace>,
+    workspaces: Workspaces,
     activeWorkspaceId: WorkspaceId,
     cwdMap: Map<string, string>,
     sessionId: string
@@ -156,7 +157,7 @@ export function SessionProvider(props: SessionProviderProps) {
 
         // Load session data and notify parent
         const data = await loadSessionData(activeId);
-        if (data && data.workspaces.size > 0) {
+        if (data && Object.keys(data.workspaces).length > 0) {
           // IMPORTANT: Await onSessionLoad to ensure CWD map is set before initialized
           await props.onSessionLoad(data.workspaces, data.activeWorkspaceId, data.cwdMap, activeId);
         }
@@ -174,7 +175,7 @@ export function SessionProvider(props: SessionProviderProps) {
       const workspaces = props.getWorkspaces();
       const activeWorkspaceId = props.getActiveWorkspaceId();
 
-      if (state.activeSession && workspaces.size > 0) {
+      if (state.activeSession && Object.keys(workspaces).length > 0) {
         await saveCurrentSession(
           state.activeSession,
           workspaces,
@@ -206,7 +207,7 @@ export function SessionProvider(props: SessionProviderProps) {
     const workspaces = props.getWorkspaces();
     const activeWorkspaceId = props.getActiveWorkspaceId();
 
-    if (workspaces.size > 0) {
+    if (Object.keys(workspaces).length > 0) {
       saveCurrentSession(
         state.activeSession,
         workspaces,
@@ -237,7 +238,7 @@ export function SessionProvider(props: SessionProviderProps) {
     dispatch({ type: 'SET_ACTIVE_SESSION', id: metadata.id, session: metadata });
 
     // Load empty workspaces for new session
-    await props.onSessionLoad(new Map(), 1, new Map(), metadata.id);
+    await props.onSessionLoad({}, 1, new Map(), metadata.id);
 
     return metadata;
   };

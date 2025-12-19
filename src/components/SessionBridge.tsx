@@ -7,7 +7,8 @@ import type { ParentProps } from 'solid-js';
 import { useLayout } from '../contexts/LayoutContext';
 import { useTerminal } from '../contexts/TerminalContext';
 import { SessionProvider } from '../contexts/SessionContext';
-import type { Workspace, WorkspaceId } from '../core/types';
+import type { WorkspaceId } from '../core/types';
+import type { Workspaces } from '../core/operations/layout-actions';
 import {
   clearPtyTracking,
   setSessionCwdMap,
@@ -37,7 +38,7 @@ export function SessionBridge(props: SessionBridgeProps) {
   };
 
   const onSessionLoad = async (
-    workspaces: Map<WorkspaceId, Workspace>,
+    workspaces: Workspaces,
     activeWorkspaceId: WorkspaceId,
     cwdMap: Map<string, string>,
     sessionId: string
@@ -47,7 +48,8 @@ export function SessionBridge(props: SessionBridgeProps) {
 
     // If we have restored PTYs, assign them to the panes
     if (restoredPtys && restoredPtys.size > 0) {
-      for (const [, workspace] of workspaces) {
+      for (const workspace of Object.values(workspaces)) {
+        if (!workspace) continue;
         if (workspace.mainPane) {
           const ptyId = restoredPtys.get(workspace.mainPane.id);
           if (ptyId) {

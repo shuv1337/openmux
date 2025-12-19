@@ -8,6 +8,7 @@ import {
   useContext,
   createEffect,
   onCleanup,
+  batch,
   type ParentProps,
 } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
@@ -223,6 +224,77 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
   // when multiple panes are created/destroyed rapidly
   const debouncedRefreshPtys = debounce(() => refreshPtys(), 100);
 
+  // Incremental refresh - fetches new data but only updates fields that changed
+  // This prevents full re-renders when most data is unchanged
+  let incrementalRefreshInProgress = false;
+  const incrementalRefreshPtys = async () => {
+    if (incrementalRefreshInProgress || state.allPtys.length === 0) return;
+    incrementalRefreshInProgress = true;
+
+    try {
+      const newPtys = await listAllPtysWithMetadata();
+      const newPtysMap = new Map(newPtys.map(p => [p.ptyId, p]));
+
+      // Check if PTY list changed (added/removed)
+      const oldPtyIds = new Set(state.allPtys.map(p => p.ptyId));
+      const newPtyIds = new Set(newPtys.map(p => p.ptyId));
+      const listChanged = oldPtyIds.size !== newPtyIds.size ||
+        [...oldPtyIds].some(id => !newPtyIds.has(id));
+
+      if (listChanged) {
+        // PTYs added or removed - do full refresh
+        await refreshPtys();
+        return;
+      }
+
+      // Update only changed fields in existing PTYs
+      setState(produce((s) => {
+        for (let i = 0; i < s.allPtys.length; i++) {
+          const oldPty = s.allPtys[i];
+          const newPty = newPtysMap.get(oldPty.ptyId);
+          if (!newPty) continue;
+
+          // Only update fields that changed (triggers minimal reactivity)
+          if (oldPty.foregroundProcess !== newPty.foregroundProcess) {
+            s.allPtys[i].foregroundProcess = newPty.foregroundProcess;
+          }
+          if (oldPty.gitBranch !== newPty.gitBranch) {
+            s.allPtys[i].gitBranch = newPty.gitBranch;
+          }
+          if (oldPty.cwd !== newPty.cwd) {
+            s.allPtys[i].cwd = newPty.cwd;
+          }
+          if (oldPty.gitDiffStats?.added !== newPty.gitDiffStats?.added ||
+              oldPty.gitDiffStats?.removed !== newPty.gitDiffStats?.removed) {
+            s.allPtys[i].gitDiffStats = newPty.gitDiffStats;
+          }
+        }
+        // Also update matchedPtys if filter is active
+        for (let i = 0; i < s.matchedPtys.length; i++) {
+          const oldPty = s.matchedPtys[i];
+          const newPty = newPtysMap.get(oldPty.ptyId);
+          if (!newPty) continue;
+
+          if (oldPty.foregroundProcess !== newPty.foregroundProcess) {
+            s.matchedPtys[i].foregroundProcess = newPty.foregroundProcess;
+          }
+          if (oldPty.gitBranch !== newPty.gitBranch) {
+            s.matchedPtys[i].gitBranch = newPty.gitBranch;
+          }
+          if (oldPty.cwd !== newPty.cwd) {
+            s.matchedPtys[i].cwd = newPty.cwd;
+          }
+          if (oldPty.gitDiffStats?.added !== newPty.gitDiffStats?.added ||
+              oldPty.gitDiffStats?.removed !== newPty.gitDiffStats?.removed) {
+            s.matchedPtys[i].gitDiffStats = newPty.gitDiffStats;
+          }
+        }
+      }));
+    } finally {
+      incrementalRefreshInProgress = false;
+    }
+  };
+
   const setupSubscriptions = async () => {
     // Subscribe to PTY lifecycle events for auto-refresh (created/destroyed)
     // Use debounced refresh to prevent animation stutter from rapid events
@@ -234,8 +306,9 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     subscriptions.titleChange = await subscribeToAllTitleChanges(handleTitleChange);
 
     // Poll for foreground process changes (OS-level, not captured by title events)
+    // Use incremental refresh to only update changed fields (reduces re-renders)
     subscriptions.polling = setInterval(() => {
-      refreshPtys();
+      incrementalRefreshPtys();
     }, 2000);
   };
 

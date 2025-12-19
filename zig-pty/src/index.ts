@@ -48,6 +48,10 @@ const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
 const DEFAULT_FILE = "sh";
 
+// Async spawn return codes
+const SPAWN_PENDING = -3;
+const SPAWN_ERROR = -4;
+
 // ============================================================================
 // Library Loading
 // ============================================================================
@@ -131,6 +135,13 @@ const lib = dlopen(libPath, {
   bun_pty_get_pid: { args: [FFIType.i32], returns: FFIType.i32 },
   bun_pty_get_exit_code: { args: [FFIType.i32], returns: FFIType.i32 },
   bun_pty_close: { args: [FFIType.i32], returns: FFIType.void },
+  // Async spawn functions
+  bun_pty_spawn_async: {
+    args: [FFIType.cstring, FFIType.cstring, FFIType.cstring, FFIType.i32, FFIType.i32],
+    returns: FFIType.i32,
+  },
+  bun_pty_spawn_poll: { args: [FFIType.i32], returns: FFIType.i32 },
+  bun_pty_spawn_cancel: { args: [FFIType.i32], returns: FFIType.void },
 });
 
 // ============================================================================
@@ -191,6 +202,25 @@ export class Terminal implements IPty {
   private _onExit = new EventEmitter<IExitEvent>();
   // Streaming TextDecoder handles incomplete UTF-8 sequences across reads
   private _decoder = new TextDecoder("utf-8", { fatal: false });
+
+  /**
+   * Create a Terminal from an already-spawned handle (used by spawnAsync)
+   */
+  static fromHandle(handle: number, cols: number, rows: number): Terminal {
+    const term = Object.create(Terminal.prototype) as Terminal;
+    term.handle = handle;
+    term._pid = lib.symbols.bun_pty_get_pid(handle);
+    term._cols = cols;
+    term._rows = rows;
+    term._readLoop = false;
+    term._closing = false;
+    term._exitFired = false;
+    term._onData = new EventEmitter<string>();
+    term._onExit = new EventEmitter<IExitEvent>();
+    term._decoder = new TextDecoder("utf-8", { fatal: false });
+    term._startReadLoop();
+    return term;
+  }
 
   constructor(
     file: string = DEFAULT_FILE,
@@ -325,4 +355,65 @@ export function spawn(
   options: IPtyForkOptions
 ): IPty {
   return new Terminal(file, args, options);
+}
+
+/**
+ * Spawn a PTY asynchronously - the fork() happens off the main thread.
+ * This prevents animation stutter when creating new panes.
+ */
+export function spawnAsync(
+  file: string,
+  args: string[],
+  options: IPtyForkOptions
+): Promise<IPty> {
+  const cols = options.cols ?? DEFAULT_COLS;
+  const rows = options.rows ?? DEFAULT_ROWS;
+  const cwd = options.cwd ?? process.cwd();
+
+  const cmdline = [file, ...args.map(shQuote)].join(" ");
+
+  let envStr = "";
+  if (options.env) {
+    const envPairs = Object.entries(options.env).map(([k, v]) => `${k}=${v}`);
+    envStr = envPairs.join("\0") + "\0";
+  }
+
+  const requestId = lib.symbols.bun_pty_spawn_async(
+    Buffer.from(`${cmdline}\0`, "utf8"),
+    Buffer.from(`${cwd}\0`, "utf8"),
+    Buffer.from(`${envStr}\0`, "utf8"),
+    cols,
+    rows
+  );
+
+  if (requestId < 0) {
+    return Promise.reject(new Error("PTY async spawn request failed"));
+  }
+
+  return new Promise((resolve, reject) => {
+    const poll = () => {
+      const result = lib.symbols.bun_pty_spawn_poll(requestId);
+
+      if (result === SPAWN_PENDING) {
+        // Still pending - poll again after a short delay
+        // Use 5ms interval to reduce polling overhead while staying responsive
+        setTimeout(poll, 5);
+        return;
+      }
+
+      if (result === SPAWN_ERROR || result < 0) {
+        reject(new Error("PTY spawn failed"));
+        return;
+      }
+
+      // Success - result is the handle
+      // Defer Terminal creation to next tick to avoid synchronous work burst
+      setImmediate(() => {
+        resolve(Terminal.fromHandle(result, cols, rows));
+      });
+    };
+
+    // Start polling on next tick to avoid synchronous FFI call
+    setImmediate(poll);
+  });
 }

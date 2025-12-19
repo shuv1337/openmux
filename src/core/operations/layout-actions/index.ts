@@ -3,7 +3,7 @@
  * Re-exports all layout reducer functionality
  */
 
-export type { LayoutState, LayoutAction } from './types';
+export type { LayoutState, LayoutAction, Workspaces } from './types';
 
 export {
   generatePaneId,

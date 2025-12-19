@@ -3,8 +3,8 @@
  * SET_VIEWPORT, SWITCH_WORKSPACE, LOAD_SESSION, CLEAR_ALL
  */
 
-import type { Rectangle, Workspace, WorkspaceId } from '../../types';
-import type { LayoutState } from './types';
+import type { Rectangle, WorkspaceId } from '../../types';
+import type { LayoutState, Workspaces } from './types';
 import { createWorkspace, updateWorkspace, recalculateLayout, syncPaneIdCounter } from './helpers';
 
 /**
@@ -12,12 +12,14 @@ import { createWorkspace, updateWorkspace, recalculateLayout, syncPaneIdCounter 
  * Updates viewport and recalculates all layouts
  */
 export function handleSetViewport(state: LayoutState, viewport: Rectangle): LayoutState {
-  const newWorkspaces = new Map<WorkspaceId, Workspace>();
-  for (const [id, workspace] of state.workspaces) {
+  const newWorkspaces: Workspaces = {};
+  for (const [idStr, workspace] of Object.entries(state.workspaces)) {
+    if (!workspace) continue;
+    const id = Number(idStr) as WorkspaceId;
     if (workspace.mainPane) {
-      newWorkspaces.set(id, recalculateLayout(workspace, viewport, state.config));
+      newWorkspaces[id] = recalculateLayout(workspace, viewport, state.config);
     } else {
-      newWorkspaces.set(id, workspace);
+      newWorkspaces[id] = workspace;
     }
   }
   return { ...state, workspaces: newWorkspaces, viewport };
@@ -28,7 +30,7 @@ export function handleSetViewport(state: LayoutState, viewport: Rectangle): Layo
  * Switches to existing workspace or creates new one
  */
 export function handleSwitchWorkspace(state: LayoutState, workspaceId: WorkspaceId): LayoutState {
-  if (!state.workspaces.has(workspaceId)) {
+  if (state.workspaces[workspaceId] === undefined) {
     const newWorkspace = createWorkspace(workspaceId, state.config.defaultLayoutMode);
     return {
       ...state,
@@ -46,15 +48,17 @@ export function handleSwitchWorkspace(state: LayoutState, workspaceId: Workspace
  */
 export function handleLoadSession(
   state: LayoutState,
-  workspaces: Map<WorkspaceId, Workspace>,
+  workspaces: Workspaces,
   activeWorkspaceId: WorkspaceId
 ): LayoutState {
-  const newWorkspaces = new Map<WorkspaceId, Workspace>();
-  for (const [id, workspace] of workspaces) {
+  const newWorkspaces: Workspaces = {};
+  for (const [idStr, workspace] of Object.entries(workspaces)) {
+    if (!workspace) continue;
+    const id = Number(idStr) as WorkspaceId;
     if (workspace.mainPane) {
-      newWorkspaces.set(id, recalculateLayout(workspace, state.viewport, state.config));
+      newWorkspaces[id] = recalculateLayout(workspace, state.viewport, state.config);
     } else {
-      newWorkspaces.set(id, workspace);
+      newWorkspaces[id] = workspace;
     }
   }
   // Sync pane ID counter to avoid conflicts with existing pane IDs
@@ -73,7 +77,7 @@ export function handleLoadSession(
 export function handleClearAll(state: LayoutState): LayoutState {
   return {
     ...state,
-    workspaces: new Map(),
+    workspaces: {},
     activeWorkspaceId: 1,
   };
 }

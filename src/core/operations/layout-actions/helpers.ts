@@ -4,7 +4,7 @@
 
 import type { Rectangle, Workspace, WorkspaceId, LayoutMode } from '../../types';
 import type { LayoutConfig } from '../../config';
-import type { LayoutState } from './types';
+import type { LayoutState, Workspaces } from './types';
 import { calculateMasterStackLayout } from '../master-stack-layout';
 
 let paneIdCounter = 0;
@@ -27,9 +27,10 @@ export function resetPaneIdCounter(): void {
  * Sync pane ID counter with loaded panes to avoid ID conflicts
  * Called when loading a session with existing pane IDs
  */
-export function syncPaneIdCounter(workspaces: Map<WorkspaceId, Workspace>): void {
+export function syncPaneIdCounter(workspaces: Workspaces): void {
   let maxId = paneIdCounter;
-  for (const workspace of workspaces.values()) {
+  for (const workspace of Object.values(workspaces)) {
+    if (!workspace) continue;
     if (workspace.mainPane) {
       const match = workspace.mainPane.id.match(/^pane-(\d+)$/);
       if (match) {
@@ -66,7 +67,7 @@ export function createWorkspace(id: WorkspaceId, layoutMode: LayoutMode): Worksp
  * Creates a new one if it doesn't exist
  */
 export function getActiveWorkspace(state: LayoutState): Workspace {
-  let workspace = state.workspaces.get(state.activeWorkspaceId);
+  let workspace = state.workspaces[state.activeWorkspaceId];
   if (!workspace) {
     workspace = createWorkspace(state.activeWorkspaceId, state.config.defaultLayoutMode);
   }
@@ -74,12 +75,13 @@ export function getActiveWorkspace(state: LayoutState): Workspace {
 }
 
 /**
- * Create a new workspaces Map with the updated workspace
+ * Create a new workspaces object with the updated workspace
  */
-export function updateWorkspace(state: LayoutState, workspace: Workspace): Map<WorkspaceId, Workspace> {
-  const newWorkspaces = new Map(state.workspaces);
-  newWorkspaces.set(workspace.id, workspace);
-  return newWorkspaces;
+export function updateWorkspace(state: LayoutState, workspace: Workspace): Workspaces {
+  return {
+    ...state.workspaces,
+    [workspace.id]: workspace,
+  };
 }
 
 /**

@@ -4,44 +4,18 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { Rectangle, Workspace, WorkspaceId, LayoutMode, PaneData } from '../../src/core/types';
-import type { LayoutConfig } from '../../src/core/config';
+import type { Rectangle, Workspace, WorkspaceId, PaneData } from '../../src/core/types';
 import { DEFAULT_CONFIG } from '../../src/core/config';
 
-// We'll import from the extracted module once refactoring is complete
-// For now, we define the reducer types and test the pure logic
-
-interface LayoutState {
-  workspaces: Map<WorkspaceId, Workspace>;
-  activeWorkspaceId: WorkspaceId;
-  viewport: Rectangle;
-  config: LayoutConfig;
-  layoutVersion: number;
-}
-
-type LayoutAction =
-  | { type: 'FOCUS_PANE'; paneId: string }
-  | { type: 'NAVIGATE'; direction: 'north' | 'south' | 'east' | 'west' }
-  | { type: 'NEW_PANE'; ptyId?: string; title?: string }
-  | { type: 'CLOSE_PANE' }
-  | { type: 'CLOSE_PANE_BY_ID'; paneId: string }
-  | { type: 'SET_VIEWPORT'; viewport: Rectangle }
-  | { type: 'SWITCH_WORKSPACE'; workspaceId: WorkspaceId }
-  | { type: 'SET_LAYOUT_MODE'; mode: LayoutMode }
-  | { type: 'SET_PANE_PTY'; paneId: string; ptyId: string }
-  | { type: 'SWAP_MAIN' }
-  | { type: 'TOGGLE_ZOOM' }
-  | { type: 'LOAD_SESSION'; workspaces: Map<WorkspaceId, Workspace>; activeWorkspaceId: WorkspaceId }
-  | { type: 'CLEAR_ALL' };
-
-// Import the extracted reducer once ready
+// Import from the layout-actions module
 import {
   layoutReducer,
   createWorkspace,
   getActiveWorkspace,
-  updateWorkspace,
   generatePaneId,
   resetPaneIdCounter,
+  type LayoutState,
+  type Workspaces,
 } from '../../src/core/operations/layout-actions';
 
 describe('Layout Reducer', () => {
@@ -49,7 +23,7 @@ describe('Layout Reducer', () => {
 
   function createInitialState(overrides?: Partial<LayoutState>): LayoutState {
     return {
-      workspaces: new Map(),
+      workspaces: {},
       activeWorkspaceId: 1,
       viewport: defaultViewport,
       config: DEFAULT_CONFIG,
@@ -114,9 +88,9 @@ describe('Layout Reducer', () => {
       it('should return existing workspace', () => {
         const workspace = createWorkspaceWithPanes(1, { id: 'pane-1', title: 'test' });
         const state = createInitialState({
-          workspaces: new Map([[1, workspace]]),
+          workspaces: { 1: workspace },
         });
-        expect(getActiveWorkspace(state)).toBe(workspace);
+        expect(getActiveWorkspace(state)).toEqual(workspace);
       });
 
       it('should create new workspace if not exists', () => {
@@ -134,11 +108,11 @@ describe('Layout Reducer', () => {
       const stackPane: PaneData = { id: 'pane-2' };
       const workspace = createWorkspaceWithPanes(1, mainPane, [stackPane]);
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'FOCUS_PANE', paneId: 'pane-2' });
-      const newWorkspace = newState.workspaces.get(1)!;
+      const newWorkspace = newState.workspaces[1]!;
 
       expect(newWorkspace.focusedPaneId).toBe('pane-2');
     });
@@ -152,11 +126,11 @@ describe('Layout Reducer', () => {
       ];
       const workspace = createWorkspaceWithPanes(1, mainPane, stackPanes);
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'FOCUS_PANE', paneId: 'pane-4' });
-      const newWorkspace = newState.workspaces.get(1)!;
+      const newWorkspace = newState.workspaces[1]!;
 
       expect(newWorkspace.activeStackIndex).toBe(2);
     });
@@ -169,11 +143,11 @@ describe('Layout Reducer', () => {
         activeStackIndex: 0,
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'FOCUS_PANE', paneId: 'pane-1' });
-      const newWorkspace = newState.workspaces.get(1)!;
+      const newWorkspace = newState.workspaces[1]!;
 
       expect(newWorkspace.focusedPaneId).toBe('pane-1');
       expect(newWorkspace.activeStackIndex).toBe(0); // Unchanged
@@ -186,11 +160,11 @@ describe('Layout Reducer', () => {
         zoomed: true,
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'FOCUS_PANE', paneId: 'pane-2' });
-      const newWorkspace = newState.workspaces.get(1)!;
+      const newWorkspace = newState.workspaces[1]!;
 
       // When zoomed, focused pane should get full viewport
       expect(newWorkspace.stackPanes[0]?.rectangle).toEqual(defaultViewport);
@@ -207,11 +181,11 @@ describe('Layout Reducer', () => {
           focusedPaneId: 'pane-1',
         });
         const state = createInitialState({
-          workspaces: new Map([[1, workspace]]),
+          workspaces: { 1: workspace },
         });
 
         const newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'east' });
-        expect(newState.workspaces.get(1)!.focusedPaneId).toBe('pane-2');
+        expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-2');
       });
 
       it('should navigate west from stack to main', () => {
@@ -221,11 +195,11 @@ describe('Layout Reducer', () => {
           focusedPaneId: 'pane-2',
         });
         const state = createInitialState({
-          workspaces: new Map([[1, workspace]]),
+          workspaces: { 1: workspace },
         });
 
         const newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'west' });
-        expect(newState.workspaces.get(1)!.focusedPaneId).toBe('pane-1');
+        expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-1');
       });
 
       it('should navigate north/south within stack', () => {
@@ -240,16 +214,16 @@ describe('Layout Reducer', () => {
           activeStackIndex: 1,
         });
         const state = createInitialState({
-          workspaces: new Map([[1, workspace]]),
+          workspaces: { 1: workspace },
         });
 
         // Navigate north (up in stack)
         let newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'north' });
-        expect(newState.workspaces.get(1)!.focusedPaneId).toBe('pane-2');
+        expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-2');
 
         // Navigate south (down in stack)
         newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'south' });
-        expect(newState.workspaces.get(1)!.focusedPaneId).toBe('pane-4');
+        expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-4');
       });
 
       it('should not navigate north when at top of stack', () => {
@@ -260,11 +234,11 @@ describe('Layout Reducer', () => {
           activeStackIndex: 0,
         });
         const state = createInitialState({
-          workspaces: new Map([[1, workspace]]),
+          workspaces: { 1: workspace },
         });
 
         const newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'north' });
-        expect(newState.workspaces.get(1)!.focusedPaneId).toBe('pane-2');
+        expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-2');
       });
 
       it('should not navigate south when at bottom of stack', () => {
@@ -275,11 +249,11 @@ describe('Layout Reducer', () => {
           activeStackIndex: 1,
         });
         const state = createInitialState({
-          workspaces: new Map([[1, workspace]]),
+          workspaces: { 1: workspace },
         });
 
         const newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'south' });
-        expect(newState.workspaces.get(1)!.focusedPaneId).toBe('pane-3');
+        expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-3');
       });
 
       it('should navigate to correct stack pane using activeStackIndex', () => {
@@ -294,11 +268,11 @@ describe('Layout Reducer', () => {
           activeStackIndex: 2, // Remember last focused stack pane
         });
         const state = createInitialState({
-          workspaces: new Map([[1, workspace]]),
+          workspaces: { 1: workspace },
         });
 
         const newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'east' });
-        expect(newState.workspaces.get(1)!.focusedPaneId).toBe('pane-4');
+        expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-4');
       });
     });
 
@@ -311,11 +285,11 @@ describe('Layout Reducer', () => {
           layoutMode: 'horizontal',
         });
         const state = createInitialState({
-          workspaces: new Map([[1, workspace]]),
+          workspaces: { 1: workspace },
         });
 
         const newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'south' });
-        expect(newState.workspaces.get(1)!.focusedPaneId).toBe('pane-2');
+        expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-2');
       });
 
       it('should navigate north from stack to main', () => {
@@ -326,11 +300,11 @@ describe('Layout Reducer', () => {
           layoutMode: 'horizontal',
         });
         const state = createInitialState({
-          workspaces: new Map([[1, workspace]]),
+          workspaces: { 1: workspace },
         });
 
         const newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'north' });
-        expect(newState.workspaces.get(1)!.focusedPaneId).toBe('pane-1');
+        expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-1');
       });
 
       it('should navigate west/east within stack', () => {
@@ -346,16 +320,16 @@ describe('Layout Reducer', () => {
           layoutMode: 'horizontal',
         });
         const state = createInitialState({
-          workspaces: new Map([[1, workspace]]),
+          workspaces: { 1: workspace },
         });
 
         // Navigate west
         let newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'west' });
-        expect(newState.workspaces.get(1)!.focusedPaneId).toBe('pane-2');
+        expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-2');
 
         // Navigate east
         newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'east' });
-        expect(newState.workspaces.get(1)!.focusedPaneId).toBe('pane-4');
+        expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-4');
       });
     });
 
@@ -371,7 +345,7 @@ describe('Layout Reducer', () => {
         focusedPaneId: 'non-existent',
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'east' });
@@ -384,7 +358,7 @@ describe('Layout Reducer', () => {
       const state = createInitialState();
       const newState = layoutReducer(state, { type: 'NEW_PANE' });
 
-      const workspace = newState.workspaces.get(1)!;
+      const workspace = newState.workspaces[1]!;
       expect(workspace.mainPane).not.toBeNull();
       expect(workspace.mainPane!.id).toBe('pane-1');
       expect(workspace.focusedPaneId).toBe('pane-1');
@@ -398,7 +372,7 @@ describe('Layout Reducer', () => {
 
       // Now add second pane
       const newState = layoutReducer(stateWithMain, { type: 'NEW_PANE' });
-      const newWorkspace = newState.workspaces.get(1)!;
+      const newWorkspace = newState.workspaces[1]!;
 
       expect(newWorkspace.mainPane!.id).toBe('pane-1');
       expect(newWorkspace.stackPanes).toHaveLength(1);
@@ -415,7 +389,7 @@ describe('Layout Reducer', () => {
         title: 'my-shell',
       });
 
-      const workspace = newState.workspaces.get(1)!;
+      const workspace = newState.workspaces[1]!;
       expect(workspace.mainPane!.ptyId).toBe('pty-123');
       expect(workspace.mainPane!.title).toBe('my-shell');
     });
@@ -424,7 +398,7 @@ describe('Layout Reducer', () => {
       const state = createInitialState();
       const newState = layoutReducer(state, { type: 'NEW_PANE' });
 
-      const workspace = newState.workspaces.get(1)!;
+      const workspace = newState.workspaces[1]!;
       expect(workspace.mainPane!.title).toBe('shell');
     });
 
@@ -439,11 +413,11 @@ describe('Layout Reducer', () => {
       let newState = layoutReducer(state, { type: 'NEW_PANE' });
 
       // Single pane gets full viewport
-      expect(newState.workspaces.get(1)!.mainPane!.rectangle).toEqual(defaultViewport);
+      expect(newState.workspaces[1]!.mainPane!.rectangle).toEqual(defaultViewport);
 
       // Add second pane - should split
       newState = layoutReducer(newState, { type: 'NEW_PANE' });
-      const workspace = newState.workspaces.get(1)!;
+      const workspace = newState.workspaces[1]!;
 
       expect(workspace.mainPane!.rectangle!.width).toBeLessThan(defaultViewport.width);
       expect(workspace.stackPanes[0]!.rectangle).toBeDefined();
@@ -458,11 +432,11 @@ describe('Layout Reducer', () => {
         focusedPaneId: 'pane-1',
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'CLOSE_PANE' });
-      const newWorkspace = newState.workspaces.get(1)!;
+      const newWorkspace = newState.workspaces[1]!;
 
       expect(newWorkspace.mainPane!.id).toBe('pane-2');
       expect(newWorkspace.stackPanes).toHaveLength(1);
@@ -478,11 +452,11 @@ describe('Layout Reducer', () => {
         activeStackIndex: 0,
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'CLOSE_PANE' });
-      const newWorkspace = newState.workspaces.get(1)!;
+      const newWorkspace = newState.workspaces[1]!;
 
       expect(newWorkspace.stackPanes).toHaveLength(1);
       expect(newWorkspace.stackPanes[0]!.id).toBe('pane-3');
@@ -498,11 +472,11 @@ describe('Layout Reducer', () => {
         activeStackIndex: 0,
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'CLOSE_PANE' });
-      const newWorkspace = newState.workspaces.get(1)!;
+      const newWorkspace = newState.workspaces[1]!;
 
       expect(newWorkspace.stackPanes).toHaveLength(0);
       expect(newWorkspace.focusedPaneId).toBe('pane-1');
@@ -512,19 +486,19 @@ describe('Layout Reducer', () => {
       const mainPane: PaneData = { id: 'pane-1' };
       const workspace = createWorkspaceWithPanes(1, mainPane);
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'CLOSE_PANE' });
 
-      // Workspace should be removed from map
-      expect(newState.workspaces.has(1)).toBe(false);
+      // Workspace should be removed from object
+      expect(newState.workspaces[1]).toBeUndefined();
     });
 
     it('should return same state when no focused pane', () => {
       const workspace = createWorkspace(1, 'vertical');
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'CLOSE_PANE' });
@@ -538,7 +512,7 @@ describe('Layout Reducer', () => {
         focusedPaneId: 'pane-2',
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'CLOSE_PANE' });
@@ -554,11 +528,11 @@ describe('Layout Reducer', () => {
         focusedPaneId: 'pane-1', // Focus main, but close stack pane
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'CLOSE_PANE_BY_ID', paneId: 'pane-2' });
-      const newWorkspace = newState.workspaces.get(1)!;
+      const newWorkspace = newState.workspaces[1]!;
 
       expect(newWorkspace.stackPanes).toHaveLength(1);
       expect(newWorkspace.stackPanes[0]!.id).toBe('pane-3');
@@ -573,11 +547,11 @@ describe('Layout Reducer', () => {
         activeStackIndex: 0,
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'CLOSE_PANE_BY_ID', paneId: 'pane-2' });
-      const newWorkspace = newState.workspaces.get(1)!;
+      const newWorkspace = newState.workspaces[1]!;
 
       expect(newWorkspace.focusedPaneId).toBe('pane-3');
     });
@@ -594,11 +568,11 @@ describe('Layout Reducer', () => {
         activeStackIndex: 2,
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'CLOSE_PANE_BY_ID', paneId: 'pane-2' });
-      const newWorkspace = newState.workspaces.get(1)!;
+      const newWorkspace = newState.workspaces[1]!;
 
       // Active index should be adjusted
       expect(newWorkspace.activeStackIndex).toBe(1);
@@ -609,7 +583,7 @@ describe('Layout Reducer', () => {
       const mainPane: PaneData = { id: 'pane-1' };
       const workspace = createWorkspaceWithPanes(1, mainPane);
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'CLOSE_PANE_BY_ID', paneId: 'non-existent' });
@@ -623,11 +597,11 @@ describe('Layout Reducer', () => {
         focusedPaneId: 'pane-2',
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'CLOSE_PANE_BY_ID', paneId: 'pane-1' });
-      const newWorkspace = newState.workspaces.get(1)!;
+      const newWorkspace = newState.workspaces[1]!;
 
       expect(newWorkspace.mainPane!.id).toBe('pane-2');
       expect(newWorkspace.stackPanes).toHaveLength(0);
@@ -639,44 +613,41 @@ describe('Layout Reducer', () => {
       const mainPane: PaneData = { id: 'pane-1' };
       const workspace = createWorkspaceWithPanes(1, mainPane);
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newViewport: Rectangle = { x: 0, y: 0, width: 200, height: 60 };
       const newState = layoutReducer(state, { type: 'SET_VIEWPORT', viewport: newViewport });
 
       expect(newState.viewport).toEqual(newViewport);
-      expect(newState.workspaces.get(1)!.mainPane!.rectangle).toEqual(newViewport);
+      expect(newState.workspaces[1]!.mainPane!.rectangle).toEqual(newViewport);
     });
 
     it('should recalculate all workspaces', () => {
       const workspace1 = createWorkspaceWithPanes(1, { id: 'pane-1' });
       const workspace2 = createWorkspaceWithPanes(2, { id: 'pane-2' });
       const state = createInitialState({
-        workspaces: new Map([
-          [1, workspace1],
-          [2, workspace2],
-        ]),
+        workspaces: { 1: workspace1, 2: workspace2 },
       });
 
       const newViewport: Rectangle = { x: 0, y: 0, width: 200, height: 60 };
       const newState = layoutReducer(state, { type: 'SET_VIEWPORT', viewport: newViewport });
 
-      expect(newState.workspaces.get(1)!.mainPane!.rectangle).toEqual(newViewport);
-      expect(newState.workspaces.get(2)!.mainPane!.rectangle).toEqual(newViewport);
+      expect(newState.workspaces[1]!.mainPane!.rectangle).toEqual(newViewport);
+      expect(newState.workspaces[2]!.mainPane!.rectangle).toEqual(newViewport);
     });
 
     it('should not modify empty workspaces', () => {
       const emptyWorkspace = createWorkspace(1, 'vertical');
       const state = createInitialState({
-        workspaces: new Map([[1, emptyWorkspace]]),
+        workspaces: { 1: emptyWorkspace },
       });
 
       const newViewport: Rectangle = { x: 0, y: 0, width: 200, height: 60 };
       const newState = layoutReducer(state, { type: 'SET_VIEWPORT', viewport: newViewport });
 
       // Empty workspace should remain unchanged
-      expect(newState.workspaces.get(1)!.mainPane).toBeNull();
+      expect(newState.workspaces[1]!.mainPane).toBeNull();
     });
   });
 
@@ -685,10 +656,7 @@ describe('Layout Reducer', () => {
       const workspace1 = createWorkspaceWithPanes(1, { id: 'pane-1' });
       const workspace2 = createWorkspaceWithPanes(2, { id: 'pane-2' });
       const state = createInitialState({
-        workspaces: new Map([
-          [1, workspace1],
-          [2, workspace2],
-        ]),
+        workspaces: { 1: workspace1, 2: workspace2 },
       });
 
       const newState = layoutReducer(state, { type: 'SWITCH_WORKSPACE', workspaceId: 2 });
@@ -700,8 +668,8 @@ describe('Layout Reducer', () => {
       const newState = layoutReducer(state, { type: 'SWITCH_WORKSPACE', workspaceId: 5 });
 
       expect(newState.activeWorkspaceId).toBe(5);
-      expect(newState.workspaces.has(5)).toBe(true);
-      expect(newState.workspaces.get(5)!.mainPane).toBeNull();
+      expect(newState.workspaces[5]).toBeDefined();
+      expect(newState.workspaces[5]!.mainPane).toBeNull();
     });
 
     it('should increment layout version', () => {
@@ -716,11 +684,11 @@ describe('Layout Reducer', () => {
       const mainPane: PaneData = { id: 'pane-1' };
       const workspace = createWorkspaceWithPanes(1, mainPane);
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'SET_LAYOUT_MODE', mode: 'horizontal' });
-      expect(newState.workspaces.get(1)!.layoutMode).toBe('horizontal');
+      expect(newState.workspaces[1]!.layoutMode).toBe('horizontal');
     });
 
     it('should recalculate layout when has panes', () => {
@@ -728,11 +696,11 @@ describe('Layout Reducer', () => {
       const stackPane: PaneData = { id: 'pane-2' };
       const workspace = createWorkspaceWithPanes(1, mainPane, [stackPane]);
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'SET_LAYOUT_MODE', mode: 'horizontal' });
-      const newWorkspace = newState.workspaces.get(1)!;
+      const newWorkspace = newState.workspaces[1]!;
 
       // Layout should be recalculated with new mode
       expect(newWorkspace.mainPane!.rectangle).toBeDefined();
@@ -743,7 +711,7 @@ describe('Layout Reducer', () => {
       const mainPane: PaneData = { id: 'pane-1' };
       const workspace = createWorkspaceWithPanes(1, mainPane);
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'SET_LAYOUT_MODE', mode: 'stacked' });
@@ -756,7 +724,7 @@ describe('Layout Reducer', () => {
       const mainPane: PaneData = { id: 'pane-1' };
       const workspace = createWorkspaceWithPanes(1, mainPane);
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, {
@@ -765,7 +733,7 @@ describe('Layout Reducer', () => {
         ptyId: 'pty-123',
       });
 
-      expect(newState.workspaces.get(1)!.mainPane!.ptyId).toBe('pty-123');
+      expect(newState.workspaces[1]!.mainPane!.ptyId).toBe('pty-123');
     });
 
     it('should set ptyId on stack pane', () => {
@@ -773,7 +741,7 @@ describe('Layout Reducer', () => {
       const stackPane: PaneData = { id: 'pane-2' };
       const workspace = createWorkspaceWithPanes(1, mainPane, [stackPane]);
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, {
@@ -782,7 +750,7 @@ describe('Layout Reducer', () => {
         ptyId: 'pty-456',
       });
 
-      expect(newState.workspaces.get(1)!.stackPanes[0]!.ptyId).toBe('pty-456');
+      expect(newState.workspaces[1]!.stackPanes[0]!.ptyId).toBe('pty-456');
     });
 
     it('should not modify other panes', () => {
@@ -790,7 +758,7 @@ describe('Layout Reducer', () => {
       const stackPane: PaneData = { id: 'pane-2' };
       const workspace = createWorkspaceWithPanes(1, mainPane, [stackPane]);
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, {
@@ -799,7 +767,7 @@ describe('Layout Reducer', () => {
         ptyId: 'pty-new',
       });
 
-      expect(newState.workspaces.get(1)!.mainPane!.ptyId).toBe('pty-original');
+      expect(newState.workspaces[1]!.mainPane!.ptyId).toBe('pty-original');
     });
   });
 
@@ -812,11 +780,11 @@ describe('Layout Reducer', () => {
         activeStackIndex: 0,
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'SWAP_MAIN' });
-      const newWorkspace = newState.workspaces.get(1)!;
+      const newWorkspace = newState.workspaces[1]!;
 
       expect(newWorkspace.mainPane!.id).toBe('pane-2');
       expect(newWorkspace.stackPanes[0]!.id).toBe('pane-1');
@@ -829,7 +797,7 @@ describe('Layout Reducer', () => {
         focusedPaneId: 'pane-1', // Main is focused
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'SWAP_MAIN' });
@@ -839,7 +807,7 @@ describe('Layout Reducer', () => {
     it('should return same state when no main pane', () => {
       const workspace = createWorkspace(1, 'vertical');
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'SWAP_MAIN' });
@@ -852,7 +820,7 @@ describe('Layout Reducer', () => {
         focusedPaneId: null,
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'SWAP_MAIN' });
@@ -866,7 +834,7 @@ describe('Layout Reducer', () => {
         focusedPaneId: 'pane-2',
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'SWAP_MAIN' });
@@ -883,11 +851,11 @@ describe('Layout Reducer', () => {
         zoomed: false,
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'TOGGLE_ZOOM' });
-      const newWorkspace = newState.workspaces.get(1)!;
+      const newWorkspace = newState.workspaces[1]!;
 
       expect(newWorkspace.zoomed).toBe(true);
       // Focused pane should get full viewport
@@ -903,11 +871,11 @@ describe('Layout Reducer', () => {
         zoomed: true,
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'TOGGLE_ZOOM' });
-      const newWorkspace = newState.workspaces.get(1)!;
+      const newWorkspace = newState.workspaces[1]!;
 
       expect(newWorkspace.zoomed).toBe(false);
       // Should recalculate normal layout
@@ -917,7 +885,7 @@ describe('Layout Reducer', () => {
     it('should return same state when no focused pane', () => {
       const workspace = createWorkspace(1, 'vertical');
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'TOGGLE_ZOOM' });
@@ -930,7 +898,7 @@ describe('Layout Reducer', () => {
         focusedPaneId: 'pane-1',
       });
       const state = createInitialState({
-        workspaces: new Map([[1, workspace]]),
+        workspaces: { 1: workspace },
       });
 
       const newState = layoutReducer(state, { type: 'TOGGLE_ZOOM' });
@@ -953,13 +921,13 @@ describe('Layout Reducer', () => {
 
       const newState = layoutReducer(state, {
         type: 'LOAD_SESSION',
-        workspaces: new Map([[3, loadedWorkspace]]),
+        workspaces: { 3: loadedWorkspace },
         activeWorkspaceId: 3,
       });
 
       expect(newState.activeWorkspaceId).toBe(3);
-      expect(newState.workspaces.has(3)).toBe(true);
-      expect(newState.workspaces.get(3)!.mainPane!.id).toBe('pane-100');
+      expect(newState.workspaces[3]).toBeDefined();
+      expect(newState.workspaces[3]!.mainPane!.id).toBe('pane-100');
     });
 
     it('should recalculate layouts for loaded workspaces', () => {
@@ -976,12 +944,12 @@ describe('Layout Reducer', () => {
 
       const newState = layoutReducer(state, {
         type: 'LOAD_SESSION',
-        workspaces: new Map([[1, loadedWorkspace]]),
+        workspaces: { 1: loadedWorkspace },
         activeWorkspaceId: 1,
       });
 
       // Should have calculated rectangle
-      expect(newState.workspaces.get(1)!.mainPane!.rectangle).toBeDefined();
+      expect(newState.workspaces[1]!.mainPane!.rectangle).toBeDefined();
     });
   });
 
@@ -990,16 +958,13 @@ describe('Layout Reducer', () => {
       const workspace1 = createWorkspaceWithPanes(1, { id: 'pane-1' });
       const workspace2 = createWorkspaceWithPanes(2, { id: 'pane-2' });
       const state = createInitialState({
-        workspaces: new Map([
-          [1, workspace1],
-          [2, workspace2],
-        ]),
+        workspaces: { 1: workspace1, 2: workspace2 },
         activeWorkspaceId: 2,
       });
 
       const newState = layoutReducer(state, { type: 'CLEAR_ALL' });
 
-      expect(newState.workspaces.size).toBe(0);
+      expect(Object.keys(newState.workspaces).length).toBe(0);
       expect(newState.activeWorkspaceId).toBe(1);
     });
   });

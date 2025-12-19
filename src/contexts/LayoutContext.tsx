@@ -6,9 +6,10 @@ import {
   createContext,
   useContext,
   createMemo,
+  batch,
   type ParentProps,
 } from 'solid-js';
-import { createStore, produce, unwrap } from 'solid-js/store';
+import { createStore, unwrap, reconcile } from 'solid-js/store';
 import type { Workspace, WorkspaceId, PaneData, Direction, LayoutMode } from '../core/types';
 import { LayoutConfig, DEFAULT_CONFIG } from '../core/config';
 import {
@@ -20,6 +21,7 @@ import {
   getActiveWorkspace,
   type LayoutState,
   type LayoutAction,
+  type Workspaces,
 } from '../core/operations/layout-actions';
 
 // =============================================================================
@@ -47,7 +49,7 @@ interface LayoutContextValue {
   setPaneTitle: (paneId: string, title: string) => void;
   swapMain: () => void;
   toggleZoom: () => void;
-  loadSession: (params: { workspaces: Map<WorkspaceId, Workspace>; activeWorkspaceId: WorkspaceId }) => void;
+  loadSession: (params: { workspaces: Workspaces; activeWorkspaceId: WorkspaceId }) => void;
   clearAll: () => void;
 }
 
@@ -65,7 +67,7 @@ export function LayoutProvider(props: LayoutProviderProps) {
   const mergedConfig = { ...DEFAULT_CONFIG, ...props.config };
 
   const initialState: LayoutState = {
-    workspaces: new Map(),
+    workspaces: {},
     activeWorkspaceId: 1,
     viewport: { x: 0, y: 0, width: 80, height: 24 },
     config: mergedConfig,
@@ -76,19 +78,77 @@ export function LayoutProvider(props: LayoutProviderProps) {
   // This preserves the well-tested reducer logic
   const [state, setState] = createStore<LayoutState>(initialState);
 
+  // Debug timing flag - set to true to see layout timing
+  const DEBUG_LAYOUT_TIMING = false;
+
+  // Apply state update using batch to group all updates into a single render cycle
+  const applyState = (newState: LayoutState) => {
+    const start = DEBUG_LAYOUT_TIMING ? performance.now() : 0;
+
+    // Batch all updates into a single render cycle
+    batch(() => {
+      // Use reconcile with merge:true for workspaces to preserve object references
+      // where possible - this minimizes re-renders when only some properties change
+      setState('workspaces', reconcile(newState.workspaces, { merge: true }));
+      setState('activeWorkspaceId', newState.activeWorkspaceId);
+      setState('viewport', newState.viewport);
+      setState('config', newState.config);
+      setState('layoutVersion', newState.layoutVersion);
+    });
+
+    if (DEBUG_LAYOUT_TIMING) {
+      const elapsed = performance.now() - start;
+      if (elapsed > 1) {
+        console.log(`[LAYOUT] setState took ${elapsed.toFixed(2)}ms`);
+      }
+    }
+  };
+
+  // Queue for batching rapid actions (like spam creating panes)
+  let pendingActions: LayoutAction[] = [];
+  let flushScheduled = false;
+
+  // Flush pending actions in a batch
+  const flushActions = () => {
+    if (pendingActions.length === 0) return;
+
+    const actions = pendingActions;
+    pendingActions = [];
+    flushScheduled = false;
+
+    // Apply all actions to get final state
+    let currentState = unwrap(state);
+    for (const action of actions) {
+      currentState = layoutReducer(currentState, action);
+    }
+
+    // Apply state update
+    applyState(currentState);
+  };
+
   // Helper to dispatch actions through the reducer
-  // Use produce for efficient structural sharing - only updates changed paths
-  // This avoids full tree comparison that reconcile does, reducing re-renders
+  // Uses reconcile for efficient diffing
   const dispatch = (action: LayoutAction) => {
+    // Actions that affect layout (can cause expensive re-renders) are batched
+    // to reduce stutter when rapidly creating/closing panes
+    const batchableActions = ['NEW_PANE', 'CLOSE_PANE', 'CLOSE_PANE_BY_ID'];
+
+    if (batchableActions.includes(action.type)) {
+      pendingActions.push(action);
+      if (!flushScheduled) {
+        flushScheduled = true;
+        // Use queueMicrotask for faster batching - processes before next render
+        // This is faster than setTimeout(0) while still allowing multiple
+        // rapid actions to be batched together
+        queueMicrotask(flushActions);
+      }
+      return;
+    }
+
+    // Non-batchable actions apply directly
     const currentState = unwrap(state);
     const newState = layoutReducer(currentState, action);
-    setState(produce((draft) => {
-      draft.workspaces = newState.workspaces;
-      draft.activeWorkspaceId = newState.activeWorkspaceId;
-      draft.viewport = newState.viewport;
-      draft.config = newState.config;
-      draft.layoutVersion = newState.layoutVersion;
-    }));
+    applyState(newState);
   };
 
   // Computed values using createMemo
@@ -96,9 +156,9 @@ export function LayoutProvider(props: LayoutProviderProps) {
 
   const populatedWorkspaces = createMemo(() => {
     const result: WorkspaceId[] = [];
-    for (const [id, workspace] of state.workspaces) {
-      if (workspace.mainPane) {
-        result.push(id);
+    for (const [idStr, workspace] of Object.entries(state.workspaces)) {
+      if (workspace?.mainPane) {
+        result.push(Number(idStr) as WorkspaceId);
       }
     }
     if (!result.includes(state.activeWorkspaceId)) {
@@ -128,7 +188,7 @@ export function LayoutProvider(props: LayoutProviderProps) {
     dispatch({ type: 'SET_PANE_TITLE', paneId, title });
   const swapMain = () => dispatch({ type: 'SWAP_MAIN' });
   const toggleZoom = () => dispatch({ type: 'TOGGLE_ZOOM' });
-  const loadSession = (params: { workspaces: Map<WorkspaceId, Workspace>; activeWorkspaceId: WorkspaceId }) =>
+  const loadSession = (params: { workspaces: Workspaces; activeWorkspaceId: WorkspaceId }) =>
     dispatch({ type: 'LOAD_SESSION', workspaces: params.workspaces, activeWorkspaceId: params.activeWorkspaceId });
   const clearAll = () => dispatch({ type: 'CLEAR_ALL' });
 

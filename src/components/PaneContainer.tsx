@@ -21,6 +21,16 @@ export function PaneContainer() {
   const session = useSession();
   const { state: aggregateState } = useAggregateView();
 
+  // Memoize workspace properties to prevent cascading re-renders
+  // Access layout.activeWorkspace once and derive stable values
+  const workspace = () => layout.activeWorkspace;
+  const mainPane = createMemo(() => workspace().mainPane);
+  const stackPanes = createMemo(() => workspace().stackPanes);
+  const focusedPaneId = createMemo(() => workspace().focusedPaneId);
+  const layoutMode = createMemo(() => workspace().layoutMode);
+  const isZoomed = createMemo(() => workspace().zoomed);
+  const activeStackIndex = createMemo(() => workspace().activeStackIndex);
+
   const handlePaneClick = (paneId: string) => {
     focusPane(paneId);
   };
@@ -35,11 +45,11 @@ export function PaneContainer() {
   };
 
   // Don't show "No panes" message while session is switching or aggregate view is open (prevents bleed-through)
-  const showNoPanesMessage = () => !layout.activeWorkspace.mainPane && !session.state.switching && !aggregateState.showAggregateView;
+  const showNoPanesMessage = () => !mainPane() && !session.state.switching && !aggregateState.showAggregateView;
 
   return (
     <Show
-      when={layout.activeWorkspace.mainPane}
+      when={mainPane()}
       fallback={
         <Show when={showNoPanesMessage()}>
           <box
@@ -57,7 +67,7 @@ export function PaneContainer() {
       }
     >
       <Show
-        when={layout.activeWorkspace.zoomed}
+        when={isZoomed()}
         fallback={
           <box
             style={{
@@ -67,8 +77,8 @@ export function PaneContainer() {
           >
             {/* Render main pane */}
             <PaneRenderer
-              pane={layout.activeWorkspace.mainPane!}
-              isFocused={layout.activeWorkspace.focusedPaneId === layout.activeWorkspace.mainPane!.id}
+              pane={mainPane()!}
+              isFocused={focusedPaneId() === mainPane()!.id}
               isMain={true}
               onFocus={handlePaneClick}
               onMouseInput={handleMouseInput}
@@ -76,16 +86,16 @@ export function PaneContainer() {
 
             {/* Render stack panes */}
             <Show
-              when={layout.activeWorkspace.layoutMode === 'stacked'}
+              when={layoutMode() === 'stacked'}
               fallback={
                 /* Use Index instead of For - tracks by position not reference.
                    This prevents component recreation when array reference changes
                    but individual panes stay the same (just their rectangles update) */
-                <Index each={layout.activeWorkspace.stackPanes}>
+                <Index each={stackPanes()}>
                   {(pane) => (
                     <PaneRenderer
                       pane={pane()}
-                      isFocused={layout.activeWorkspace.focusedPaneId === pane().id}
+                      isFocused={focusedPaneId() === pane().id}
                       isMain={false}
                       onFocus={handlePaneClick}
                       onMouseInput={handleMouseInput}
@@ -96,9 +106,9 @@ export function PaneContainer() {
             >
               {/* Stacked mode: render tab headers and only the active pane */}
               <StackedPanesRenderer
-                stackPanes={layout.activeWorkspace.stackPanes}
-                activeStackIndex={layout.activeWorkspace.activeStackIndex}
-                focusedPaneId={layout.activeWorkspace.focusedPaneId}
+                stackPanes={stackPanes()}
+                activeStackIndex={activeStackIndex()}
+                focusedPaneId={focusedPaneId()}
                 onFocus={handlePaneClick}
                 onMouseInput={handleMouseInput}
               />
@@ -108,7 +118,7 @@ export function PaneContainer() {
       >
         {/* When zoomed, only render the focused pane */}
         <ZoomedPaneRenderer
-          workspace={layout.activeWorkspace}
+          workspace={workspace()}
           onFocus={handlePaneClick}
           onMouseInput={handleMouseInput}
         />

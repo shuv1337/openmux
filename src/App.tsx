@@ -270,68 +270,71 @@ function AppContent() {
         if (!isSessionInit) return;
         if (isSwitching) return;
 
-        let hadFailure = false;
-
-        const createPtysForPanes = async () => {
-          for (const pane of panes) {
-            // SYNCHRONOUS guard: check and add to pendingPtyCreation Set IMMEDIATELY
-            // This prevents race conditions where concurrent effect runs both pass the check
-            if (pendingPtyCreation.has(pane.id)) {
-              continue;
+        const createPtyForPane = async (pane: typeof panes[number]) => {
+          try {
+            // ASYNC check: verify PTY wasn't created in a previous session/effect run
+            const alreadyCreated = await isPtyCreated(pane.id);
+            if (alreadyCreated) {
+              return true; // Already has a PTY
             }
-            // Add to set synchronously BEFORE any async work
-            pendingPtyCreation.add(pane.id);
 
-            try {
-              // ASYNC check: verify PTY wasn't created in a previous session/effect run
-              const alreadyCreated = await isPtyCreated(pane.id);
-              if (alreadyCreated) {
-                // Already has a PTY, skip creation
-                continue;
-              }
+            // Calculate pane dimensions (account for border)
+            const rect = pane.rectangle ?? { width: 80, height: 24 };
+            const cols = Math.max(1, rect.width - 2);
+            const rows = Math.max(1, rect.height - 2);
 
-              // Calculate pane dimensions (account for border)
-              const rect = pane.rectangle ?? { width: 80, height: 24 };
-              const cols = Math.max(1, rect.width - 2);
-              const rows = Math.max(1, rect.height - 2);
+            // Check for session-restored CWD first, then pending CWD from new pane,
+            // then OPENMUX_ORIGINAL_CWD (set by wrapper to preserve user's cwd)
+            const sessionCwd = await getSessionCwdFromCoordinator(pane.id);
+            let cwd = sessionCwd ?? pendingCwd ?? process.env.OPENMUX_ORIGINAL_CWD ?? undefined;
+            pendingCwd = null; // Clear after use
 
-              // Check for session-restored CWD first, then pending CWD from new pane,
-              // then OPENMUX_ORIGINAL_CWD (set by wrapper to preserve user's cwd)
-              const sessionCwd = await getSessionCwdFromCoordinator(pane.id);
-              let cwd = sessionCwd ?? pendingCwd ?? process.env.OPENMUX_ORIGINAL_CWD ?? undefined;
-              pendingCwd = null; // Clear after use
-
-              // Mark as created BEFORE calling createPTY (persistent marker)
-              await markPtyCreated(pane.id);
-              await createPTY(pane.id, cols, rows, cwd);
-            } catch (err) {
-              console.error(`Failed to create PTY for pane ${pane.id}:`, err);
-              hadFailure = true;
-            } finally {
-              // Always remove from pending set when done (success or failure)
-              pendingPtyCreation.delete(pane.id);
-            }
-          }
-
-          // Schedule a retry if any PTY creation failed
-          if (hadFailure) {
-            setTimeout(() => {
-              setPtyRetryCounter(c => c + 1);
-            }, 100);
+            // Mark as created BEFORE calling createPTY (persistent marker)
+            await markPtyCreated(pane.id);
+            // Fire-and-forget PTY creation - don't await to avoid blocking
+            createPTY(pane.id, cols, rows, cwd).catch(err => {
+              console.error(`PTY creation failed for ${pane.id}:`, err);
+            });
+            return true;
+          } catch (err) {
+            console.error(`Failed to create PTY for pane ${pane.id}:`, err);
+            return false;
+          } finally {
+            pendingPtyCreation.delete(pane.id);
           }
         };
 
-        createPtysForPanes();
+        // Process each pane in a separate macrotask to avoid blocking animations
+        for (const pane of panes) {
+          // SYNCHRONOUS guard: check and add to pendingPtyCreation Set IMMEDIATELY
+          if (pendingPtyCreation.has(pane.id)) {
+            continue;
+          }
+          pendingPtyCreation.add(pane.id);
+
+          // Defer to next macrotask - allows animations to continue
+          setTimeout(() => {
+            createPtyForPane(pane).then(success => {
+              if (!success) {
+                setTimeout(() => setPtyRetryCounter(c => c + 1), 100);
+              }
+            });
+          }, 0);
+        }
       }
     )
   );
 
-  // Resize PTYs and update positions when pane dimensions change
+  // Resize PTYs and update positions when layout structure or viewport changes
+  // Use layoutVersion (structural changes) and viewport instead of panes
+  // This avoids re-running on non-structural changes like ptyId/title updates
   createEffect(() => {
     if (!terminal.isInitialized) return;
-    // Access layout.panes to create reactive dependency
-    const _panes = layout.panes;
-    paneResizeHandlers.resizeAllPanes();
+    // Track structural changes (pane add/remove, layout mode) and viewport resize
+    const _version = layout.layoutVersion;
+    const _viewport = layout.state.viewport;
+    // Debounce via queueMicrotask to batch rapid structural changes
+    queueMicrotask(() => paneResizeHandlers.resizeAllPanes());
   });
 
   // Restore PTY sizes when aggregate view closes

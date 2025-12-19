@@ -57,6 +57,9 @@ interface SessionState {
   // Error tracking for worker recovery
   errorCount: number;
   lastErrorAt: number | null;
+  // Initialization tracking for non-blocking session creation
+  initializationState: 'pending' | 'ready' | 'failed';
+  initializationPromise: Promise<void> | null;
 }
 
 /**
@@ -65,6 +68,14 @@ interface SessionState {
 interface PendingRequest<T> {
   resolve: (value: T) => void;
   reject: (error: Error) => void;
+}
+
+/**
+ * Promise with attached resolve/reject for non-blocking session creation
+ */
+interface InitPromiseWithResolvers extends Promise<void> {
+  _resolve: () => void;
+  _reject: (error: Error) => void;
 }
 
 // ============================================================================
@@ -85,6 +96,10 @@ export class EmulatorWorkerPool {
   private nextRequestId = 0;
   private nextWorkerIndex = 0;
   private initialized = false;
+
+  // Message batching for reduced main thread blocking
+  private messageQueue: Array<{ workerIndex: number; msg: WorkerOutbound }> = [];
+  private flushScheduled = false;
 
   /**
    * Initialize the worker pool
@@ -107,7 +122,7 @@ export class EmulatorWorkerPool {
       this.workerRestartInProgress.push(false);
 
       worker.onmessage = (event: MessageEvent<WorkerOutbound>) => {
-        this.handleWorkerMessage(i, event.data);
+        this.queueMessage(i, event.data);
       };
 
       worker.onerror = (error) => {
@@ -162,13 +177,18 @@ export class EmulatorWorkerPool {
 
   /**
    * Create a new terminal session
+   *
+   * This method is non-blocking - it returns immediately after sending the
+   * initialization message to the worker. The worker will buffer any incoming
+   * writes until initialization completes. Use waitForSession() if you need
+   * to wait for initialization to complete.
    */
-  async createSession(
+  createSession(
     sessionId: string,
     cols: number,
     rows: number,
     colors: TerminalColors
-  ): Promise<void> {
+  ): void {
     if (!this.initialized) {
       throw new Error('Worker pool not initialized');
     }
@@ -188,7 +208,20 @@ export class EmulatorWorkerPool {
       palette: colors.palette.map(extractRgb),
     };
 
-    // Track session state
+    // Create initialization promise (resolved by handleWorkerMessage)
+    let resolveInit: () => void;
+    let rejectInit: (error: Error) => void;
+    const initPromise = new Promise<void>((resolve, reject) => {
+      resolveInit = resolve;
+      rejectInit = reject;
+    });
+
+    // Store resolve/reject functions for use by message handler
+    // We attach them to the promise object for access in handleInitialized/handleError
+    (initPromise as InitPromiseWithResolvers)._resolve = resolveInit!;
+    (initPromise as InitPromiseWithResolvers)._reject = rejectInit!;
+
+    // Track session state with pending initialization
     this.sessionToState.set(sessionId, {
       workerIndex,
       updateCallback: null,
@@ -202,9 +235,11 @@ export class EmulatorWorkerPool {
       pendingUpdate: null,
       errorCount: 0,
       lastErrorAt: null,
+      initializationState: 'pending',
+      initializationPromise: initPromise,
     });
 
-    // Send init message
+    // Send init message (fire and forget - don't block)
     const msg: WorkerInbound = {
       type: 'init',
       sessionId,
@@ -212,28 +247,29 @@ export class EmulatorWorkerPool {
       rows,
       colors: workerColors,
     };
+    this.workers[workerIndex].postMessage(msg);
 
-    return new Promise((resolve, reject) => {
-      const handler = (event: MessageEvent<WorkerOutbound>) => {
-        if (
-          event.data.type === 'initialized' &&
-          event.data.sessionId === sessionId
-        ) {
-          this.workers[workerIndex].removeEventListener('message', handler);
-          resolve();
-        } else if (
-          event.data.type === 'error' &&
-          event.data.sessionId === sessionId
-        ) {
-          this.workers[workerIndex].removeEventListener('message', handler);
-          this.sessionToState.delete(sessionId);
-          reject(new Error(event.data.message));
-        }
-      };
+    // Return immediately - worker buffers writes until session is ready
+  }
 
-      this.workers[workerIndex].addEventListener('message', handler);
-      this.workers[workerIndex].postMessage(msg);
-    });
+  /**
+   * Wait for a session to complete initialization
+   * Use this if you need to ensure the session is fully ready before proceeding.
+   */
+  async waitForSession(sessionId: string): Promise<void> {
+    const state = this.sessionToState.get(sessionId);
+    if (!state) {
+      throw new Error(`Session ${sessionId} not found`);
+    }
+    if (state.initializationState === 'ready') {
+      return;
+    }
+    if (state.initializationState === 'failed') {
+      throw new Error('Session initialization failed');
+    }
+    if (state.initializationPromise) {
+      await state.initializationPromise;
+    }
   }
 
   /**
@@ -466,6 +502,37 @@ export class EmulatorWorkerPool {
   // Message Handling
   // ============================================================================
 
+  /**
+   * Queue a message for batched processing
+   * Messages are processed together in the next microtask to reduce main thread blocking
+   */
+  private queueMessage(workerIndex: number, msg: WorkerOutbound): void {
+    this.messageQueue.push({ workerIndex, msg });
+    this.scheduleFlush();
+  }
+
+  /**
+   * Schedule message queue flush if not already scheduled
+   */
+  private scheduleFlush(): void {
+    if (this.flushScheduled) return;
+    this.flushScheduled = true;
+    queueMicrotask(() => this.flushMessageQueue());
+  }
+
+  /**
+   * Process all queued messages in one batch
+   */
+  private flushMessageQueue(): void {
+    this.flushScheduled = false;
+    const queue = this.messageQueue;
+    this.messageQueue = [];
+
+    for (const { workerIndex, msg } of queue) {
+      this.handleWorkerMessage(workerIndex, msg);
+    }
+  }
+
   private handleWorkerMessage(workerIndex: number, msg: WorkerOutbound): void {
     switch (msg.type) {
       case 'ready':
@@ -473,7 +540,7 @@ export class EmulatorWorkerPool {
         break;
 
       case 'initialized':
-        // Already handled via promise
+        this.handleInitialized(msg.sessionId);
         break;
 
       case 'update':
@@ -507,6 +574,19 @@ export class EmulatorWorkerPool {
       case 'error':
         this.handleError(workerIndex, msg.sessionId, msg.requestId, msg.message);
         break;
+    }
+  }
+
+  private handleInitialized(sessionId: string): void {
+    const state = this.sessionToState.get(sessionId);
+    if (!state) return;
+
+    state.initializationState = 'ready';
+
+    // Resolve the initialization promise
+    const promise = state.initializationPromise as InitPromiseWithResolvers | null;
+    if (promise?._resolve) {
+      promise._resolve();
     }
   }
 
@@ -622,6 +702,16 @@ export class EmulatorWorkerPool {
       if (state) {
         state.errorCount++;
         state.lastErrorAt = now;
+
+        // Reject initialization promise if session was still pending
+        if (state.initializationState === 'pending') {
+          state.initializationState = 'failed';
+          const promise = state.initializationPromise as InitPromiseWithResolvers | null;
+          if (promise?._reject) {
+            promise._reject(new Error(message));
+          }
+          this.sessionToState.delete(sessionId);
+        }
       }
     }
 
@@ -671,7 +761,7 @@ export class EmulatorWorkerPool {
     this.workers[workerIndex] = newWorker;
 
     newWorker.onmessage = (event: MessageEvent<WorkerOutbound>) => {
-      this.handleWorkerMessage(workerIndex, event.data);
+      this.queueMessage(workerIndex, event.data);
     };
 
     newWorker.onerror = (error) => {

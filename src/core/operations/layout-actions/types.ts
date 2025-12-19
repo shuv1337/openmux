@@ -5,8 +5,11 @@
 import type { Direction, Rectangle, Workspace, WorkspaceId, LayoutMode, PaneData, NodeId } from '../../types';
 import type { LayoutConfig } from '../../config';
 
+/** Workspaces stored as plain object for better SolidJS reactivity */
+export type Workspaces = { [K in WorkspaceId]?: Workspace };
+
 export interface LayoutState {
-  workspaces: Map<WorkspaceId, Workspace>;
+  workspaces: Workspaces;
   activeWorkspaceId: WorkspaceId;
   viewport: Rectangle;
   config: LayoutConfig;
@@ -27,5 +30,5 @@ export type LayoutAction =
   | { type: 'SET_PANE_TITLE'; paneId: NodeId; title: string }
   | { type: 'SWAP_MAIN' }
   | { type: 'TOGGLE_ZOOM' }
-  | { type: 'LOAD_SESSION'; workspaces: Map<WorkspaceId, Workspace>; activeWorkspaceId: WorkspaceId }
+  | { type: 'LOAD_SESSION'; workspaces: Workspaces; activeWorkspaceId: WorkspaceId }
   | { type: 'CLEAR_ALL' };

@@ -3,7 +3,7 @@
  * Wraps zig-pty with ghostty-web VT parsing.
  */
 import { Context, Effect, Layer, Ref, HashMap, Option } from "effect"
-import { spawn } from "../../../zig-pty/src/index"
+import { spawnAsync } from "../../../zig-pty/src/index"
 import type { TerminalState, UnifiedTerminalUpdate } from "../../core/types"
 import type { ITerminalEmulator } from "../../terminal/emulator-interface"
 import { createWorkerEmulator } from "../../terminal/worker-emulator"
@@ -179,12 +179,17 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           return session.value
         })
 
+      // Debug timing flag - set to true to see PTY creation timing
+      const DEBUG_PTY_TIMING = false
+
       const create = Effect.fn("Pty.create")(function* (options: {
         cols: Cols
         rows: Rows
         cwd?: string
         env?: Record<string, string>
       }) {
+        const startTime = DEBUG_PTY_TIMING ? performance.now() : 0
+
         const id = makePtyId()
         const cols = options.cols
         const rows = options.rows
@@ -194,12 +199,16 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         // Get host colors (required for worker emulator)
         const colors = getHostColors() ?? getDefaultColors()
 
-        // Create worker-based emulator
-        const emulator = yield* Effect.tryPromise({
+        const afterColors = DEBUG_PTY_TIMING ? performance.now() : 0
+
+        // Create worker-based emulator (non-blocking - worker buffers until initialized)
+        const emulator = yield* Effect.try({
           try: () => createWorkerEmulator(workerPool, cols, rows, colors),
           catch: (error) =>
             PtySpawnError.make({ shell, cwd, cause: error }),
         })
+
+        const afterEmulator = DEBUG_PTY_TIMING ? performance.now() : 0
 
         // Create graphics passthrough
         const graphicsPassthrough = new GraphicsPassthrough()
@@ -210,10 +219,10 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         // Get capability environment
         const capabilityEnv = getCapabilityEnvironment()
 
-        // Spawn PTY
-        const pty = yield* Effect.try({
+        // Spawn PTY asynchronously (fork happens off main thread)
+        const pty = yield* Effect.tryPromise({
           try: () =>
-            spawn(shell, [], {
+            spawnAsync(shell, [], {
               name: "xterm-256color",
               cols,
               rows,
@@ -229,6 +238,8 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           catch: (error) =>
             PtySpawnError.make({ shell, cwd, cause: error }),
         })
+
+        const afterSpawn = DEBUG_PTY_TIMING ? performance.now() : 0
 
         const session: InternalPtySession = {
           id,
@@ -312,6 +323,12 @@ export class Pty extends Context.Tag("@openmux/Pty")<
 
         // Emit lifecycle event using registry
         yield* lifecycleRegistry.notify({ type: 'created', ptyId: id })
+
+        const afterSetup = DEBUG_PTY_TIMING ? performance.now() : 0
+
+        if (DEBUG_PTY_TIMING) {
+          console.log(`[PTY.create] Colors: ${(afterColors - startTime).toFixed(2)}ms, Emulator: ${(afterEmulator - afterColors).toFixed(2)}ms, Spawn: ${(afterSpawn - afterEmulator).toFixed(2)}ms, Setup: ${(afterSetup - afterSpawn).toFixed(2)}ms, Total: ${(afterSetup - startTime).toFixed(2)}ms`)
+        }
 
         return id
       })

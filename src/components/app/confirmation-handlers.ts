@@ -92,8 +92,9 @@ export function createConfirmationHandlers(deps: ConfirmationHandlerDeps) {
       const ptyId = getFocusedPtyId();
       closePane();
       // Destroy the PTY to kill the terminal process
+      // Defer to macrotask to avoid blocking animations
       if (ptyId) {
-        destroyPTY(ptyId);
+        setTimeout(() => destroyPTY(ptyId), 0);
       }
     } else if (type === 'exit') {
       await saveSession();

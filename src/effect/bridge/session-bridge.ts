@@ -20,6 +20,7 @@ import type {
   WorkspaceId,
   PaneData,
 } from "../../core/types"
+import type { Workspaces } from "../../core/operations/layout-actions"
 
 // =============================================================================
 // Core Session Functions
@@ -280,7 +281,7 @@ function extractCwdMap(session: EffectSerializedSession): Map<string, string> {
  */
 export async function saveCurrentSession(
   metadata: LegacySessionMetadata,
-  workspaces: Map<WorkspaceId, Workspace>,
+  workspaces: Workspaces,
   activeWorkspaceId: WorkspaceId,
   getCwd: (ptyId: string) => Promise<string>
 ): Promise<void> {
@@ -297,7 +298,7 @@ export async function saveCurrentSession(
         autoNamed: metadata.autoNamed,
       })
 
-      // Convert Map<WorkspaceId, Workspace> to ReadonlyMap<number, WorkspaceState>
+      // Convert Workspaces object to ReadonlyMap<number, WorkspaceState>
       const workspaceState = new Map<number, {
         mainPane: { id: string; ptyId?: string; title?: string } | null
         stackPanes: Array<{ id: string; ptyId?: string; title?: string }>
@@ -307,7 +308,9 @@ export async function saveCurrentSession(
         zoomed: boolean
       }>()
 
-      for (const [id, ws] of workspaces) {
+      for (const [idStr, ws] of Object.entries(workspaces)) {
+        if (!ws) continue
+        const id = Number(idStr)
         workspaceState.set(id, {
           mainPane: ws.mainPane ? {
             id: ws.mainPane.id,
@@ -339,7 +342,7 @@ export async function loadSessionData(
   sessionId: string
 ): Promise<{
   metadata: LegacySessionMetadata
-  workspaces: Map<WorkspaceId, Workspace>
+  workspaces: Workspaces
   activeWorkspaceId: WorkspaceId
   cwdMap: Map<string, string>
 } | null> {
@@ -358,10 +361,10 @@ export async function loadSessionData(
           autoNamed: session.metadata.autoNamed,
         }
 
-        // Deserialize workspaces
-        const workspaces = new Map<WorkspaceId, Workspace>()
+        // Deserialize workspaces to plain object
+        const workspaces: Workspaces = {}
         for (const ws of session.workspaces) {
-          workspaces.set(ws.id as WorkspaceId, deserializeWorkspace(ws))
+          workspaces[ws.id as WorkspaceId] = deserializeWorkspace(ws)
         }
 
         // Extract CWD map
