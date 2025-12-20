@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.28](https://github.com/monotykamary/openmux/compare/v0.2.27...v0.2.28) (2025-12-20)
+
+
+### Bug Fixes
+
+* **async-spawn:** prevent race condition in spawnCancel ([77be515](https://github.com/monotykamary/openmux/commit/77be5153d245a529dd040f23db6b8337a60d112b))
+* **stacked-tabs:** prevent text selection on tab click ([79f0da9](https://github.com/monotykamary/openmux/commit/79f0da924d85d21475832d0fd13b9202b3576e25))
+
 ### [0.2.27](https://github.com/monotykamary/openmux/compare/v0.2.26...v0.2.27) (2025-12-19)
 
 ### [0.2.26](https://github.com/monotykamary/openmux/compare/v0.2.25...v0.2.26) (2025-12-19)
