@@ -2,7 +2,7 @@
 //! Native APIs for process inspection without subprocess spawning.
 //!
 //! Provides:
-//! - Process name detection (with argv[0] support for better CLI tool names)
+//! - Process name detection (argv basename with runtime-aware argv[1] fallback)
 //! - Current working directory lookup
 //! - Child process finding for foreground detection
 //!
@@ -20,7 +20,7 @@ const c = posix.c;
 // Public API
 // ============================================================================
 
-/// Get the name of a process, preferring argv[0] basename over executable name.
+/// Get the name of a process, preferring argv basename over executable name.
 /// This gives better results for CLI tools (e.g., "claude" instead of "node").
 ///
 /// Returns: number of bytes written to buf (> 0), or ERROR (-1) on failure.
@@ -67,6 +67,59 @@ pub fn findChildProcess(parent_pid: c_int) c_int {
     return parent_pid;
 }
 
+fn copyNameToBuf(name: []const u8, buf: [*]u8, len: usize) c_int {
+    if (len == 0 or name.len == 0) return constants.ERROR;
+
+    const copy_len = @min(name.len, len - 1);
+    @memcpy(buf[0..copy_len], name[0..copy_len]);
+    buf[copy_len] = 0;
+
+    return @intCast(copy_len);
+}
+
+fn basename(path: []const u8) []const u8 {
+    var start: usize = 0;
+    for (path, 0..) |ch, i| {
+        if (ch == '/') {
+            start = i + 1;
+        }
+    }
+    return path[start..];
+}
+
+fn stripScriptExtension(name: []const u8) []const u8 {
+    if (std.mem.endsWith(u8, name, ".js")) return name[0 .. name.len - 3];
+    if (std.mem.endsWith(u8, name, ".mjs")) return name[0 .. name.len - 4];
+    if (std.mem.endsWith(u8, name, ".cjs")) return name[0 .. name.len - 4];
+    return name;
+}
+
+fn isRuntimeName(name: []const u8) bool {
+    return std.mem.eql(u8, name, "node") or
+        std.mem.eql(u8, name, "nodejs") or
+        std.mem.eql(u8, name, "bun") or
+        std.mem.eql(u8, name, "deno");
+}
+
+fn pickArgvBasename(argv0: []const u8, argv1: []const u8) []const u8 {
+    const argv0_base = basename(argv0);
+    if (!isRuntimeName(argv0_base)) return argv0_base;
+
+    if (argv1.len == 0 or argv1[0] == '-') return argv0_base;
+
+    const argv1_base = basename(argv1);
+    const stripped = stripScriptExtension(argv1_base);
+    if (stripped.len == 0) return argv0_base;
+
+    if ((std.mem.eql(u8, stripped, "cli") or std.mem.eql(u8, stripped, "index")) and
+        std.mem.indexOf(u8, argv1, "codex") != null)
+    {
+        return "codex";
+    }
+
+    return stripped;
+}
+
 // ============================================================================
 // macOS Implementation
 // ============================================================================
@@ -92,24 +145,24 @@ const macos = struct {
     const KERN_ARGMAX = 8;
     const KERN_PROCARGS2 = 49;
 
-    /// Get process name, preferring argv[0] basename over pbi_comm.
-    /// Falls back to pbi_comm if argv[0] is unavailable.
+    /// Get process name, preferring argv basename over pbi_comm.
+    /// Falls back to pbi_comm if argv info is unavailable.
     pub fn getProcessName(pid: c_int, buf: [*]u8, len: usize) c_int {
         if (builtin.os.tag != .macos) return constants.ERROR;
 
-        // First try to get argv[0] via sysctl - this gives better names for CLI tools
-        const argv0_result = getArgv0Basename(pid, buf, len);
-        if (argv0_result > 0) {
-            return argv0_result;
+        // First try to get argv info via sysctl - this gives better names for CLI tools
+        const argv_result = getArgvBasename(pid, buf, len);
+        if (argv_result > 0) {
+            return argv_result;
         }
 
         // Fall back to pbi_comm from proc_pidinfo
         return getCommName(pid, buf, len);
     }
 
-    /// Get argv[0] basename via sysctl KERN_PROCARGS2.
+    /// Get preferred argv basename via sysctl KERN_PROCARGS2.
     /// Returns: length written, or <= 0 on failure.
-    fn getArgv0Basename(pid: c_int, buf: [*]u8, len: usize) c_int {
+    fn getArgvBasename(pid: c_int, buf: [*]u8, len: usize) c_int {
         if (builtin.os.tag != .macos) return constants.ERROR;
 
         // Get KERN_ARGMAX to know buffer size needed
@@ -163,25 +216,22 @@ const macos = struct {
             return constants.ERROR;
         }
 
-        // Extract basename from argv[0]
+        var argv1_start: usize = 0;
+        var argv1_end: usize = 0;
+
+        // Move to argv[1] if present
+        while (p < size and procargs_buf[p] == 0) : (p += 1) {}
+        if (p < size) {
+            argv1_start = p;
+            while (p < size and procargs_buf[p] != 0) : (p += 1) {}
+            argv1_end = p;
+        }
+
         const argv0 = procargs_buf[argv0_start..argv0_end];
-        var basename_start: usize = 0;
-        for (argv0, 0..) |ch, i| {
-            if (ch == '/') {
-                basename_start = i + 1;
-            }
-        }
+        const argv1 = if (argv1_end > argv1_start) procargs_buf[argv1_start..argv1_end] else "";
+        const preferred = pickArgvBasename(argv0, argv1);
 
-        const basename = argv0[basename_start..];
-        if (basename.len == 0) {
-            return constants.ERROR;
-        }
-
-        const copy_len = @min(basename.len, len - 1);
-        @memcpy(buf[0..copy_len], basename[0..copy_len]);
-        buf[copy_len] = 0;
-
-        return @intCast(copy_len);
+        return copyNameToBuf(preferred, buf, len);
     }
 
     /// Get pbi_comm from proc_bsdinfo (fallback method).
@@ -204,11 +254,7 @@ const macos = struct {
             return constants.ERROR;
         }
 
-        const copy_len = @min(name_len, len - 1);
-        @memcpy(buf[0..copy_len], comm_ptr[0..copy_len]);
-        buf[copy_len] = 0;
-
-        return @intCast(copy_len);
+        return copyNameToBuf(comm_ptr[0..name_len], buf, len);
     }
 
     /// Get current working directory via proc_pidinfo.
@@ -301,7 +347,7 @@ const macos = struct {
 
 const linux = struct {
     /// Get process name from /proc/<pid>/cmdline, falling back to /proc/<pid>/comm.
-    /// Prefers argv[0] basename for better CLI tool names.
+    /// Prefers argv basename for better CLI tool names.
     pub fn getProcessName(pid: c_int, buf: [*]u8, len: usize) c_int {
         if (builtin.os.tag != .linux) return constants.ERROR;
 
@@ -330,29 +376,30 @@ const linux = struct {
         const bytes_read = c.read(fd, &cmdline, cmdline.len - 1);
         if (bytes_read <= 0) return constants.ERROR;
 
+        const total_len: usize = @intCast(bytes_read);
+
         // argv[0] is the first null-terminated string
         var argv0_len: usize = 0;
-        while (argv0_len < @as(usize, @intCast(bytes_read)) and cmdline[argv0_len] != 0) : (argv0_len += 1) {}
+        while (argv0_len < total_len and cmdline[argv0_len] != 0) : (argv0_len += 1) {}
 
         if (argv0_len == 0) return constants.ERROR;
 
-        // Extract basename
-        const argv0 = cmdline[0..argv0_len];
-        var basename_start: usize = 0;
-        for (argv0, 0..) |ch, i| {
-            if (ch == '/') {
-                basename_start = i + 1;
-            }
+        var argv1_start: usize = 0;
+        var argv1_end: usize = 0;
+
+        var next_index = argv0_len;
+        while (next_index < total_len and cmdline[next_index] == 0) : (next_index += 1) {}
+        if (next_index < total_len) {
+            argv1_start = next_index;
+            while (next_index < total_len and cmdline[next_index] != 0) : (next_index += 1) {}
+            argv1_end = next_index;
         }
 
-        const basename = argv0[basename_start..];
-        if (basename.len == 0) return constants.ERROR;
+        const argv0 = cmdline[0..argv0_len];
+        const argv1 = if (argv1_end > argv1_start) cmdline[argv1_start..argv1_end] else "";
+        const preferred = pickArgvBasename(argv0, argv1);
 
-        const copy_len = @min(basename.len, len - 1);
-        @memcpy(buf[0..copy_len], basename[0..copy_len]);
-        buf[copy_len] = 0;
-
-        return @intCast(copy_len);
+        return copyNameToBuf(preferred, buf, len);
     }
 
     /// Get process name from /proc/<pid>/comm (fallback).
@@ -421,3 +468,18 @@ const linux = struct {
         return max_pid;
     }
 };
+
+test "pickArgvBasename prefers argv1 for runtime" {
+    const chosen = pickArgvBasename("node", "/usr/local/bin/codex");
+    try std.testing.expectEqualStrings("codex", chosen);
+}
+
+test "pickArgvBasename maps cli.js with codex path to codex" {
+    const chosen = pickArgvBasename("node", "/opt/codex/cli.js");
+    try std.testing.expectEqualStrings("codex", chosen);
+}
+
+test "pickArgvBasename keeps argv0 for non-runtime" {
+    const chosen = pickArgvBasename("/bin/zsh", "/usr/local/bin/anything");
+    try std.testing.expectEqualStrings("zsh", chosen);
+}
