@@ -36,6 +36,7 @@ openmux is a terminal multiplexer with a master-stack tiling layout (Zellij-styl
 ### Entry Points
 
 - `src/index.tsx` - CLI entry, renderer setup
+- `src/shim/main.ts` - Shim server entry (background detach/attach)
 - `src/App.tsx` - Provider tree and top-level app wiring
 
 ### Core Data Flow
@@ -46,12 +47,16 @@ Keyboard Input → KeyboardContext → Layout/Terminal actions
                     Master-stack layout calculation
                                 ↓
                        PaneContainer/TerminalView
-PTY Data → zig-pty → WorkerEmulator (ghostty-web) → TerminalContext
+PTY Data → zig-pty → WorkerEmulator (ghostty-web) → Shim protocol → TerminalContext
                                 ↓
                    TerminalView + AggregateView preview
 Session data → SessionContext → disk persistence → SessionBridge (Layout/Terminal)
 Title updates → TitleContext → StatusBar/window title
 ```
+
+Note: In shim server mode, PTY data stays local; in shim client mode, it flows through the shim protocol.
+
+Detach/attach uses a single-client lock; new clients steal the lock and detach the previous client.
 
 ### Context Hierarchy (src/App.tsx)
 
@@ -83,6 +88,10 @@ ThemeProvider              // Styling/theming
 - `input-handler.ts`, `sync-mode-parser.ts` - Input/escape handling
 - `title-parser.ts`, `terminal-query-passthrough/` - Title/query parsing
 - `graphics-passthrough.ts`, `paste-intercepting-stdin.ts`, `focused-pty-registry.ts`
+
+**Shim / detach (src/shim/)**
+- `main.ts`, `server.ts` - Shim server + RPC handling
+- `client/` - Shim client connection, PTY state cache, detach handling
 
 **UI components (src/components/)**
 - `PaneContainer.tsx`, `Pane.tsx`, `TerminalView.tsx` - Pane rendering

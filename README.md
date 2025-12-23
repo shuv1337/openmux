@@ -21,6 +21,7 @@ A terminal multiplexer with master-stack layout (Zellij-style), built with:
 - Tmux-style `Ctrl+b` prefix key
 - 9 workspaces with isolated pane layouts
 - Session persistence and management
+- Detach/attach (leave sessions running in background)
 - Pane zoom (fullscreen focused pane)
 - Aggregate view for browsing/filtering PTYs across workspaces
 - Kitty Graphics and Sixel protocol support
@@ -57,6 +58,7 @@ bun run build --install
 Download prebuilt binaries from [GitHub Releases](https://github.com/monotykamary/openmux/releases).
 
 Available platforms:
+
 - macOS (Apple Silicon)
 - Linux (x64 / arm64)
 
@@ -73,9 +75,33 @@ bun start      # Run from source
 bun dev        # Run with watch mode
 ```
 
+## Architecture (High Level)
+
+```
+┌─────────────────────────┐
+│  Host Terminal (TTY)    │
+└────────────┬────────────┘
+             │ input/output
+             v
+┌─────────────────────────┐
+│ openmux UI (client)     │  Solid + OpenTUI
+└────────────┬────────────┘
+             │ shim protocol (detach/attach)
+             v
+┌─────────────────────────┐
+│ shim server (background)│
+└────────────┬────────────┘
+             │ PTY I/O + emulation
+             v
+┌─────────────────────────┐
+│ zig-pty + ghostty-web   │  worker pool
+└─────────────────────────┘
+```
+
 ## Keyboard Shortcuts
 
 ### Normal Mode (Alt shortcuts - no prefix needed)
+
 - `Alt+h/j/k/l` - Navigate panes
 - `Alt+n` - New pane
 - `Alt+1-9` - Switch to workspace 1-9
@@ -87,6 +113,7 @@ bun dev        # Run with watch mode
 - `Ctrl+b` - Enter prefix mode
 
 ### Mouse
+
 - `Click` - Focus pane
 - `Click tab` - Switch to stacked pane (in stacked mode)
 - `Scroll wheel` - Scroll through terminal history (when not in alternate screen apps like vim)
@@ -94,6 +121,7 @@ bun dev        # Run with watch mode
 - `Drag scrollbar` - Scroll through history by dragging
 
 ### Prefix Mode (Ctrl+b, 2s timeout)
+
 - `n` or `Enter` - New pane
 - `h/j/k/l` - Navigate panes
 - `1-9` - Switch to workspace 1-9
@@ -105,11 +133,13 @@ bun dev        # Run with watch mode
 - `s` - Open session picker
 - `a` - Open aggregate view
 - `]` - Paste from clipboard
+- `d` - Detach (leave session running)
 - `r` - Enter resize mode
 - `?` - Toggle keyboard hints
 - `Esc` - Exit prefix mode
 
 ### Resize Mode
+
 - `h/l` - Shrink/grow width
 - `j/k` - Grow/shrink height
 - `Enter/Esc` - Exit resize mode
@@ -117,19 +147,29 @@ bun dev        # Run with watch mode
 ## Concepts
 
 ### Workspaces
+
 Like i3/sway, openmux supports multiple workspaces (1-9). Each workspace has its own layout tree of panes. The status bar shows populated workspaces dynamically - empty workspaces don't appear unless active.
 
 ### Layout Modes (Zellij-style)
+
 Each workspace has a layout mode that determines how panes are arranged:
+
 - **Vertical** (`│`): Main pane on left, stack panes split vertically on right
 - **Horizontal** (`─`): Main pane on top, stack panes split horizontally on bottom
 - **Stacked** (`▣`): Main pane on left, stack panes tabbed on right (only active visible)
 
 ### Sessions
+
 Sessions persist your workspace layouts and pane working directories. Sessions are auto-saved to `~/.config/openmux/sessions/` and can be switched via the session picker (`Alt+s` or `Ctrl+b s`).
 
+### Detach / Attach
+
+Use `Ctrl+b d` to detach and leave the background shim running. Reattach by launching `openmux` again. Detach/attach uses a single-client lock; a new client steals the lock and the previous client detaches.
+
 ### Aggregate View
+
 A fullscreen overlay (`Alt+a` or `Ctrl+b a`) that lets you browse all PTYs across all workspaces in one place. Features:
+
 - **Card-style PTY list** showing directory, process name, and git branch
 - **Interactive terminal preview** with full input support (keyboard + mouse)
 - **Filter by typing** to search by process name, directory, or git branch
@@ -205,8 +245,9 @@ Current status:
 - [x] Graphics protocol passthrough (Kitty/Sixel)
 - [x] Scrollback support
 - [x] Aggregate view (PTY browser)
-- [ ] Session restore on startup
+- [x] Attach/detach (steal + lock)
 - [ ] Configurable keybindings
+- [ ] Configurable settings and colors
 
 ## License
 
