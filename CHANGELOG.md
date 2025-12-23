@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.33](https://github.com/monotykamary/openmux/compare/v0.2.32...v0.2.33) (2025-12-23)
+
+
+### Bug Fixes
+
+* Effect context typing in the shim server ([24493bd](https://github.com/monotykamary/openmux/commit/24493bd43acf7d71dddfe20700ee033a948c8018))
+
 ### [0.2.32](https://github.com/monotykamary/openmux/compare/v0.2.31...v0.2.32) (2025-12-23)
 
 
