@@ -152,7 +152,10 @@ function AppContent() {
     });
 
     const unsubscribeDetached = onShimDetached(() => {
-      handleDetach();
+      if (detaching) return;
+      detaching = true;
+      renderer.destroy();
+      process.exit(0);
     });
 
     onCleanup(() => {

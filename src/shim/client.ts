@@ -48,6 +48,7 @@ let reader: FrameReader | null = null;
 let connecting: Promise<void> | null = null;
 let spawnAttempted = false;
 let shimPid: number | null = null;
+let detached = false;
 
 const unifiedSubscribers = new Map<string, Set<UnifiedSubscriber>>();
 const stateSubscribers = new Map<string, Set<(state: TerminalState) => void>>();
@@ -402,6 +403,7 @@ function handleFrame(header: ShimHeader, payloads: Buffer[]): void {
   }
 
   if (header.type === 'detached') {
+    detached = true;
     for (const callback of detachedSubscribers) {
       callback();
     }
@@ -502,6 +504,9 @@ async function ensureConnectedWithoutSpawn(): Promise<boolean> {
 }
 
 async function ensureConnected(): Promise<void> {
+  if (detached) {
+    throw new Error('Shim client detached');
+  }
   if (socket && !socket.destroyed) {
     return;
   }

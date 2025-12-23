@@ -174,7 +174,12 @@ async function handleTitles(): Promise<void> {
 async function attachClient(socket: net.Socket): Promise<void> {
   if (activeClient && !activeClient.destroyed) {
     sendFrame(activeClient, { type: 'detached' });
-    activeClient.destroy();
+    activeClient.end();
+    setTimeout(() => {
+      if (activeClient && !activeClient.destroyed) {
+        activeClient.destroy();
+      }
+    }, 250);
   }
 
   activeClient = socket;
