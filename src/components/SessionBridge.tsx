@@ -19,7 +19,7 @@ interface SessionBridgeProps extends ParentProps {}
 
 export function SessionBridge(props: SessionBridgeProps) {
   const layout = useLayout();
-  const { loadSession, clearAll } = layout;
+  const { loadSession } = layout;
   const { suspendSession, resumeSession, cleanupSessionPtys, getSessionCwd } = useTerminal();
 
   // In Solid, we don't need refs for stable callbacks - there are no stale closures
@@ -79,7 +79,6 @@ export function SessionBridge(props: SessionBridgeProps) {
   const onBeforeSwitch = async (currentSessionId: string) => {
     // Suspend PTYs for current session (save mapping, unsubscribe but don't destroy)
     suspendSession(currentSessionId);
-    clearAll();
     // Clear PTY tracking and CWD map to prevent stale state
     clearPtyTracking();
     clearSessionCwdMap();
