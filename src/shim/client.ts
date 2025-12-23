@@ -22,6 +22,7 @@ import {
 import { encodeFrame, FrameReader, SHIM_SOCKET_DIR, SHIM_SOCKET_PATH, type ShimHeader } from './protocol';
 
 const CLIENT_VERSION = 1;
+const CLIENT_ID = `client_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
 type PendingRequest = {
   resolve: (value: { header: ShimHeader; payloads: Buffer[] }) => void;
@@ -403,10 +404,7 @@ function handleFrame(header: ShimHeader, payloads: Buffer[]): void {
   }
 
   if (header.type === 'detached') {
-    detached = true;
-    for (const callback of detachedSubscribers) {
-      callback();
-    }
+    markDetached();
     return;
   }
 }
@@ -431,12 +429,7 @@ async function connectSocket(): Promise<void> {
       client.on('close', () => {
         socket = null;
         reader = null;
-        if (!detached) {
-          detached = true;
-          for (const callback of detachedSubscribers) {
-            callback();
-          }
-        }
+        markDetached();
       });
       resolve();
     };
@@ -444,7 +437,18 @@ async function connectSocket(): Promise<void> {
     client.once('connect', handleConnect);
   });
 
-  const hello = await sendRequest('hello', { clientId: `client_${Date.now()}` , version: CLIENT_VERSION });
+  let hello: { header: ShimHeader; payloads: Buffer[] };
+  try {
+    hello = await sendRequest('hello', { clientId: CLIENT_ID, version: CLIENT_VERSION });
+  } catch (error) {
+    if (error instanceof Error && error.message.toLowerCase().includes('detached')) {
+      socket?.destroy();
+      socket = null;
+      reader = null;
+      markDetached();
+    }
+    throw error;
+  }
   const helloResult = hello.header.result as { pid?: number } | undefined;
   if (helloResult && typeof helloResult.pid === 'number') {
     shimPid = helloResult.pid;
@@ -520,7 +524,10 @@ async function ensureConnected(): Promise<void> {
     connecting = (async () => {
       try {
         await connectSocket();
-      } catch {
+      } catch (error) {
+        if (detached) {
+          throw error;
+        }
         spawnShimProcess();
         await connectWithRetry();
       } finally {
@@ -878,4 +885,11 @@ export async function shutdownShim(): Promise<void> {
 
 export async function waitForShim(): Promise<void> {
   await ensureConnected();
+}
+function markDetached(): void {
+  if (detached) return;
+  detached = true;
+  for (const callback of detachedSubscribers) {
+    callback();
+  }
 }

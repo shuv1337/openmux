@@ -13,12 +13,15 @@ import { encodeFrame, FrameReader, SHIM_SOCKET_DIR, SHIM_SOCKET_PATH, type ShimH
 
 const sessionPanes = new Map<string, Map<string, string>>();
 const ptyToPane = new Map<string, { sessionId: string; paneId: string }>();
+const clientIds = new Map<net.Socket, string>();
+const revokedClientIds = new Set<string>();
 
 const ptySubscriptions = new Map<string, { unifiedUnsub: () => void; exitUnsub: () => void }>();
 let lifecycleUnsub: (() => void) | null = null;
 let titleUnsub: (() => void) | null = null;
 
 let activeClient: net.Socket | null = null;
+let activeClientId: string | null = null;
 let hostColorsSet = false;
 
 async function ensureSocketDir(): Promise<void> {
@@ -233,8 +236,9 @@ async function sendSnapshots(ptyIds: string[]): Promise<void> {
   await Promise.all(ptyIds.map((ptyId) => sendSnapshot(ptyId)));
 }
 
-async function attachClient(socket: net.Socket): Promise<void> {
+async function attachClient(socket: net.Socket, clientId: string): Promise<void> {
   const previousClient = activeClient;
+  const previousClientId = previousClient ? clientIds.get(previousClient) ?? null : null;
   if (previousClient && !previousClient.destroyed) {
     sendFrame(previousClient, { type: 'detached' });
     previousClient.end();
@@ -245,7 +249,13 @@ async function attachClient(socket: net.Socket): Promise<void> {
     }, 250);
   }
 
+  if (previousClientId) {
+    revokedClientIds.add(previousClientId);
+  }
+
+  clientIds.set(socket, clientId);
   activeClient = socket;
+  activeClientId = clientId;
   const ptyIds = await subscribeAllPtys();
   await handleLifecycle();
   await handleTitles();
@@ -256,6 +266,7 @@ async function detachClient(socket: net.Socket): Promise<void> {
   if (activeClient !== socket) return;
 
   activeClient = null;
+  activeClientId = null;
   for (const ptyId of ptySubscriptions.keys()) {
     await unsubscribeFromPty(ptyId);
   }
@@ -279,10 +290,33 @@ async function handleRequest(socket: net.Socket, header: ShimHeader, payloads: B
   const params = (header.params as Record<string, unknown>) ?? {};
 
   try {
+    if (method !== 'hello' && activeClient !== socket) {
+      sendError(socket, requestId, 'Inactive client');
+      socket.end();
+      return;
+    }
+
     switch (method) {
       case 'hello':
-        await attachClient(socket);
-        sendResponse(socket, requestId, { pid: process.pid });
+        {
+          const clientId = typeof params.clientId === 'string' ? params.clientId : null;
+          if (!clientId) {
+            sendError(socket, requestId, 'Missing clientId');
+            socket.end();
+            return;
+          }
+          if (revokedClientIds.has(clientId)) {
+            sendError(socket, requestId, 'Client is detached');
+            socket.end();
+            return;
+          }
+          if (activeClient === socket && activeClientId === clientId) {
+            sendResponse(socket, requestId, { pid: process.pid, clientId });
+            return;
+          }
+          await attachClient(socket, clientId);
+          sendResponse(socket, requestId, { pid: process.pid, clientId });
+        }
         return;
 
       case 'setHostColors':
@@ -492,10 +526,12 @@ export async function startShimServer(): Promise<net.Server> {
     });
 
     socket.on('close', () => {
+      clientIds.delete(socket);
       detachClient(socket).catch(() => {});
     });
 
     socket.on('error', () => {
+      clientIds.delete(socket);
       detachClient(socket).catch(() => {});
     });
   });
