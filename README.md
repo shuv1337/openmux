@@ -146,6 +146,15 @@ bun dev        # Run with watch mode
 
 ## Concepts
 
+### Why openmux (vs tmux / zellij)
+
+- **Single-client steal/lock**: predictable attach semantics; new client wins and old client detaches.
+- **UI binary swap**: update the UI without touching running PTYs (shim stays alive).
+- **UI-first architecture**: SolidJS/OpenTUI enables richer overlays and layout evolution.
+- **PTY state snapshots**: fast attach with immediate state restore (no full redraw pipeline).
+- **Emulator ownership**: aggregate previews, scrollback caching, and search are first-class.
+- **Lower client CPU**: shim does emulation; client focuses on rendering updates.
+
 ### Workspaces
 
 Like i3/sway, openmux supports multiple workspaces (1-9). Each workspace has its own layout tree of panes. The status bar shows populated workspaces dynamically - empty workspaces don't appear unless active.
