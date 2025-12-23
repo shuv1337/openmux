@@ -234,12 +234,13 @@ async function sendSnapshots(ptyIds: string[]): Promise<void> {
 }
 
 async function attachClient(socket: net.Socket): Promise<void> {
-  if (activeClient && !activeClient.destroyed) {
-    sendFrame(activeClient, { type: 'detached' });
-    activeClient.end();
+  const previousClient = activeClient;
+  if (previousClient && !previousClient.destroyed) {
+    sendFrame(previousClient, { type: 'detached' });
+    previousClient.end();
     setTimeout(() => {
-      if (activeClient && !activeClient.destroyed) {
-        activeClient.destroy();
+      if (previousClient && !previousClient.destroyed) {
+        previousClient.destroy();
       }
     }, 250);
   }
