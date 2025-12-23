@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 
 import { Effect } from 'effect';
 import { runEffect } from '../effect/runtime';
+import type { AppServices } from '../effect/runtime';
 import { Pty } from '../effect/services';
 import { PtyId, Cols, Rows } from '../effect/types';
 import type { UnifiedTerminalUpdate, TerminalScrollState, TerminalState, DirtyTerminalUpdate } from '../core/types';
@@ -70,11 +71,12 @@ function sendError(socket: net.Socket, requestId: number, error: string): void {
   });
 }
 
-async function withPty<A>(fn: (pty: any) => Effect.Effect<A, unknown>): Promise<A> {
-  return runEffect(Effect.gen(function* () {
+async function withPty<A>(fn: (pty: any) => Effect.Effect<A, unknown, any>): Promise<A> {
+  const effect = Effect.gen(function* () {
     const pty = (yield* Pty) as any;
     return yield* fn(pty);
-  })) as Promise<A>;
+  }) as Effect.Effect<A, unknown, AppServices>;
+  return runEffect(effect) as Promise<A>;
 }
 
 function registerMapping(sessionId: string, paneId: string, ptyId: string): void {
