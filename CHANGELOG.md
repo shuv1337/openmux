@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.34](https://github.com/monotykamary/openmux/compare/v0.2.33...v0.2.34) (2025-12-23)
+
+
+### Documentation
+
+* add openmux vs tmux zellij comparison ([37b42a3](https://github.com/monotykamary/openmux/commit/37b42a390bb161af92c7305634c8bd14403b03c7))
+
 ### [0.2.33](https://github.com/monotykamary/openmux/compare/v0.2.32...v0.2.33) (2025-12-23)
 
 
