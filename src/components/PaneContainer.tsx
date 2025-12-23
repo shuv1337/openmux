@@ -48,82 +48,84 @@ export function PaneContainer() {
   const showNoPanesMessage = () => !mainPane() && !session.state.switching && !aggregateState.showAggregateView;
 
   return (
-    <Show
-      when={mainPane()}
-      fallback={
-        <Show when={showNoPanesMessage()}>
-          <box
-            style={{
-              flexGrow: 1,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <text fg="#666666">
-              No panes. Press Ctrl+b n or Alt+n to create a pane.
-            </text>
-          </box>
-        </Show>
-      }
-    >
+    <box style={{ flexGrow: 1, position: 'relative' }}>
       <Show
-        when={isZoomed()}
+        when={mainPane()}
         fallback={
-          <box
-            style={{
-              position: 'relative',
-              flexGrow: 1,
-            }}
-          >
-            {/* Render main pane */}
-            <PaneRenderer
-              pane={mainPane()!}
-              isFocused={focusedPaneId() === mainPane()!.id}
-              isMain={true}
-              onFocus={handlePaneClick}
-              onMouseInput={handleMouseInput}
-            />
-
-            {/* Render stack panes */}
-            <Show
-              when={layoutMode() === 'stacked'}
-              fallback={
-                /* Use Index instead of For - tracks by position not reference.
-                   This prevents component recreation when array reference changes
-                   but individual panes stay the same (just their rectangles update) */
-                <Index each={stackPanes()}>
-                  {(pane) => (
-                    <PaneRenderer
-                      pane={pane()}
-                      isFocused={focusedPaneId() === pane().id}
-                      isMain={false}
-                      onFocus={handlePaneClick}
-                      onMouseInput={handleMouseInput}
-                    />
-                  )}
-                </Index>
-              }
+          <Show when={showNoPanesMessage()}>
+            <box
+              style={{
+                flexGrow: 1,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
             >
-              {/* Stacked mode: render tab headers and only the active pane */}
-              <StackedPanesRenderer
-                stackPanes={stackPanes()}
-                activeStackIndex={activeStackIndex()}
-                focusedPaneId={focusedPaneId()}
+              <text fg="#666666">
+                No panes. Press Ctrl+b n or Alt+n to create a pane.
+              </text>
+            </box>
+          </Show>
+        }
+      >
+        <Show
+          when={isZoomed()}
+          fallback={
+            <box
+              style={{
+                position: 'relative',
+                flexGrow: 1,
+              }}
+            >
+              {/* Render main pane */}
+              <PaneRenderer
+                pane={mainPane()!}
+                isFocused={focusedPaneId() === mainPane()!.id}
+                isMain={true}
                 onFocus={handlePaneClick}
                 onMouseInput={handleMouseInput}
               />
-            </Show>
-          </box>
-        }
-      >
-        {/* When zoomed, only render the focused pane */}
-        <ZoomedPaneRenderer
-          workspace={workspace()}
-          onFocus={handlePaneClick}
-          onMouseInput={handleMouseInput}
-        />
+
+              {/* Render stack panes */}
+              <Show
+                when={layoutMode() === 'stacked'}
+                fallback={
+                  /* Use Index instead of For - tracks by position not reference.
+                     This prevents component recreation when array reference changes
+                     but individual panes stay the same (just their rectangles update) */
+                  <Index each={stackPanes()}>
+                    {(pane) => (
+                      <PaneRenderer
+                        pane={pane()}
+                        isFocused={focusedPaneId() === pane().id}
+                        isMain={false}
+                        onFocus={handlePaneClick}
+                        onMouseInput={handleMouseInput}
+                      />
+                    )}
+                  </Index>
+                }
+              >
+                {/* Stacked mode: render tab headers and only the active pane */}
+                <StackedPanesRenderer
+                  stackPanes={stackPanes()}
+                  activeStackIndex={activeStackIndex()}
+                  focusedPaneId={focusedPaneId()}
+                  onFocus={handlePaneClick}
+                  onMouseInput={handleMouseInput}
+                />
+              </Show>
+            </box>
+          }
+        >
+          {/* When zoomed, only render the focused pane */}
+          <ZoomedPaneRenderer
+            workspace={workspace()}
+            onFocus={handlePaneClick}
+            onMouseInput={handleMouseInput}
+          />
+        </Show>
       </Show>
-    </Show>
+    </box>
   );
 }
 
