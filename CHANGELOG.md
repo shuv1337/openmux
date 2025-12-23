@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.32](https://github.com/monotykamary/openmux/compare/v0.2.31...v0.2.32) (2025-12-23)
+
+
+### Bug Fixes
+
+* avoid blank frame during session switch ([43385c6](https://github.com/monotykamary/openmux/commit/43385c6d97e57ef4019f95bc22dcc139dade2d34))
+* prevent status bar jump during session switch ([5ca15a3](https://github.com/monotykamary/openmux/commit/5ca15a3cc38eb6b5568123974f6d4c230eba740a))
+
 ### [0.2.31](https://github.com/monotykamary/openmux/compare/v0.2.30...v0.2.31) (2025-12-23)
 
 
