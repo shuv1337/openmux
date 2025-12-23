@@ -47,6 +47,7 @@ let socket: net.Socket | null = null;
 let reader: FrameReader | null = null;
 let connecting: Promise<void> | null = null;
 let spawnAttempted = false;
+let shimPid: number | null = null;
 
 const unifiedSubscribers = new Map<string, Set<UnifiedSubscriber>>();
 const stateSubscribers = new Map<string, Set<(state: TerminalState) => void>>();
@@ -435,7 +436,11 @@ async function connectSocket(): Promise<void> {
     client.once('connect', handleConnect);
   });
 
-  await sendRequest('hello', { clientId: `client_${Date.now()}` , version: CLIENT_VERSION });
+  const hello = await sendRequest('hello', { clientId: `client_${Date.now()}` , version: CLIENT_VERSION });
+  const helloResult = hello.header.result as { pid?: number } | undefined;
+  if (helloResult && typeof helloResult.pid === 'number') {
+    shimPid = helloResult.pid;
+  }
 
   const colors = getHostColors();
   if (colors) {
@@ -484,6 +489,18 @@ async function connectWithRetry(attempts = 25, delayMs = 120): Promise<void> {
   throw lastError ?? new Error('Failed to connect to shim');
 }
 
+async function ensureConnectedWithoutSpawn(): Promise<boolean> {
+  if (socket && !socket.destroyed) {
+    return true;
+  }
+  try {
+    await connectWithRetry(3, 80);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function ensureConnected(): Promise<void> {
   if (socket && !socket.destroyed) {
     return;
@@ -501,6 +518,44 @@ async function ensureConnected(): Promise<void> {
     })();
   }
   await connecting;
+}
+
+async function sendRequestDirect(
+  method: string,
+  params?: Record<string, unknown>,
+  payloads: ArrayBuffer[] = [],
+  timeoutMs?: number
+): Promise<{ header: ShimHeader; payloads: Buffer[] }> {
+  if (!socket || socket.destroyed) {
+    throw new Error('Shim socket not available');
+  }
+
+  const requestId = nextRequestId++;
+  const header: ShimHeader = {
+    type: 'request',
+    requestId,
+    method,
+    params,
+    payloadLengths: payloads.map((payload) => payload.byteLength),
+  };
+
+  return new Promise((resolve, reject) => {
+    pendingRequests.set(requestId, { resolve, reject });
+    if (timeoutMs) {
+      setTimeout(() => {
+        if (pendingRequests.has(requestId)) {
+          pendingRequests.delete(requestId);
+          reject(new Error('Shim request timed out'));
+        }
+      }, timeoutMs);
+    }
+    socket?.write(encodeFrame(header, payloads), (err) => {
+      if (err) {
+        pendingRequests.delete(requestId);
+        reject(err);
+      }
+    });
+  });
 }
 
 async function sendRequest(method: string, params?: Record<string, unknown>, payloads: ArrayBuffer[] = []): Promise<{ header: ShimHeader; payloads: Buffer[] }> {
@@ -791,21 +846,22 @@ export async function shutdownShim(): Promise<void> {
   if (connecting) {
     await connecting.catch(() => {});
   }
-  if (!socket || socket.destroyed) {
-    return;
+  const connected = await ensureConnectedWithoutSpawn();
+  if (connected) {
+    const shutdownOk = await sendRequestDirect('shutdown', undefined, [], 500)
+      .then(() => true)
+      .catch(() => false);
+    if (shutdownOk) {
+      return;
+    }
   }
 
-  const requestId = nextRequestId++;
-  const header: ShimHeader = {
-    type: 'request',
-    requestId,
-    method: 'shutdown',
-    payloadLengths: [],
-  };
-  try {
-    socket.write(encodeFrame(header));
-  } catch {
-    // ignore
+  if (shimPid) {
+    try {
+      process.kill(shimPid);
+    } catch {
+      // ignore
+    }
   }
 }
 
