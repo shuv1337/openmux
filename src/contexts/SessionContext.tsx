@@ -26,6 +26,7 @@ import {
   loadSessionData,
   switchToSession,
   getSessionSummary,
+  setActiveSessionIdForShim,
 } from '../effect/bridge';
 import {
   type SessionState,
@@ -190,6 +191,11 @@ export function SessionProvider(props: SessionProviderProps) {
 
   // Track previous layoutVersion to detect changes
   let prevLayoutVersion = props.layoutVersion?.();
+
+  // Keep active session ID available for shim mapping
+  createEffect(() => {
+    setActiveSessionIdForShim(state.activeSessionId ?? null);
+  });
 
   // Immediate save when layoutVersion changes (pane/workspace changes)
   createEffect(() => {

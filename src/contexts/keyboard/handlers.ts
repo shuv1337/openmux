@@ -118,6 +118,7 @@ export function handlePrefixModeKey(
   onPaste?: () => void,
   onNewPane?: () => void,
   onQuit?: () => void,
+  onDetach?: () => void,
   onRequestQuit?: () => void,
   onRequestClosePane?: () => void,
   onToggleSessionPicker?: () => void,
@@ -207,13 +208,20 @@ export function handlePrefixModeKey(
       keyboard.toggleHints();
       return true;
 
-    // Quit openmux (with confirmation)
+    // Quit openmux
     case 'q':
-      if (onRequestQuit) {
-        onRequestQuit();
-      } else {
-        onQuit?.();
+      if (onQuit) {
+        exitPrefix();
+        onQuit();
+        return true;
       }
+      onRequestQuit?.();
+      return true;
+
+    // Detach (tmux-style)
+    case 'd':
+      onDetach?.();
+      exitPrefix();
       return true;
 
     // Toggle debug console

@@ -39,6 +39,7 @@ const PREFIX_MODE_HINTS: KeyHint[] = [
   { key: '] or p', description: 'Paste' },
   { key: '`', description: 'Toggle debug console' },
   { key: 'q', description: 'Quit openmux' },
+  { key: 'd', description: 'Detach' },
   { key: '?', description: 'Toggle hints' },
   { key: 'Esc', description: 'Exit prefix mode' },
 ];

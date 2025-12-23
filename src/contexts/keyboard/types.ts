@@ -21,6 +21,7 @@ export interface KeyboardHandlerOptions {
   onPaste?: () => void;
   onNewPane?: () => void;
   onQuit?: () => void;
+  onDetach?: () => void;
   onRequestQuit?: () => void;
   onRequestClosePane?: () => void;
   onToggleSessionPicker?: () => void;

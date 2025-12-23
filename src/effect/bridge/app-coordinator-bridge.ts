@@ -15,6 +15,9 @@ const createdPtys = new Set<string>()
 /** Map of pane ID to CWD for session restoration (fast sync access) */
 const sessionCwdMap = new Map<string, string>()
 
+/** Active session ID for shim mapping */
+let activeSessionId: string | null = null
+
 // =============================================================================
 // PTY Tracking (SYNCHRONOUS for performance)
 // =============================================================================
@@ -70,4 +73,16 @@ export function getSessionCwd(paneId: string): string | undefined {
  */
 export function clearSessionCwdMap(): void {
   sessionCwdMap.clear()
+}
+
+// =============================================================================
+// Active Session Tracking (SYNCHRONOUS)
+// =============================================================================
+
+export function setActiveSessionIdForShim(sessionId: string | null): void {
+  activeSessionId = sessionId
+}
+
+export function getActiveSessionIdForShim(): string | null {
+  return activeSessionId
 }

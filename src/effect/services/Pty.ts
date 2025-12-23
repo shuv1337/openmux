@@ -11,6 +11,7 @@ import { PtySpawnError, PtyNotFoundError, PtyCwdError } from "../errors"
 import { PtyId, Cols, Rows, makePtyId } from "../types"
 import { PtySession } from "../models"
 import { AppConfig } from "../Config"
+import * as ShimClient from "../../shim/client"
 
 // Import extracted modules
 import type { InternalPtySession } from "./pty/types"
@@ -148,9 +149,6 @@ export class Pty extends Context.Tag("@openmux/Pty")<
       yield* Effect.promise(() => initWorkerPool(2))
       const workerPool = getWorkerPool()
 
-      // Get host colors (required for worker emulator)
-      const colors = getHostColors() ?? getDefaultColors()
-
       // Internal session storage
       const sessionsRef = yield* Ref.make(
         HashMap.empty<PtyId, InternalPtySession>()
@@ -182,6 +180,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         cwd?: string
         env?: Record<string, string>
       }) {
+        const colors = getHostColors() ?? getDefaultColors()
         const { id, session } = yield* createSession(
           {
             workerPool,
@@ -240,6 +239,106 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         getTitle: operations.getTitle,
         subscribeToTitleChange: subscriptions.subscribeToTitleChange,
         subscribeToAllTitleChanges: subscriptions.subscribeToAllTitleChanges,
+      })
+    })
+  )
+
+  /** Shim layer - proxies PTY operations through the background shim process */
+  static readonly shimLayer = Layer.effect(
+    Pty,
+    Effect.gen(function* () {
+      yield* Effect.promise(() => ShimClient.waitForShim())
+
+      return Pty.of({
+        create: (options) =>
+          Effect.promise(async () => {
+            const ptyId = await ShimClient.createPty({
+              cols: options.cols as number,
+              rows: options.rows as number,
+              cwd: options.cwd,
+            })
+            return PtyId.make(ptyId)
+          }),
+        write: (id, data) =>
+          Effect.promise(() => ShimClient.writePty(String(id), data)),
+        resize: (id, cols, rows) =>
+          Effect.promise(() => ShimClient.resizePty(String(id), cols as number, rows as number)),
+        getCwd: (id) =>
+          Effect.promise(() => ShimClient.getPtyCwd(String(id))),
+        destroy: (id) =>
+          Effect.promise(() => ShimClient.destroyPty(String(id))),
+        getSession: (id) =>
+          Effect.gen(function* () {
+            const session = yield* Effect.promise(() => ShimClient.getSessionInfo(String(id)))
+            if (!session) {
+              return yield* PtyNotFoundError.make({ ptyId: id })
+            }
+            return PtySession.make({
+              id: PtyId.make(session.id),
+              pid: session.pid,
+              cols: Cols.make(session.cols),
+              rows: Rows.make(session.rows),
+              cwd: session.cwd,
+              shell: session.shell,
+            })
+          }),
+        getTerminalState: (id) =>
+          Effect.gen(function* () {
+            const state = yield* Effect.promise(() => ShimClient.getTerminalState(String(id)))
+            if (!state) {
+              return yield* PtyNotFoundError.make({ ptyId: id })
+            }
+            return state
+          }),
+        subscribe: (id, callback) =>
+          Effect.sync(() => ShimClient.subscribeState(String(id), callback)),
+        subscribeToScroll: (id, callback) =>
+          Effect.sync(() => ShimClient.subscribeScroll(String(id), callback)),
+        subscribeUnified: (id, callback) =>
+          Effect.sync(() => ShimClient.subscribeUnified(String(id), callback)),
+        onExit: (id, callback) =>
+          Effect.sync(() => ShimClient.subscribeExit(String(id), callback)),
+        setPanePosition: (id, x, y) =>
+          Effect.promise(() => ShimClient.setPanePosition(String(id), x, y)),
+        getScrollState: (id) =>
+          Effect.gen(function* () {
+            const state = yield* Effect.promise(() => ShimClient.getScrollState(String(id)))
+            if (!state) {
+              return yield* PtyNotFoundError.make({ ptyId: id })
+            }
+            return state
+          }),
+        setScrollOffset: (id, offset) =>
+          Effect.promise(() => ShimClient.setScrollOffset(String(id), offset)),
+        getEmulator: (id) =>
+          Effect.sync(() => ShimClient.getEmulator(String(id))),
+        destroyAll: () =>
+          Effect.promise(() => ShimClient.destroyAllPtys()),
+        listAll: () =>
+          Effect.promise(async () => {
+            const ids = await ShimClient.listAllPtys()
+            return ids.map((value) => PtyId.make(value))
+          }),
+        getForegroundProcess: (id) =>
+          Effect.promise(() => ShimClient.getForegroundProcess(String(id))),
+        getGitBranch: (id) =>
+          Effect.promise(() => ShimClient.getGitBranch(String(id))),
+        subscribeToLifecycle: (callback) =>
+          Effect.sync(() =>
+            ShimClient.subscribeToLifecycle((event) => {
+              callback({ type: event.type, ptyId: PtyId.make(event.ptyId) })
+            })
+          ),
+        getTitle: (id) =>
+          Effect.promise(() => ShimClient.getTitle(String(id))),
+        subscribeToTitleChange: (id, callback) =>
+          Effect.sync(() => ShimClient.subscribeToTitle(String(id), callback)),
+        subscribeToAllTitleChanges: (callback) =>
+          Effect.sync(() =>
+            ShimClient.subscribeToAllTitles((event) => {
+              callback({ ptyId: PtyId.make(event.ptyId), title: event.title })
+            })
+          ),
       })
     })
   )

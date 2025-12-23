@@ -8,6 +8,7 @@ import {
   destroyPty,
   destroyAllPtys,
 } from '../../effect/bridge';
+import { getActiveSessionIdForShim, registerPtyPane } from '../../effect/bridge';
 import {
   subscribeToPtyWithCaches,
   clearPtyCaches,
@@ -100,6 +101,15 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     // Track the mapping immediately
     ptyToPaneMap.set(ptyId, paneId);
 
+    const sessionId = getActiveSessionIdForShim();
+    if (sessionId) {
+      const mapping = sessionPtyMap.get(sessionId) ?? new Map<string, string>();
+      mapping.set(paneId, ptyId);
+      sessionPtyMap.set(sessionId, mapping);
+      ptyToSessionMap.set(ptyId, { sessionId, paneId });
+      registerPtyPane(sessionId, paneId, ptyId).catch(() => {});
+    }
+
     // Update the pane with the PTY ID FIRST - this triggers TerminalView mounting
     // TerminalView has its own subscription, so we can defer the context subscription
     setPanePty(paneId, ptyId);
@@ -137,6 +147,15 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
 
     // Track the mapping
     ptyToPaneMap.set(ptyId, paneId);
+
+    const sessionId = getActiveSessionIdForShim();
+    if (sessionId) {
+      const mapping = sessionPtyMap.get(sessionId) ?? new Map<string, string>();
+      mapping.set(paneId, ptyId);
+      sessionPtyMap.set(sessionId, mapping);
+      ptyToSessionMap.set(ptyId, { sessionId, paneId });
+      registerPtyPane(sessionId, paneId, ptyId).catch(() => {});
+    }
 
     // Defer subscription setup to next frame to avoid blocking the render
     setTimeout(async () => {

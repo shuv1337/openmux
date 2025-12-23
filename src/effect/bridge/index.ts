@@ -66,6 +66,12 @@ export { listAllPtysWithMetadata, getPtyMetadata, type ListAllPtysOptions } from
 
 // Terminal color operations
 export { getHostBackgroundColor, getHostForegroundColor } from "./color-bridge"
+export {
+  registerPtyPane,
+  getSessionPtyMapping,
+  onShimDetached,
+  waitForShimClient,
+} from "./shim-bridge"
 
 // Keyboard router operations
 export {
@@ -87,4 +93,6 @@ export {
   setSessionCwdMap,
   getSessionCwd,
   clearSessionCwdMap,
+  setActiveSessionIdForShim,
+  getActiveSessionIdForShim,
 } from "./app-coordinator-bridge"

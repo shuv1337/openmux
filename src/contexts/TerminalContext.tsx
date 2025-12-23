@@ -31,6 +31,7 @@ import {
   setPanePosition,
   readFromClipboard,
   subscribeToAllTitleChanges,
+  getSessionPtyMapping,
 } from '../effect/bridge';
 import {
   subscribeToPtyWithCaches,
@@ -38,6 +39,7 @@ import {
   type PtyCaches,
 } from '../hooks/usePtySubscription';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
+import { isShimClient } from '../shim/mode';
 
 interface TerminalContextValue {
   /** Create a new PTY session for a pane */
@@ -164,8 +166,10 @@ export function TerminalProvider(props: TerminalProviderProps) {
     // Worker pool initializes its own Ghostty WASM in each worker
     detectHostCapabilities()
       .then(() => {
-        // Clean up any orphaned PTYs from previous hot reloads (dev mode)
-        return destroyAllPtys();
+        if (!isShimClient()) {
+          // Clean up any orphaned PTYs from previous hot reloads (dev mode)
+          return destroyAllPtys();
+        }
       })
       .then(() => {
         setIsInitialized(true);
@@ -199,7 +203,9 @@ export function TerminalProvider(props: TerminalProviderProps) {
     for (const unsub of unsubscribeFns.values()) {
       unsub();
     }
-    destroyAllPtys();
+    if (!isShimClient()) {
+      destroyAllPtys();
+    }
     // Worker pool cleanup happens via runtime disposal
   });
 
@@ -226,9 +232,14 @@ export function TerminalProvider(props: TerminalProviderProps) {
 
   // Resume a session: resubscribe to saved PTYs
   const handleResumeSession = async (sessionId: string): Promise<Map<string, string> | undefined> => {
-    const savedMapping = sessionPtyMap.get(sessionId);
+    const shimMapping = await getSessionPtyMapping(sessionId);
+    const savedMapping = shimMapping ?? sessionPtyMap.get(sessionId);
     if (!savedMapping || savedMapping.size === 0) {
       return undefined;
+    }
+
+    if (shimMapping) {
+      sessionPtyMap.set(sessionId, new Map(shimMapping));
     }
 
     // Resubscribe to each PTY
@@ -247,6 +258,7 @@ export function TerminalProvider(props: TerminalProviderProps) {
 
         // Restore pty→pane mapping
         ptyToPaneMap.set(ptyId, paneId);
+        ptyToSessionMap.set(ptyId, { sessionId, paneId });
       } catch (_err) {
         // PTY may have exited while suspended - remove from mapping
         savedMapping.delete(paneId);
@@ -273,7 +285,21 @@ export function TerminalProvider(props: TerminalProviderProps) {
         destroyPty(ptyId);
       }
       sessionPtyMap.delete(sessionId);
+      return;
     }
+
+    getSessionPtyMapping(sessionId).then((mapping) => {
+      if (!mapping) return;
+      for (const ptyId of mapping.values()) {
+        const unsub = unsubscribeFns.get(ptyId);
+        if (unsub) {
+          unsub();
+          unsubscribeFns.delete(ptyId);
+        }
+        ptyToSessionMap.delete(ptyId);
+        destroyPty(ptyId);
+      }
+    });
   };
 
   // Write to the focused pane's PTY

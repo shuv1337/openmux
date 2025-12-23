@@ -31,6 +31,7 @@ import {
   markPtyCreated,
   isPtyCreated,
   getSessionCwd as getSessionCwdFromCoordinator,
+  onShimDetached,
 } from './effect/bridge';
 import { disposeRuntime } from './effect/runtime';
 import type { PasteEvent } from '@opentui/core';
@@ -63,6 +64,7 @@ function AppContent() {
   const { state: aggregateState, openAggregateView } = useAggregateView();
   const { enterConfirmMode, exitConfirmMode, exitSearchMode: keyboardExitSearchMode } = useKeyboardState();
   const renderer = useRenderer();
+  let detaching = false;
 
 
   // Confirmation dialog state
@@ -127,6 +129,14 @@ function AppContent() {
         console.error('Clipboard paste error:', err);
       }
     });
+
+    const unsubscribeDetached = onShimDetached(() => {
+      handleDetach();
+    });
+
+    onCleanup(() => {
+      unsubscribeDetached();
+    });
   });
 
   // Keep the focused PTY registry in sync with the current workspace focus
@@ -157,12 +167,18 @@ function AppContent() {
 
   // Quit handler - save session and cleanup terminal before exiting
   const handleQuit = async () => {
+    if (detaching) return;
+    detaching = true;
     // Save the current session before quitting
     await saveSession();
     // Dispose Effect runtime to cleanup services
     await disposeRuntime();
     renderer.destroy();
     process.exit(0);
+  };
+
+  const handleDetach = async () => {
+    await handleQuit();
   };
 
   // Session picker toggle handler
@@ -206,6 +222,7 @@ function AppContent() {
     onPaste: handlePaste,
     onNewPane: handleNewPane,
     onQuit: handleQuit,
+    onDetach: handleDetach,
     onRequestQuit: confirmationHandlers.handleRequestQuit,
     onRequestClosePane: confirmationHandlers.handleRequestClosePane,
     onToggleSessionPicker: handleToggleSessionPicker,
@@ -440,7 +457,7 @@ function AppContent() {
       <SearchOverlay width={width()} height={height()} />
 
       {/* Aggregate view overlay */}
-      <AggregateView width={width()} height={height()} onRequestQuit={confirmationHandlers.handleRequestQuit} onRequestKillPty={confirmationHandlers.handleRequestKillPty} />
+      <AggregateView width={width()} height={height()} onRequestQuit={handleQuit} onRequestKillPty={confirmationHandlers.handleRequestKillPty} />
 
       {/* Confirmation dialog */}
       <ConfirmationDialog

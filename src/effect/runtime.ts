@@ -5,6 +5,7 @@
 import { Effect, Layer, ManagedRuntime, Runtime } from "effect"
 import { AppConfig, ThemeConfig } from "./Config"
 import { Clipboard, FileSystem, Pty, SessionStorage, SessionManager } from "./services"
+import { isShimProcess } from "../shim/mode"
 
 // =============================================================================
 // Layer Composition
@@ -20,7 +21,9 @@ const IoLayer = Layer.mergeAll(
 )
 
 /** PTY layer (depends on Config) */
-const PtyLayer = Pty.layer.pipe(Layer.provide(ConfigLayer))
+const PtyLayer = (isShimProcess() ? Pty.layer : Pty.shimLayer).pipe(
+  Layer.provide(ConfigLayer)
+)
 
 /** Session layer (depends on FileSystem and Config) */
 const SessionLayer = SessionStorage.layer.pipe(
