@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.38](https://github.com/monotykamary/openmux/compare/v0.2.37...v0.2.38) (2025-12-24)
+
+
+### Bug Fixes
+
+* **pty:** gate updates and schedule writes ([ab9ffcc](https://github.com/monotykamary/openmux/commit/ab9ffccb3a51208be7cc8ab306ae4ed3f9590a02))
+* **publish:** auto-stash changes during npm publish ([619c239](https://github.com/monotykamary/openmux/commit/619c239bb873f22c80faecaaaaf40002432ff53c))
+
 ### [0.2.37](https://github.com/monotykamary/openmux/compare/v0.2.36...v0.2.37) (2025-12-24)
 
 
