@@ -356,14 +356,16 @@ function AppContent() {
     )
   );
 
-  // Resize PTYs and update positions when layout structure or viewport changes
-  // Use layoutVersion (structural changes) and viewport instead of panes
+  // Resize PTYs and update positions when layout structure or terminal size changes
+  // Use layoutVersion (structural changes) and terminal dimensions instead of panes
   // This avoids re-running on non-structural changes like ptyId/title updates
   createEffect(() => {
     if (!terminal.isInitialized) return;
     // Track structural changes (pane add/remove, layout mode) and viewport resize
     const _version = layout.layoutVersion;
-    const _viewport = layout.state.viewport;
+    const _width = width();
+    const _height = height();
+    if (_width <= 0 || _height <= 0) return;
     // Defer to macrotask (setTimeout) to allow animations to complete first
     // queueMicrotask runs before render, setTimeout runs after
     setTimeout(() => paneResizeHandlers.resizeAllPanes(), 0);
