@@ -7,7 +7,7 @@ import { Effect } from "effect"
 import { runEffect, runEffectIgnore } from "../runtime"
 import { Pty } from "../services"
 import { PtyId, Cols, Rows } from "../types"
-import type { TerminalState, UnifiedTerminalUpdate, TerminalCell } from "../../core/types"
+import type { TerminalState, UnifiedTerminalUpdate } from "../../core/types"
 import type { ITerminalEmulator } from "../../terminal/emulator-interface"
 
 /**
@@ -199,46 +199,6 @@ export async function scrollToBottom(ptyId: string): Promise<void> {
 }
 
 /**
- * Subscribe to terminal state updates.
- * Returns an unsubscribe function.
- */
-export async function subscribeToPty(
-  ptyId: string,
-  callback: (state: TerminalState) => void
-): Promise<() => void> {
-  try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        return yield* pty.subscribe(PtyId.make(ptyId), callback)
-      })
-    )
-  } catch {
-    return () => {}
-  }
-}
-
-/**
- * Subscribe to scroll state changes (lightweight - no terminal state rebuild).
- * Returns an unsubscribe function.
- */
-export async function subscribeToScroll(
-  ptyId: string,
-  callback: () => void
-): Promise<() => void> {
-  try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        return yield* pty.subscribeToScroll(PtyId.make(ptyId), callback)
-      })
-    )
-  } catch {
-    return () => {}
-  }
-}
-
-/**
  * Subscribe to unified terminal + scroll updates.
  * More efficient than separate subscriptions - eliminates race conditions
  * and reduces render cycles by delivering both state changes in one callback.
@@ -257,27 +217,6 @@ export async function subscribeUnifiedToPty(
     )
   } catch {
     return () => {}
-  }
-}
-
-/**
- * Get a scrollback line from the terminal emulator.
- * Returns null if the line doesn't exist or the PTY is not found.
- */
-export async function getScrollbackLine(
-  ptyId: string,
-  lineIndex: number
-): Promise<TerminalCell[] | null> {
-  try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        const emulator = yield* pty.getEmulator(PtyId.make(ptyId))
-        return emulator.getScrollbackLine(lineIndex)
-      })
-    )
-  } catch {
-    return null
   }
 }
 

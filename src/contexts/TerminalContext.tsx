@@ -40,6 +40,7 @@ import {
 } from '../hooks/usePtySubscription';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
 import { isShimClient } from '../shim/mode';
+import { getPtyState as getShimPtyState } from '../shim/client/state';
 
 interface TerminalContextValue {
   /** Create a new PTY session for a pane */
@@ -120,6 +121,13 @@ export function TerminalProvider(props: TerminalProviderProps) {
     scrollStates: new Map<string, TerminalScrollState>(),
     emulators: new Map<string, ITerminalEmulator>(),
   };
+  const shouldCacheScrollState = !isShimClient();
+  const getScrollState = (ptyId: string): TerminalScrollState | undefined => {
+    if (!shouldCacheScrollState) {
+      return getShimPtyState(ptyId)?.scrollState;
+    }
+    return ptyCaches.scrollStates.get(ptyId);
+  };
 
   // Track unsubscribe functions for cleanup
   const unsubscribeFns = new Map<string, () => void>();
@@ -133,7 +141,7 @@ export function TerminalProvider(props: TerminalProviderProps) {
   };
 
   // Create scroll handlers (extracted for reduced file size)
-  const scrollHandlers = createScrollHandlers(ptyCaches);
+  const scrollHandlers = createScrollHandlers(getScrollState);
 
   // Create PTY lifecycle handlers (extracted for reduced file size)
   const ptyLifecycleHandlers = createPtyLifecycleHandlers({
@@ -146,6 +154,7 @@ export function TerminalProvider(props: TerminalProviderProps) {
     setPanePty,
     newPaneWithPty,
     getNewPaneDimensions,
+    shouldCacheScrollState,
   });
 
   // Create cache accessors (extracted for reduced file size)
@@ -248,7 +257,8 @@ export function TerminalProvider(props: TerminalProviderProps) {
           ptyId,
           paneId,
           ptyCaches,
-          ptyLifecycleHandlers.handlePtyExit
+          ptyLifecycleHandlers.handlePtyExit,
+          { cacheScrollState: shouldCacheScrollState }
         );
 
         // Store unsubscribe function

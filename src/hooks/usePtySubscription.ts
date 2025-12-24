@@ -27,7 +27,8 @@ export async function subscribeToPtyWithCaches(
   ptyId: string,
   paneId: string,
   caches: PtyCaches,
-  onExit: (ptyId: string, paneId: string) => void
+  onExit: (ptyId: string, paneId: string) => void,
+  options?: { cacheScrollState?: boolean }
 ): Promise<() => void> {
   // Register exit callback
   const unsubExit = await onPtyExit(ptyId, () => {
@@ -43,7 +44,9 @@ export async function subscribeToPtyWithCaches(
   // Subscribe to unified updates (terminal + scroll combined)
   // This eliminates race conditions from separate subscriptions
   const unsubState = await subscribeUnifiedToPty(ptyId, (update: UnifiedTerminalUpdate) => {
-    caches.scrollStates.set(ptyId, update.scrollState);
+    if (options?.cacheScrollState !== false) {
+      caches.scrollStates.set(ptyId, update.scrollState);
+    }
   });
 
   // Return combined unsubscribe function

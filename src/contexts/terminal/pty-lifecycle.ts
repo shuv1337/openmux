@@ -35,6 +35,8 @@ export interface PtyLifecycleDeps {
   newPaneWithPty: (ptyId: string, title?: string) => string;
   /** Get estimated dimensions for a new pane */
   getNewPaneDimensions: () => { cols: number; rows: number };
+  /** Whether to cache scroll state locally */
+  shouldCacheScrollState: boolean;
 }
 
 /**
@@ -51,6 +53,7 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     setPanePty,
     newPaneWithPty,
     getNewPaneDimensions,
+    shouldCacheScrollState,
   } = deps;
 
   /**
@@ -121,7 +124,8 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
         ptyId,
         paneId,
         ptyCaches,
-        handlePtyExit
+        handlePtyExit,
+        { cacheScrollState: shouldCacheScrollState }
       );
       unsubscribeFns.set(ptyId, unsub);
     }, 0);
@@ -163,7 +167,8 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
         ptyId,
         paneId,
         ptyCaches,
-        handlePtyExit
+        handlePtyExit,
+        { cacheScrollState: shouldCacheScrollState }
       );
       unsubscribeFns.set(ptyId, unsub);
     }, 0);

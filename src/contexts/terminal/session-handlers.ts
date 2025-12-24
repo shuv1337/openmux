@@ -17,6 +17,8 @@ export interface SessionHandlerDeps {
   unsubscribeFns: Map<string, () => void>;
   /** Handler for PTY exit events */
   handlePtyExit: (ptyId: string, paneId: string) => void;
+  /** Whether to cache scroll state locally */
+  shouldCacheScrollState: boolean;
 }
 
 /**
@@ -29,6 +31,7 @@ export function createSessionHandlers(deps: SessionHandlerDeps) {
     ptyCaches,
     unsubscribeFns,
     handlePtyExit,
+    shouldCacheScrollState,
   } = deps;
 
   /**
@@ -73,7 +76,8 @@ export function createSessionHandlers(deps: SessionHandlerDeps) {
           ptyId,
           paneId,
           ptyCaches,
-          handlePtyExit
+          handlePtyExit,
+          { cacheScrollState: shouldCacheScrollState }
         );
 
         // Store unsubscribe function
