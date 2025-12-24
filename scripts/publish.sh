@@ -11,6 +11,7 @@ EXPECTED_ASSETS=3
 POLL_INTERVAL_SECONDS="${GITHUB_POLL_INTERVAL_SECONDS:-15}"
 POLL_TIMEOUT_SECONDS="${GITHUB_POLL_TIMEOUT_SECONDS:-1200}"
 POLL_DEADLINE=$((SECONDS + POLL_TIMEOUT_SECONDS))
+SUBMODULE_DIR="$PROJECT_DIR/vendor/ghostty"
 
 # Colors
 RED='\033[0;31m'
@@ -45,7 +46,35 @@ if [[ -z "${NPM_TOKEN:-}" ]]; then
     error "NPM_TOKEN is not set. Add it to .env or export it in your shell."
 fi
 TMP_NPMRC="$(mktemp)"
-trap 'rm -f "$TMP_NPMRC"' EXIT
+MAIN_STASH_REF=""
+SUBMODULE_STASH_REF=""
+
+cleanup() {
+    local exit_code=$?
+
+    if [[ -n "$SUBMODULE_STASH_REF" ]]; then
+        if git -C "$SUBMODULE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            if ! git -C "$SUBMODULE_DIR" stash pop --index "$SUBMODULE_STASH_REF" >/dev/null; then
+                warn "Failed to pop submodule stash $SUBMODULE_STASH_REF. Resolve manually."
+            else
+                info "Restored submodule stash."
+            fi
+        fi
+    fi
+
+    if [[ -n "$MAIN_STASH_REF" ]]; then
+        if ! git stash pop --index "$MAIN_STASH_REF" >/dev/null; then
+            warn "Failed to pop main repo stash $MAIN_STASH_REF. Resolve manually."
+        else
+            info "Restored main repo stash."
+        fi
+    fi
+
+    rm -f "$TMP_NPMRC"
+    exit "$exit_code"
+}
+
+trap cleanup EXIT
 {
     echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}"
     echo "always-auth=true"
@@ -58,11 +87,41 @@ if ! npm whoami &>/dev/null; then
 fi
 info "Authenticated to npm as $(npm whoami)"
 
-# Check for uncommitted changes
-if [[ -n $(git status --porcelain) ]]; then
-    error "Working directory has uncommitted changes. Commit or stash them first."
+# Stash uncommitted changes (main repo)
+if [[ -n $(git status --porcelain --ignore-submodules=dirty) ]]; then
+    prev_hash="$(git stash list -n 1 --format="%H" || true)"
+    git stash push -u -m "publish:npm auto-stash" >/dev/null
+    new_hash="$(git stash list -n 1 --format="%H" || true)"
+    if [[ -z "$new_hash" || "$new_hash" == "$prev_hash" ]]; then
+        error "Failed to stash main repo changes."
+    fi
+    MAIN_STASH_REF="$(git stash list -n 1 --format="%gd" || true)"
+    if [[ -z "$MAIN_STASH_REF" ]]; then
+        error "Failed to resolve main repo stash reference."
+    fi
+    info "Stashed main repo changes."
 fi
-info "Working directory clean"
+
+# Stash uncommitted changes (ghostty submodule)
+if [[ -d "$SUBMODULE_DIR" ]] && git -C "$SUBMODULE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if [[ -n $(git -C "$SUBMODULE_DIR" status --porcelain) ]]; then
+        prev_hash="$(git -C "$SUBMODULE_DIR" stash list -n 1 --format="%H" || true)"
+        git -C "$SUBMODULE_DIR" stash push -u -m "publish:npm auto-stash" >/dev/null
+        new_hash="$(git -C "$SUBMODULE_DIR" stash list -n 1 --format="%H" || true)"
+        if [[ -z "$new_hash" || "$new_hash" == "$prev_hash" ]]; then
+            error "Failed to stash ghostty submodule changes."
+        fi
+        SUBMODULE_STASH_REF="$(git -C "$SUBMODULE_DIR" stash list -n 1 --format="%gd" || true)"
+        if [[ -z "$SUBMODULE_STASH_REF" ]]; then
+            error "Failed to resolve ghostty submodule stash reference."
+        fi
+        info "Stashed ghostty submodule changes."
+    fi
+fi
+
+if [[ -z "$MAIN_STASH_REF" && -z "$SUBMODULE_STASH_REF" ]]; then
+    info "Working directory clean"
+fi
 
 # Check if tag exists
 if ! git rev-parse "$TAG" &>/dev/null; then
