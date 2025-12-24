@@ -425,6 +425,14 @@ function createServerHandlers(options?: ShimServerOptions) {
           sendResponse(socket, requestId);
           return;
 
+        case 'setUpdateEnabled':
+          await withPty((pty) => pty.setUpdateEnabled(
+            PtyId.make(params.ptyId as string),
+            Boolean(params.enabled)
+          ));
+          sendResponse(socket, requestId);
+          return;
+
         case 'getScrollbackLines': {
           const ptyId = params.ptyId as string;
           const startOffset = params.startOffset as number;

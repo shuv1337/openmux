@@ -103,6 +103,12 @@ export class Pty extends Context.Tag("@openmux/Pty")<
       offset: number
     ) => Effect.Effect<void, PtyNotFoundError>
 
+    /** Enable or disable terminal update notifications (visibility gating) */
+    readonly setUpdateEnabled: (
+      id: PtyId,
+      enabled: boolean
+    ) => Effect.Effect<void, PtyNotFoundError>
+
     /** Get emulator for direct access (e.g., scrollback lines) */
     readonly getEmulator: (id: PtyId) => Effect.Effect<ITerminalEmulator, PtyNotFoundError>
 
@@ -224,6 +230,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         setPanePosition: operations.setPanePosition,
         getScrollState: operations.getScrollState,
         setScrollOffset: operations.setScrollOffset,
+        setUpdateEnabled: operations.setUpdateEnabled,
         getEmulator: operations.getEmulator,
         destroyAll: operations.destroyAll,
         listAll: operations.listAll,
@@ -304,6 +311,8 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           }),
         setScrollOffset: (id, offset) =>
           Effect.promise(() => ShimClient.setScrollOffset(String(id), offset)),
+        setUpdateEnabled: (id, enabled) =>
+          Effect.promise(() => ShimClient.setUpdateEnabled(String(id), enabled)),
         getEmulator: (id) =>
           Effect.sync(() => ShimClient.getEmulator(String(id))),
         destroyAll: () =>
@@ -374,6 +383,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         isAtBottom: true,
       }),
     setScrollOffset: () => Effect.void,
+    setUpdateEnabled: () => Effect.void,
     getEmulator: () => Effect.die(new Error("No emulator in test layer")),
     destroyAll: () => Effect.void,
     listAll: () => Effect.succeed([]),

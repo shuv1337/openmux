@@ -29,6 +29,7 @@ export {
   getScrollbackLine,
   prefetchScrollbackLines,
   getEmulator,
+  setPtyUpdateEnabled,
   subscribeToPtyLifecycle,
   subscribeToAllTitleChanges,
   getPtyTitle,

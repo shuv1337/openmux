@@ -328,6 +328,25 @@ export async function getEmulator(
 }
 
 /**
+ * Enable or disable terminal update notifications (visibility gating).
+ */
+export async function setPtyUpdateEnabled(
+  ptyId: string,
+  enabled: boolean
+): Promise<void> {
+  try {
+    await runEffect(
+      Effect.gen(function* () {
+        const pty = yield* Pty
+        yield* pty.setUpdateEnabled(PtyId.make(ptyId), enabled)
+      })
+    )
+  } catch {
+    // Ignore errors - best-effort toggle
+  }
+}
+
+/**
  * PTY lifecycle event type
  */
 export type PtyLifecycleEvent = {

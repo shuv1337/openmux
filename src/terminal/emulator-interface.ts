@@ -139,6 +139,11 @@ export interface ITerminalEmulator {
   onUpdate(callback: () => void): () => void;
 
   /**
+   * Enable or disable update notifications (used to gate hidden panes).
+   */
+  setUpdateEnabled?(enabled: boolean): void;
+
+  /**
    * Subscribe to terminal mode changes (DECSET/DECRST)
    * Callback receives new modes and optionally previous modes for transition detection.
    * @returns Unsubscribe function

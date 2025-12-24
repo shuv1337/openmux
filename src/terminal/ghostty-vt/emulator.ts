@@ -44,6 +44,8 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
   private titleCallbacks = new Set<(title: string) => void>();
   private updateCallbacks = new Set<() => void>();
   private modeChangeCallbacks = new Set<(modes: TerminalModes, prevModes?: TerminalModes) => void>();
+  private updatesEnabled = true;
+  private needsFullRefresh = false;
 
   private scrollbackCache = new ScrollbackCache(1000);
   private decoder = new TextDecoder();
@@ -101,6 +103,12 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
     const stripped = stripProblematicOscSequences(text);
     if (stripped.length > 0) {
       this.terminal.write(stripped);
+      if (!this.updatesEnabled) {
+        this.needsFullRefresh = true;
+        return;
+      }
+    } else if (!this.updatesEnabled) {
+      return;
     }
 
     this.prepareUpdate(false);
@@ -116,6 +124,10 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
     this._cols = cols;
     this._rows = rows;
     this.terminal.resize(cols, rows);
+    if (!this.updatesEnabled) {
+      this.needsFullRefresh = true;
+      return;
+    }
     this.prepareUpdate(true);
     for (const callback of this.updateCallbacks) {
       callback();
@@ -127,6 +139,10 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
     this.terminal.write("\x1bc");
     this.currentTitle = "";
     this.scrollbackCache.clear();
+    if (!this.updatesEnabled) {
+      this.needsFullRefresh = true;
+      return;
+    }
     this.prepareUpdate(true);
     for (const callback of this.updateCallbacks) {
       callback();
@@ -267,6 +283,28 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
     return () => {
       this.updateCallbacks.delete(callback);
     };
+  }
+
+  setUpdateEnabled(enabled: boolean): void {
+    if (this.updatesEnabled === enabled) return;
+    this.updatesEnabled = enabled;
+
+    if (!enabled) {
+      this.needsFullRefresh = true;
+      this.pendingUpdate = null;
+      return;
+    }
+
+    if (this.needsFullRefresh || !this.cachedState) {
+      this.prepareUpdate(true);
+    }
+    this.needsFullRefresh = false;
+
+    if (this.pendingUpdate) {
+      for (const callback of this.updateCallbacks) {
+        callback();
+      }
+    }
   }
 
   onModeChange(callback: (modes: TerminalModes, prevModes?: TerminalModes) => void): () => void {

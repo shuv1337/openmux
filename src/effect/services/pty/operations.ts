@@ -146,6 +146,14 @@ export function createOperations(deps: OperationsDeps) {
     notifyScrollSubscribers(session)
   })
 
+  const setUpdateEnabled = Effect.fn("Pty.setUpdateEnabled")(function* (
+    id: PtyId,
+    enabled: boolean
+  ) {
+    const session = yield* getSessionOrFail(id)
+    session.emulator.setUpdateEnabled?.(enabled)
+  })
+
   const getEmulator = Effect.fn("Pty.getEmulator")(function* (id: PtyId) {
     const session = yield* getSessionOrFail(id)
     return session.emulator
@@ -180,6 +188,7 @@ export function createOperations(deps: OperationsDeps) {
     setPanePosition,
     getScrollState,
     setScrollOffset,
+    setUpdateEnabled,
     getEmulator,
     destroyAll,
     listAll,

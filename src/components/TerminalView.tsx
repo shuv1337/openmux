@@ -13,6 +13,7 @@ import {
   getTerminalState,
   subscribeUnifiedToPty,
   getEmulator,
+  setPtyUpdateEnabled as setPtyUpdateEnabledBridge,
   prefetchScrollbackLines,
 } from '../effect/bridge';
 import { useSelection } from '../contexts/SelectionContext';
@@ -34,6 +35,40 @@ import {
   calculatePrefetchRequest,
   updateTransitionCache,
 } from './terminal-view';
+
+const visiblePtyCounts = new Map<string, number>();
+
+const applyUpdateGate = (ptyId: string, enabled: boolean, emulator?: ITerminalEmulator | null) => {
+  void setPtyUpdateEnabledBridge(ptyId, enabled);
+  if (emulator && !emulator.isDisposed) {
+    emulator.setUpdateEnabled?.(enabled);
+  }
+};
+
+const registerVisiblePty = (ptyId: string) => {
+  const count = (visiblePtyCounts.get(ptyId) ?? 0) + 1;
+  visiblePtyCounts.set(ptyId, count);
+  if (count === 1) {
+    applyUpdateGate(ptyId, true);
+  }
+};
+
+const attachVisibleEmulator = (ptyId: string, emulator: ITerminalEmulator | null) => {
+  if (!emulator) return;
+  if ((visiblePtyCounts.get(ptyId) ?? 0) > 0) {
+    applyUpdateGate(ptyId, true, emulator);
+  }
+};
+
+const unregisterVisiblePty = (ptyId: string, emulator: ITerminalEmulator | null) => {
+  const count = (visiblePtyCounts.get(ptyId) ?? 0) - 1;
+  if (count <= 0) {
+    visiblePtyCounts.delete(ptyId);
+    applyUpdateGate(ptyId, false, emulator);
+    return;
+  }
+  visiblePtyCounts.set(ptyId, count);
+};
 
 interface TerminalViewProps {
   ptyId: string;
@@ -142,10 +177,13 @@ export function TerminalView(props: TerminalViewProps) {
 
         // Initialize async resources
         const init = async () => {
+          registerVisiblePty(ptyId);
+
           // Get emulator for scrollback access
           const em = await getEmulator(ptyId);
           if (!mounted) return;
           emulator = em;
+          attachVisibleEmulator(ptyId, em);
 
           // Subscribe to unified updates (terminal + scroll combined)
           // This replaces separate subscribeToPty + subscribeToScroll with single subscription
@@ -216,6 +254,7 @@ export function TerminalView(props: TerminalViewProps) {
           if (unsubscribe) {
             unsubscribe();
           }
+          unregisterVisiblePty(ptyId, emulator);
           terminalState = null;
           emulator = null;
           executePrefetchFn = null;

@@ -12,7 +12,7 @@ interface DataHandlerOptions {
 }
 
 interface DataHandlerState {
-  pendingData: string
+  pendingSegments: string[]
   syncTimeout: ReturnType<typeof setTimeout> | null
 }
 
@@ -22,37 +22,72 @@ interface DataHandlerState {
  */
 export function createDataHandler(options: DataHandlerOptions) {
   const { session, syncParser, syncTimeoutMs = 100 } = options
+  const maxSegmentsPerTick = 8
+  const maxCharsPerTick = 32_768
+  const maxBudgetMs = 4
+  const now = () => (typeof performance !== "undefined" ? performance.now() : Date.now())
 
   const state: DataHandlerState = {
-    pendingData: "",
+    pendingSegments: [],
     syncTimeout: null,
   }
 
-  // Helper to schedule notification (uses queueMicrotask for tight timing)
+  const drainPending = () => {
+    session.pendingNotify = false
+
+    if (session.emulator.isDisposed) {
+      state.pendingSegments = []
+      return
+    }
+
+    if (state.pendingSegments.length === 0) {
+      return
+    }
+
+    const start = now()
+    let batch = ""
+    let batchLen = 0
+    let segmentsProcessed = 0
+
+    while (state.pendingSegments.length > 0) {
+      const segment = state.pendingSegments[0]
+      if (segment.length === 0) {
+        state.pendingSegments.shift()
+        continue
+      }
+
+      if (batchLen > 0 && batchLen + segment.length > maxCharsPerTick) {
+        break
+      }
+
+      batch += segment
+      batchLen += segment.length
+      segmentsProcessed += 1
+      state.pendingSegments.shift()
+
+      if (segmentsProcessed >= maxSegmentsPerTick) break
+      if (batchLen >= maxCharsPerTick) break
+      if (now() - start >= maxBudgetMs) break
+    }
+
+    if (batchLen === 0 && state.pendingSegments.length > 0) {
+      batch = state.pendingSegments.shift() ?? ""
+    }
+
+    if (batch.length > 0) {
+      session.emulator.write(batch)
+    }
+
+    if (state.pendingSegments.length > 0) {
+      scheduleNotify()
+    }
+  }
+
+  // Helper to schedule notification (uses setTimeout to yield for rendering)
   const scheduleNotify = () => {
     if (!session.pendingNotify) {
       session.pendingNotify = true
-      queueMicrotask(() => {
-        // Guard: check if emulator was disposed before microtask ran
-        if (session.emulator.isDisposed) {
-          session.pendingNotify = false
-          state.pendingData = ""
-          return
-        }
-
-        // Write all pending data at once
-        if (state.pendingData.length > 0) {
-          session.emulator.write(state.pendingData)
-          state.pendingData = ""
-          // Note: Scroll position adjustment for maintaining view while scrolled back
-          // is handled in getCurrentScrollState() in notification.ts. This works for
-          // both sync and async emulators by tracking lastScrollbackLength in the session.
-        }
-
-        // Note: notifySubscribers is called via emulator.onUpdate() callback
-        // This ensures proper timing for both sync and async emulators
-        session.pendingNotify = false
-      })
+      setTimeout(drainPending, 0)
     }
   }
 
@@ -76,7 +111,7 @@ export function createDataHandler(options: DataHandlerOptions) {
           // Safety flush - sync mode took too long (app may have crashed)
           const flushed = syncParser.flush()
           if (flushed.length > 0) {
-            state.pendingData += flushed
+            state.pendingSegments.push(flushed)
             scheduleNotify()
           }
           state.syncTimeout = null
@@ -87,16 +122,16 @@ export function createDataHandler(options: DataHandlerOptions) {
       state.syncTimeout = null
     }
 
-    // Add ready segments to pending data
+    // Add ready segments to pending queue
     for (const segment of readySegments) {
       if (segment.length > 0) {
-        state.pendingData += segment
+        state.pendingSegments.push(segment)
       }
     }
 
     // Only schedule notification if we have data and aren't buffering
     // When buffering, we wait for the complete frame before notifying
-    if (!isBuffering && state.pendingData.length > 0) {
+    if (!isBuffering && state.pendingSegments.length > 0) {
       scheduleNotify()
     }
   }

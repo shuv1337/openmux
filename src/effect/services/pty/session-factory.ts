@@ -51,6 +51,7 @@ export function createSession(
       catch: (error) =>
         PtySpawnError.make({ shell, cwd, cause: error }),
     })
+    emulator.setUpdateEnabled?.(false)
 
     // Create graphics passthrough
     const graphicsPassthrough = new GraphicsPassthrough()

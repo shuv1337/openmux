@@ -84,6 +84,10 @@ export async function setScrollOffset(ptyId: string, offset: number): Promise<vo
   await sendRequest('setScrollOffset', { ptyId, offset });
 }
 
+export async function setUpdateEnabled(ptyId: string, enabled: boolean): Promise<void> {
+  await sendRequest('setUpdateEnabled', { ptyId, enabled });
+}
+
 export async function getScrollbackLines(
   ptyId: string,
   startOffset: number,
