@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.35](https://github.com/monotykamary/openmux/compare/v0.2.34...v0.2.35) (2025-12-24)
+
+
+### Features
+
+* **layout:** add move mode for swapping panes ([49b412d](https://github.com/monotykamary/openmux/commit/49b412d4c875a1df7de89d135172aca9527aa3d6))
+
+
+### Bug Fixes
+
+* **shim:** lazy load Pty in server ([eba8160](https://github.com/monotykamary/openmux/commit/eba8160547813aa26a3b3e31de7d47c8eba9b528))
+
+
+### Tests
+
+* **shim:** add protocol frame tests ([fe61d65](https://github.com/monotykamary/openmux/commit/fe61d652e4d378359c11ea21f827fd8cc8e33d54))
+* **shim:** add server attach coverage ([561f2cb](https://github.com/monotykamary/openmux/commit/561f2cb028efdae6d6ca9e2e74ea89abee13b376))
+* **shim:** cover A-B-A attach race ([3ec530b](https://github.com/monotykamary/openmux/commit/3ec530b5054b6e1bede466a636a62d42b59c990f))
+* **shim:** cover client state handling ([954d171](https://github.com/monotykamary/openmux/commit/954d171d0ba6b5d60f213cf72e56fcb04652ec91))
+
 ### [0.2.34](https://github.com/monotykamary/openmux/compare/v0.2.33...v0.2.34) (2025-12-23)
 
 
