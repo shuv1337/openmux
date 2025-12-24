@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.39](https://github.com/monotykamary/openmux/compare/v0.2.38...v0.2.39) (2025-12-24)
+
+
+### Bug Fixes
+
+* resize panes on terminal resize ([70a38c2](https://github.com/monotykamary/openmux/commit/70a38c268309d4fea7b94a83c27cd17c15a26b0a))
+
 ### [0.2.38](https://github.com/monotykamary/openmux/compare/v0.2.37...v0.2.38) (2025-12-24)
 
 
