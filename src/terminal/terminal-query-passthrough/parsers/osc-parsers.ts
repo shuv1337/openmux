@@ -140,7 +140,7 @@ export class OscClipboardQueryParser extends TerminatedSequenceParser {
  * Catches OSC sequences that ghostty-vt doesn't support and would log warnings.
  *
  * Note: OSC 0/1/2 (title sequences) are NOT dropped here because the title parser
- * in the worker needs to see them. They are stripped in the worker after title parsing.
+ * in the terminal pipeline needs to see them. They are stripped after title parsing.
  *
  * Format: ESC]number;params;terminator where terminator is BEL or ST
  */

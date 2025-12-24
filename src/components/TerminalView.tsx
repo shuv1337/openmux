@@ -106,7 +106,7 @@ export function TerminalView(props: TerminalViewProps) {
   // Cache for lines transitioning from live terminal to scrollback
   // When scrollback grows, the top rows of the terminal move to scrollback.
   // We capture them before the state update so we can render them immediately
-  // without waiting for async prefetch from the worker.
+  // without waiting for async prefetch from the emulator.
   const transitionCache = new Map<number, TerminalCell[]>();
   // Cache emulator for sync access to scrollback lines
   let emulator: ITerminalEmulator | null = null;
