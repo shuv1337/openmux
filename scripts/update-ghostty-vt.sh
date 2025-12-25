@@ -73,7 +73,7 @@ if [[ "$MODE" == "update" ]]; then
     exit 1
   fi
 
-  git -C "$GHOSTTY_DIR" fetch origin --tags
+  git -C "$GHOSTTY_DIR" fetch origin --tags --force
 
   if [[ -n "$REF" ]]; then
     target_ref="$REF"
