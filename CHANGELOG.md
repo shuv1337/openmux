@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.53](https://github.com/monotykamary/openmux/compare/v0.2.52...v0.2.53) (2025-12-26)
+
+
+### Features
+
+* **command-palette:** show keybinding column ([461d639](https://github.com/monotykamary/openmux/commit/461d639e25ff33cb6b5352ab39c90889906247b4))
+
 ### [0.2.52](https://github.com/monotykamary/openmux/compare/v0.2.51...v0.2.52) (2025-12-26)
 
 
