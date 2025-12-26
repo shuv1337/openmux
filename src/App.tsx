@@ -2,8 +2,7 @@
  * Main App component for openmux
  */
 
-import { createSignal, createEffect, createMemo, onCleanup, onMount, on } from 'solid-js';
-import { createStore } from 'solid-js/store';
+import { createSignal, createEffect, onCleanup, onMount, on } from 'solid-js';
 import { useKeyboard, useTerminalDimensions, useRenderer } from '@opentui/solid';
 import {
   ConfigProvider,
@@ -22,22 +21,13 @@ import { SearchProvider, useSearch } from './contexts/SearchContext';
 import { useSession } from './contexts/SessionContext';
 import { AggregateViewProvider, useAggregateView } from './contexts/AggregateViewContext';
 import { TitleProvider } from './contexts/TitleContext';
-import { PaneContainer, StatusBar, KeyboardHints, CopyNotification, ConfirmationDialog } from './components';
+import { PaneContainer } from './components';
 import type { ConfirmationType } from './core/types';
-import { SessionPicker } from './components/SessionPicker';
-import { SearchOverlay } from './components/SearchOverlay';
-import { AggregateView } from './components/AggregateView';
-import { CommandPalette, type CommandPaletteState } from './components/CommandPalette';
-import { TemplateOverlay } from './components/TemplateOverlay';
 import { SessionBridge } from './components/SessionBridge';
 import { getFocusedPtyId } from './core/workspace-utils';
-import { DEFAULT_COMMAND_PALETTE_COMMANDS, type CommandPaletteCommand } from './core/command-palette';
+import type { CommandPaletteCommand } from './core/command-palette';
 import {
   routeKeyboardEventSync,
-  markPtyCreated,
-  isPtyCreated,
-  getSessionCwd as getSessionCwdFromCoordinator,
-  getSessionCommand as getSessionCommandFromCoordinator,
   onShimDetached,
   shutdownShim,
 } from './effect/bridge';
@@ -50,10 +40,14 @@ import {
   handleSearchKeyboard,
   processNormalModeKey,
 } from './components/app';
-import { calculateLayoutDimensions } from './components/aggregate';
 import { setFocusedPty, setClipboardPasteHandler } from './terminal/focused-pty-registry';
 import { readFromClipboard } from './effect/bridge';
 import { handleNormalModeAction } from './contexts/keyboard/handlers';
+import { createCommandPaletteState } from './components/app/command-palette-state';
+import { normalizeKeyEvent, type OpenTuiKeyEvent } from './components/app/keyboard-utils';
+import { usePtyCreation } from './components/app/pty-creation';
+import { AppOverlays } from './components/app/AppOverlays';
+import { createTemplatePendingActions } from './components/app/template-pending-actions';
 
 function AppContent() {
   const config = useConfig();
@@ -64,7 +58,7 @@ function AppContent() {
   const { setViewport, newPane, closePane } = layout;
   // Don't destructure isInitialized - it's a reactive getter that loses reactivity when destructured
   const terminal = useTerminal();
-  const { createPTY, destroyPTY, resizePTY, setPanePosition, writeToFocused, writeToPTY, pasteToFocused, getFocusedCwd, getFocusedEmulator, destroyAllPTYs, getSessionCwd, getEmulatorSync } = terminal;
+  const { destroyPTY, resizePTY, setPanePosition, writeToFocused, writeToPTY, pasteToFocused, getFocusedEmulator } = terminal;
   const session = useSession();
   const { togglePicker, toggleTemplateOverlay, state: sessionState, saveSession } = session;
   // Keep selection/search contexts to access reactive getters
@@ -78,50 +72,7 @@ function AppContent() {
   const renderer = useRenderer();
   let detaching = false;
 
-  const normalizeKeyEvent = (event: {
-    name: string;
-    ctrl?: boolean;
-    shift?: boolean;
-    option?: boolean;
-    meta?: boolean;
-    sequence?: string;
-    baseCode?: number;
-    eventType?: 'press' | 'repeat' | 'release';
-    repeated?: boolean;
-    source?: 'raw' | 'kitty';
-  }) => {
-    const sequence = event.sequence ?? '';
-    const metaIsAlt = !!event.meta && !event.option && sequence.startsWith('\x1b');
-    const option = event.option || metaIsAlt;
-    const meta = metaIsAlt ? false : (option ? false : event.meta);
-    return {
-      ...event,
-      option,
-      meta,
-    };
-  };
-
-  const [commandPaletteState, setCommandPaletteState] = createStore<CommandPaletteState>({
-    show: false,
-    query: '',
-    selectedIndex: 0,
-  });
-
-  const openCommandPalette = () => {
-    setCommandPaletteState({ show: true, query: '', selectedIndex: 0 });
-  };
-
-  const closeCommandPalette = () => {
-    setCommandPaletteState({ show: false, query: '', selectedIndex: 0 });
-  };
-
-  const toggleCommandPalette = () => {
-    if (commandPaletteState.show) {
-      closeCommandPalette();
-    } else {
-      openCommandPalette();
-    }
-  };
+  const { commandPaletteState, setCommandPaletteState, toggleCommandPalette } = createCommandPaletteState();
 
   // Quit handler - save session, shutdown shim, and cleanup terminal before exiting
   const handleQuit = async () => {
@@ -154,46 +105,14 @@ function AppContent() {
   // Track pending kill PTY ID for aggregate view kill confirmation
   const [pendingKillPtyId, setPendingKillPtyId] = createSignal<string | null>(null);
 
-  const [pendingTemplateApply, setPendingTemplateApply] = createSignal<(() => Promise<void>) | null>(null);
-  const [pendingTemplateOverwrite, setPendingTemplateOverwrite] =
-    createSignal<(() => Promise<void>) | null>(null);
-  const [pendingTemplateDelete, setPendingTemplateDelete] = createSignal<(() => Promise<void>) | null>(null);
+  const templatePending = createTemplatePendingActions();
 
-  const handleConfirmTemplateApply = async () => {
-    const pending = pendingTemplateApply();
-    if (pending) {
-      await pending();
-    }
-    setPendingTemplateApply(null);
-  };
-
-  const handleCancelTemplateApply = () => {
-    setPendingTemplateApply(null);
-  };
-
-  const handleConfirmTemplateOverwrite = async () => {
-    const pending = pendingTemplateOverwrite();
-    if (pending) {
-      await pending();
-    }
-    setPendingTemplateOverwrite(null);
-  };
-
-  const handleCancelTemplateOverwrite = () => {
-    setPendingTemplateOverwrite(null);
-  };
-
-  const handleConfirmTemplateDelete = async () => {
-    const pending = pendingTemplateDelete();
-    if (pending) {
-      await pending();
-    }
-    setPendingTemplateDelete(null);
-  };
-
-  const handleCancelTemplateDelete = () => {
-    setPendingTemplateDelete(null);
-  };
+  const handleConfirmTemplateApply = templatePending.confirmApply;
+  const handleCancelTemplateApply = templatePending.cancelApply;
+  const handleConfirmTemplateOverwrite = templatePending.confirmOverwrite;
+  const handleCancelTemplateOverwrite = templatePending.cancelOverwrite;
+  const handleConfirmTemplateDelete = templatePending.confirmDelete;
+  const handleCancelTemplateDelete = templatePending.cancelDelete;
 
   // Create confirmation handlers
   const confirmationHandlers = createConfirmationHandlers({
@@ -272,20 +191,12 @@ function AppContent() {
     setFocusedPty(focusedPtyId ?? null);
   });
 
-  // Create new pane handler - instant feedback, CWD retrieval in background
-  const handleNewPane = () => {
-    // Fire off CWD retrieval in background (don't await)
-    getFocusedCwd().then(cwd => {
-      if (cwd) pendingCwdRef = cwd;
-    });
-
-    // Create pane immediately (shows border instantly)
-    // PTY will be created by the effect with CWD when available
-    newPane();
-  };
-
-  // Ref for passing CWD to effect (avoids closure issues)
-  let pendingCwdRef: string | null = null;
+  const { handleNewPane } = usePtyCreation({
+    layout,
+    terminal,
+    sessionState,
+    newPane,
+  });
 
   // Create paste handler for manual paste (Ctrl+V, prefix+p/])
   const handlePaste = () => {
@@ -302,17 +213,17 @@ function AppContent() {
   };
 
   const requestTemplateApplyConfirm = (applyTemplate: () => Promise<void>) => {
-    setPendingTemplateApply(() => applyTemplate);
+    templatePending.setPendingApply(() => applyTemplate);
     confirmationHandlers.handleRequestApplyTemplate();
   };
 
   const requestTemplateOverwriteConfirm = (overwriteTemplate: () => Promise<void>) => {
-    setPendingTemplateOverwrite(() => overwriteTemplate);
+    templatePending.setPendingOverwrite(() => overwriteTemplate);
     confirmationHandlers.handleRequestOverwriteTemplate();
   };
 
   const requestTemplateDeleteConfirm = (deleteTemplate: () => Promise<void>) => {
-    setPendingTemplateDelete(() => deleteTemplate);
+    templatePending.setPendingDelete(() => deleteTemplate);
     confirmationHandlers.handleRequestDeleteTemplate();
   };
 
@@ -391,12 +302,6 @@ function AppContent() {
   });
   const { handleKeyDown } = keyboardHandler;
 
-  // Retry counter to trigger effect re-run when PTY creation fails
-  const [ptyRetryCounter, setPtyRetryCounter] = createSignal(0);
-
-  // Guard against concurrent PTY creation (synchronous Set for O(1) check)
-  const pendingPtyCreation = new Set<string>();
-
   // Update viewport when terminal resizes
   createEffect(() => {
     const w = width();
@@ -422,95 +327,6 @@ function AppContent() {
         }
       },
       { defer: true } // Skip initial run, wait for initialized to become true
-    )
-  );
-
-  // Memoize pane IDs that need PTYs - only changes when panes are added/removed
-  // or when a pane's ptyId status changes. This prevents re-triggering PTY creation
-  // when unrelated pane properties change (rectangle, cursor position, etc.)
-  const panesNeedingPtys = createMemo(() =>
-    layout.panes.filter(p => !p.ptyId).map(p => ({ id: p.id, rectangle: p.rectangle }))
-  );
-
-  // Create PTYs for panes that don't have one
-  // IMPORTANT: Wait for BOTH terminal AND session to be initialized
-  // This prevents creating PTYs before session has a chance to restore workspaces
-  // Also skip while session is switching to avoid creating PTYs for stale panes
-  // Using on() for explicit dependency tracking - only re-runs when these specific values change
-  createEffect(
-    on(
-      [
-        () => terminal.isInitialized,
-        () => sessionState.initialized,
-        () => sessionState.switching,
-        ptyRetryCounter,
-        panesNeedingPtys,
-      ],
-      ([isTerminalInit, isSessionInit, isSwitching, _retry, panes]) => {
-        if (!isTerminalInit) return;
-        if (!isSessionInit) return;
-        if (isSwitching) return;
-
-        const createPtyForPane = (pane: typeof panes[number]) => {
-          try {
-            // SYNC check: verify PTY wasn't created in a previous session/effect run
-            const alreadyCreated = isPtyCreated(pane.id);
-            if (alreadyCreated) {
-              return true; // Already has a PTY
-            }
-
-            // Calculate pane dimensions (account for border)
-            const rect = pane.rectangle ?? { width: 80, height: 24 };
-            const cols = Math.max(1, rect.width - 2);
-            const rows = Math.max(1, rect.height - 2);
-
-            // Check for session-restored CWD first, then pending CWD from new pane handler,
-            // then OPENMUX_ORIGINAL_CWD (set by wrapper to preserve user's cwd)
-            const sessionCwd = getSessionCwdFromCoordinator(pane.id);
-            let cwd = sessionCwd ?? pendingCwdRef ?? process.env.OPENMUX_ORIGINAL_CWD ?? undefined;
-            pendingCwdRef = null; // Clear after use
-
-            // Mark as created BEFORE calling createPTY (persistent marker)
-            markPtyCreated(pane.id);
-
-            // Fire-and-forget PTY creation - don't await to avoid blocking
-            createPTY(pane.id, cols, rows, cwd)
-              .then((ptyId) => {
-                const command = getSessionCommandFromCoordinator(pane.id);
-                if (command) {
-                  writeToPTY(ptyId, `${command}\n`);
-                }
-              })
-              .catch(err => {
-                console.error(`PTY creation failed for ${pane.id}:`, err);
-              });
-
-            return true;
-          } catch (err) {
-            console.error(`Failed to create PTY for pane ${pane.id}:`, err);
-            return false;
-          } finally {
-            pendingPtyCreation.delete(pane.id);
-          }
-        };
-
-        // Process each pane in a separate macrotask to avoid blocking animations
-        for (const pane of panes) {
-          // SYNCHRONOUS guard: check and add to pendingPtyCreation Set IMMEDIATELY
-          if (pendingPtyCreation.has(pane.id)) {
-            continue;
-          }
-          pendingPtyCreation.add(pane.id);
-
-          // Defer to next macrotask - allows animations to continue
-          setTimeout(() => {
-            const success = createPtyForPane(pane);
-            if (!success) {
-              setTimeout(() => setPtyRetryCounter(c => c + 1), 100);
-            }
-          }, 0);
-        }
-      }
     )
   );
 
@@ -547,19 +363,19 @@ function AppContent() {
 
   // Handle keyboard input
   useKeyboard(
-    (event: { name: string; ctrl?: boolean; shift?: boolean; option?: boolean; meta?: boolean; sequence?: string; baseCode?: number; eventType?: 'press' | 'repeat' | 'release'; repeated?: boolean; source?: 'raw' | 'kitty' }) => {
+    (event: OpenTuiKeyEvent) => {
       const normalizedEvent = normalizeKeyEvent(event);
       // Route to overlays via KeyboardRouter (handles confirmation, session picker, aggregate view)
       // Use event.sequence for printable chars (handles shift for uppercase/symbols)
       // Fall back to event.name for special keys
       const charCode = normalizedEvent.sequence?.charCodeAt(0) ?? 0;
       const isPrintableChar = normalizedEvent.sequence?.length === 1 && charCode >= 32 && charCode < 127;
-      const keyToPass = isPrintableChar ? normalizedEvent.sequence! : normalizedEvent.name;
+      const keyToPass = isPrintableChar ? normalizedEvent.sequence! : normalizedEvent.key;
 
       const routeResult = routeKeyboardEventSync({
         key: keyToPass,
         ctrl: normalizedEvent.ctrl,
-        alt: normalizedEvent.option,
+        alt: normalizedEvent.alt,
         shift: normalizedEvent.shift,
         sequence: normalizedEvent.sequence,
         baseCode: normalizedEvent.baseCode,
@@ -588,10 +404,10 @@ function AppContent() {
 
       // First, check if this is a multiplexer command
       const handled = handleKeyDown({
-        key: normalizedEvent.name,
+        key: normalizedEvent.key,
         ctrl: normalizedEvent.ctrl,
         shift: normalizedEvent.shift,
-        alt: normalizedEvent.option, // OpenTUI uses 'option' for Alt key
+        alt: normalizedEvent.alt,
         meta: normalizedEvent.meta,
         eventType: normalizedEvent.eventType,
         repeated: normalizedEvent.repeated,
@@ -620,78 +436,21 @@ function AppContent() {
       {/* Main pane area */}
       <PaneContainer />
 
-      {/* Status bar at bottom */}
-      <StatusBar width={width()} showCommandPalette={commandPaletteState.show} />
-
-      {/* Keyboard hints overlay */}
-      <KeyboardHints width={width()} height={height()} />
-
-      {/* Session picker overlay */}
-      <SessionPicker width={width()} height={height()} />
-
-      {/* Template overlay */}
-      <TemplateOverlay
+      <AppOverlays
         width={width()}
         height={height()}
+        commandPaletteState={commandPaletteState}
+        setCommandPaletteState={setCommandPaletteState}
+        onCommandPaletteExecute={handleCommandPaletteExecute}
+        confirmationState={confirmationState}
+        onConfirm={confirmationHandlers.handleConfirmAction}
+        onCancel={confirmationHandlers.handleCancelConfirmation}
         onRequestApplyConfirm={requestTemplateApplyConfirm}
         onRequestOverwriteConfirm={requestTemplateOverwriteConfirm}
         onRequestDeleteConfirm={requestTemplateDeleteConfirm}
-      />
-
-      {/* Command palette overlay */}
-      <CommandPalette
-        width={width()}
-        height={height()}
-        commands={DEFAULT_COMMAND_PALETTE_COMMANDS}
-        state={commandPaletteState}
-        setState={setCommandPaletteState}
-        onExecute={handleCommandPaletteExecute}
-      />
-
-      {/* Search overlay */}
-      <SearchOverlay width={width()} height={height()} />
-
-      {/* Aggregate view overlay */}
-      <AggregateView
-        width={width()}
-        height={height()}
         onRequestQuit={confirmationHandlers.handleRequestQuit}
         onDetach={handleDetach}
         onRequestKillPty={confirmationHandlers.handleRequestKillPty}
-      />
-
-      {/* Confirmation dialog */}
-      <ConfirmationDialog
-        visible={confirmationState().visible}
-        type={confirmationState().type}
-        width={width()}
-        height={height()}
-        onConfirm={confirmationHandlers.handleConfirmAction}
-        onCancel={confirmationHandlers.handleCancelConfirmation}
-      />
-
-      {/* Copy notification toast */}
-      <CopyNotification
-        visible={selection.copyNotification.visible}
-        charCount={selection.copyNotification.charCount}
-        paneRect={(() => {
-          const ptyId = selection.copyNotification.ptyId;
-          if (!ptyId) return null;
-
-          // If aggregate view is open and showing this pty, use the preview rectangle
-          if (aggregateState.showAggregateView && aggregateState.selectedPtyId === ptyId) {
-            const aggLayout = calculateLayoutDimensions({ width: width(), height: height() });
-            return {
-              x: aggLayout.listPaneWidth,
-              y: 0,
-              width: aggLayout.previewPaneWidth,
-              height: aggLayout.contentHeight,
-            };
-          }
-
-          // Otherwise use the normal pane rectangle
-          return layout.panes.find(p => p.ptyId === ptyId)?.rectangle ?? null;
-        })()}
       />
     </box>
   );

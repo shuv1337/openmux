@@ -6,20 +6,7 @@
 import type { Pointer } from "bun:ffi";
 import { ghostty } from "./ghostty-vt/ffi";
 import type { ITerminalEmulator } from "./emulator-interface";
-
-export interface TerminalKeyEvent {
-  key: string;
-  ctrl?: boolean;
-  alt?: boolean;
-  shift?: boolean;
-  meta?: boolean;
-  sequence?: string;
-  baseCode?: number;
-  eventType?: KeyEventType;
-  repeated?: boolean;
-}
-
-type KeyEventType = "press" | "repeat" | "release";
+import type { KeyboardEvent } from "../core/keyboard-event";
 
 type KeyEncoderOptions = {
   cursorKeyApplication: boolean;
@@ -166,7 +153,7 @@ class GhosttyKeyEncoder {
     this.event = createHandle(ghostty.symbols.ghostty_key_event_new);
   }
 
-  encode(event: TerminalKeyEvent, options: KeyEncoderOptions): string {
+  encode(event: KeyboardEvent, options: KeyEncoderOptions): string {
     this.applyOptions(options);
     this.configureEvent(event);
     return this.encodeEvent();
@@ -201,7 +188,7 @@ class GhosttyKeyEncoder {
     ghostty.symbols.ghostty_key_encoder_setopt(this.encoder, option, this.optionBuffer);
   }
 
-  private configureEvent(event: TerminalKeyEvent): void {
+  private configureEvent(event: KeyboardEvent): void {
     const key = resolveKeyCode(event.key);
     const mods = resolveMods(event);
     const utf8 = getPrintableSequence(event.sequence);
@@ -297,7 +284,7 @@ function resolveKeyCode(key: string): number {
   return KEY_UNIDENTIFIED;
 }
 
-function resolveMods(event: TerminalKeyEvent): number {
+function resolveMods(event: KeyboardEvent): number {
   let mods = 0;
   if (event.shift) mods |= MOD_SHIFT;
   if (event.ctrl) mods |= MOD_CTRL;
@@ -305,7 +292,7 @@ function resolveMods(event: TerminalKeyEvent): number {
   return mods;
 }
 
-function resolveAction(event: TerminalKeyEvent): number {
+function resolveAction(event: KeyboardEvent): number {
   if (event.eventType === "release") return KEY_ACTION_RELEASE;
   if (event.eventType === "repeat" || event.repeated) return KEY_ACTION_REPEAT;
   return KEY_ACTION_PRESS;
@@ -322,7 +309,7 @@ function getPrintableSequence(sequence?: string): string {
   return sequence;
 }
 
-function resolveUnshiftedCodepoint(event: TerminalKeyEvent): number {
+function resolveUnshiftedCodepoint(event: KeyboardEvent): number {
   if (typeof event.baseCode === "number" && event.baseCode > 0) {
     return event.baseCode;
   }
@@ -363,7 +350,7 @@ function getEncoderOptions(emulator: ITerminalEmulator): KeyEncoderOptions {
 const sharedEncoder = new GhosttyKeyEncoder();
 
 export function encodeKeyForEmulator(
-  event: TerminalKeyEvent,
+  event: KeyboardEvent,
   emulator: ITerminalEmulator | null
 ): string {
   if (!emulator) return "";

@@ -27,7 +27,6 @@ export {
 export {
   handleSearchKeyboard,
   type SearchKeyboardDeps,
-  type KeyEvent,
 } from './search-keyboard';
 
 export {

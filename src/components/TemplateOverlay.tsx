@@ -9,9 +9,22 @@ import { useConfig } from '../contexts/ConfigContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTerminal } from '../contexts/TerminalContext';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
-import { formatComboSet, matchKeybinding, type ResolvedKeybindingMap } from '../core/keybindings';
-import type { KeyboardEvent } from '../effect/bridge';
+import { formatComboSet, type ResolvedKeybindingMap } from '../core/keybindings';
 import type { TemplateSession } from '../effect/models';
+import { normalizeTemplateId } from '../core/template-utils';
+import { createTemplateOverlayKeyHandler, type TemplateTabMode } from './template-overlay/keyboard';
+import {
+  abbreviatePath,
+  fitLabel,
+  formatRelativeTime,
+  truncate,
+} from './template-overlay/formatting';
+import {
+  buildSaveSummaryLines,
+  buildTemplateSummary,
+  getTemplateStats,
+  type SaveSummaryLine,
+} from './template-overlay/summary';
 
 interface TemplateOverlayProps {
   width: number;
@@ -21,68 +34,8 @@ interface TemplateOverlayProps {
   onRequestDeleteConfirm: (deleteTemplate: () => Promise<void>) => void;
 }
 
-type TabMode = 'apply' | 'save';
-type SaveSummaryLine =
-  | { type: 'text'; value: string }
-  | { type: 'pane'; prefix: string; label: string; cwdTail: string; hasProcess: boolean };
-
 function getCombos(bindings: ResolvedKeybindingMap, action: string): string[] {
   return bindings.byAction.get(action) ?? [];
-}
-
-function truncate(text: string, width: number): string {
-  if (width <= 0) return '';
-  if (text.length <= width) return text.padEnd(width);
-  if (width <= 3) return text.slice(0, width);
-  return `${text.slice(0, width - 3)}...`;
-}
-
-function fitLabel(text: string, width: number): string {
-  if (width <= 0) return '';
-  if (text.length <= width) return text.padEnd(width);
-  if (width <= 3) return text.slice(0, width);
-  return `${text.slice(0, width - 3)}...`;
-}
-
-function formatRelativeTime(timestamp: number): string {
-  if (!timestamp) return 'unknown';
-  const now = Date.now();
-  const diff = now - timestamp;
-
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (seconds < 60) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days}d ago`;
-  return new Date(timestamp).toLocaleDateString();
-}
-
-function abbreviatePath(path: string): string {
-  const home = process.env.HOME ?? process.env.USERPROFILE;
-  if (home && path.startsWith(home)) {
-    const suffix = path.slice(home.length);
-    return `~${suffix || ''}`;
-  }
-  return path;
-}
-
-function pathTail(path: string): string {
-  const normalized = path.replace(/\/+$/, '');
-  const parts = normalized.split('/').filter(Boolean);
-  return parts[parts.length - 1] ?? normalized;
-}
-
-function templateIdFromName(name: string): string | null {
-  const normalized = name
-    .toLowerCase()
-    .replace(/[^a-z0-9-_]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return normalized.length > 0 ? normalized : null;
 }
 
 export function TemplateOverlay(props: TemplateOverlayProps) {
@@ -93,7 +46,7 @@ export function TemplateOverlay(props: TemplateOverlayProps) {
   const terminal = useTerminal();
   const accentColor = () => theme.pane.focusedBorderColor;
 
-  const [tab, setTab] = createSignal<TabMode>('apply');
+  const [tab, setTab] = createSignal<TemplateTabMode>('apply');
   const [selectedIndex, setSelectedIndex] = createSignal(0);
   const [error, setError] = createSignal<string | null>(null);
 
@@ -173,42 +126,7 @@ export function TemplateOverlay(props: TemplateOverlayProps) {
 
   const templates = () => session.templates;
 
-  const currentSummary = createMemo(() => {
-    const workspaces = layout.state.workspaces;
-    const summaries: Array<{
-      id: number;
-      layoutMode: string;
-      panes: Array<{ id: string; ptyId?: string }>;
-    }> = [];
-
-    const entries = Object.entries(workspaces)
-      .map(([idStr, workspace]) => ({ id: Number(idStr), workspace }))
-      .filter(({ workspace }) => workspace && (workspace.mainPane || workspace.stackPanes.length > 0))
-      .sort((a, b) => a.id - b.id);
-
-    for (const entry of entries) {
-      const workspace = entry.workspace!;
-      const panes: Array<{ id: string; ptyId?: string }> = [];
-      if (workspace.mainPane) {
-        panes.push({ id: workspace.mainPane.id, ptyId: workspace.mainPane.ptyId });
-      }
-      for (const pane of workspace.stackPanes) {
-        panes.push({ id: pane.id, ptyId: pane.ptyId });
-      }
-      summaries.push({
-        id: entry.id,
-        layoutMode: workspace.layoutMode,
-        panes,
-      });
-    }
-
-    const totalPanes = summaries.reduce((count, ws) => count + ws.panes.length, 0);
-    return {
-      workspaceCount: summaries.length,
-      paneCount: totalPanes,
-      workspaces: summaries,
-    };
-  });
+  const currentSummary = createMemo(() => buildTemplateSummary(layout.state.workspaces));
 
   const maxListRows = () => Math.max(1, props.height - 10);
   const listOffset = createMemo(() => {
@@ -244,7 +162,7 @@ export function TemplateOverlay(props: TemplateOverlayProps) {
 
   const findTemplateCollision = (name: string) => {
     const trimmed = name.trim();
-    const normalizedId = templateIdFromName(trimmed);
+    const normalizedId = normalizeTemplateId(trimmed);
     if (normalizedId) {
       const match = templates().find((template) => template.id === normalizedId);
       if (match) return match;
@@ -301,85 +219,23 @@ export function TemplateOverlay(props: TemplateOverlayProps) {
     });
   };
 
-  const handleApplyKeys = (event: KeyboardEvent) => {
-    const action = matchKeybinding(config.keybindings().templateOverlay.apply, {
-      key: event.key,
-      ctrl: event.ctrl,
-      alt: event.alt,
-      shift: event.shift,
-      meta: event.meta,
-    });
-    const count = templates().length;
-    switch (action) {
-      case 'template.close':
-        session.closeTemplateOverlay();
-        return true;
-      case 'template.tab.save':
-        setTab('save');
-        return true;
-      case 'template.list.down':
-        if (count > 0) {
-          setSelectedIndex((value) => Math.min(count - 1, value + 1));
-        }
-        return true;
-      case 'template.list.up':
-        if (count > 0) {
-          setSelectedIndex((value) => Math.max(0, value - 1));
-        }
-        return true;
-      case 'template.delete':
-        requestDeleteSelectedTemplate();
-        return true;
-      case 'template.apply':
-        void applySelectedTemplate();
-        return true;
-      default:
-        return true;
-    }
-  };
-
-  const handleSaveKeys = (event: KeyboardEvent) => {
-    const action = matchKeybinding(config.keybindings().templateOverlay.save, {
-      key: event.key,
-      ctrl: event.ctrl,
-      alt: event.alt,
-      shift: event.shift,
-      meta: event.meta,
-    });
-
-    switch (action) {
-      case 'template.close':
-        session.closeTemplateOverlay();
-        return true;
-      case 'template.tab.apply':
-        setTab('apply');
-        return true;
-      case 'template.save.delete':
-        setSaveName((value) => value.slice(0, -1));
-        return true;
-      case 'template.save':
-        void saveTemplate();
-        return true;
-      default:
-        break;
-    }
-
-    const input = event.sequence ?? (event.key.length === 1 ? event.key : '');
-    const charCode = input.charCodeAt(0) ?? 0;
-    const isPrintable = input.length === 1 && charCode >= 32 && charCode < 127;
-    if (isPrintable && !event.ctrl && !event.alt && !event.meta) {
-      setSaveName((value) => value + input);
-      return true;
-    }
-    return true;
-  };
-
-  const handleKeyDown = (event: KeyboardEvent) => {
-    if (tab() === 'apply') {
-      return handleApplyKeys(event);
-    }
-    return handleSaveKeys(event);
-  };
+  const handleKeyDown = createTemplateOverlayKeyHandler({
+    tab,
+    setTab,
+    getTemplateCount: () => templates().length,
+    setSelectedIndex,
+    onApply: () => {
+      void applySelectedTemplate();
+    },
+    onDelete: requestDeleteSelectedTemplate,
+    onClose: () => session.closeTemplateOverlay(),
+    onSave: () => {
+      void saveTemplate();
+    },
+    setSaveName,
+    applyBindings: config.keybindings().templateOverlay.apply,
+    saveBindings: config.keybindings().templateOverlay.save,
+  });
 
   useOverlayKeyboardHandler({
     overlay: 'templateOverlay',
@@ -392,45 +248,14 @@ export function TemplateOverlay(props: TemplateOverlayProps) {
   const saveIndentWidth = saveIndent.length;
   const listRows = () => Math.max(1, Math.min(templates().length, maxListRows()));
   const maxSaveSummaryLines = () => Math.max(0, props.height - 13);
-  const saveSummaryLines = createMemo(() => {
+  const saveSummaryLines = createMemo<SaveSummaryLine[]>(() => {
     const summary = currentSummary();
-    const cwdMap = paneCwds();
-    const processMap = paneProcesses();
-    const fallbackCwd = abbreviatePath(process.env.OPENMUX_ORIGINAL_CWD ?? process.cwd());
-    const lines: SaveSummaryLine[] = [];
-
-    if (summary.workspaceCount === 0) {
-      lines.push({ type: 'text', value: 'No panes to save' });
-      return lines;
-    }
-
-    summary.workspaces.forEach((workspace, workspaceIndex) => {
-      const paneCount = workspace.panes.length;
-      const isLastWorkspace = workspaceIndex === summary.workspaces.length - 1;
-      const workspacePrefix = isLastWorkspace ? '└─' : '├─';
-      const paneIndent = isLastWorkspace ? '   ' : '│  ';
-
-      lines.push({
-        type: 'text',
-        value: `${workspacePrefix} workspace [${workspace.id}] (${workspace.layoutMode.toUpperCase()})`,
-      });
-
-      workspace.panes.forEach((pane, paneIndex) => {
-        const cwd = cwdMap.get(pane.id) ?? fallbackCwd;
-        const processName = processMap.get(pane.id);
-        const isLastPane = paneIndex === paneCount - 1;
-        const panePrefix = isLastPane ? '└─' : '├─';
-        lines.push({
-          type: 'pane',
-          prefix: `${paneIndent}${panePrefix} `,
-          label: processName ?? `pane ${paneIndex + 1}`,
-          cwdTail: pathTail(cwd),
-          hasProcess: Boolean(processName),
-        });
-      });
+    return buildSaveSummaryLines({
+      summary,
+      paneCwds: paneCwds(),
+      paneProcesses: paneProcesses(),
+      fallbackCwd: abbreviatePath(process.env.OPENMUX_ORIGINAL_CWD ?? process.cwd()),
     });
-
-    return lines;
   });
 
   const visibleSaveSummaryLines = createMemo(() => {
@@ -508,24 +333,6 @@ export function TemplateOverlay(props: TemplateOverlayProps) {
         <text fg="#888888">{suffix}</text>
       </box>
     );
-  };
-
-  const getTemplateStats = (template: TemplateSession) => {
-    if (template.workspaces.length > 0) {
-      let paneCount = 0;
-      for (const workspace of template.workspaces) {
-        paneCount += workspace.panes.length;
-      }
-      return {
-        workspaceCount: template.workspaces.length,
-        paneCount,
-      };
-    }
-
-    return {
-      workspaceCount: template.defaults.workspaceCount,
-      paneCount: template.defaults.workspaceCount * template.defaults.paneCount,
-    };
   };
 
   const renderTemplateRow = (template: TemplateSession, index: number) => {

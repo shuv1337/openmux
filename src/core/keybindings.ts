@@ -2,219 +2,23 @@
  * Keybinding parsing, matching, and formatting utilities.
  */
 
-export interface KeybindingEvent {
-  key: string;
-  ctrl?: boolean;
-  alt?: boolean;
-  shift?: boolean;
-  meta?: boolean;
-}
+import type {
+  KeybindingEvent,
+  KeybindingMap,
+  KeybindingsConfig,
+  ResolvedKeybindingMap,
+  ResolvedKeybindings,
+} from './keybindings/types';
 
-export type KeybindingMap = Record<string, string | null | undefined | false>;
+export type {
+  KeybindingEvent,
+  KeybindingMap,
+  KeybindingsConfig,
+  ResolvedKeybindingMap,
+  ResolvedKeybindings,
+} from './keybindings/types';
 
-export interface KeybindingsConfig {
-  prefixKey: string;
-  prefixTimeoutMs: number;
-  normal: KeybindingMap;
-  prefix: KeybindingMap;
-  move: KeybindingMap;
-  search: KeybindingMap;
-  commandPalette: KeybindingMap;
-  templateOverlay: {
-    apply: KeybindingMap;
-    save: KeybindingMap;
-  };
-  aggregate: {
-    list: KeybindingMap;
-    preview: KeybindingMap;
-    search: KeybindingMap;
-    prefix: KeybindingMap;
-  };
-  sessionPicker: {
-    list: KeybindingMap;
-    rename: KeybindingMap;
-  };
-  confirmation: KeybindingMap;
-}
-
-export interface ResolvedKeybindingMap {
-  byCombo: Map<string, string>;
-  byAction: Map<string, string[]>;
-}
-
-export interface ResolvedKeybindings {
-  prefixKey: string;
-  prefixTimeoutMs: number;
-  normal: ResolvedKeybindingMap;
-  prefix: ResolvedKeybindingMap;
-  move: ResolvedKeybindingMap;
-  search: ResolvedKeybindingMap;
-  commandPalette: ResolvedKeybindingMap;
-  templateOverlay: {
-    apply: ResolvedKeybindingMap;
-    save: ResolvedKeybindingMap;
-  };
-  aggregate: {
-    list: ResolvedKeybindingMap;
-    preview: ResolvedKeybindingMap;
-    search: ResolvedKeybindingMap;
-    prefix: ResolvedKeybindingMap;
-  };
-  sessionPicker: {
-    list: ResolvedKeybindingMap;
-    rename: ResolvedKeybindingMap;
-  };
-  confirmation: ResolvedKeybindingMap;
-}
-
-export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
-  prefixKey: 'ctrl+b',
-  prefixTimeoutMs: 2000,
-  normal: {
-    'alt+h': 'pane.focus.west',
-    'alt+j': 'pane.focus.south',
-    'alt+k': 'pane.focus.north',
-    'alt+l': 'pane.focus.east',
-    'alt+m': 'mode.move',
-    'alt+n': 'pane.new',
-    'alt+s': 'session.picker.toggle',
-    'alt+g': 'aggregate.toggle',
-    'alt+f': 'search.open',
-    'alt+p': 'command.palette.toggle',
-    'alt+[': 'layout.cycle.prev',
-    'alt+]': 'layout.cycle.next',
-    'alt+z': 'pane.zoom',
-    'alt+x': 'pane.close',
-    ...Object.fromEntries(
-      Array.from({ length: 9 }, (_, i) => [`alt+${i + 1}`, `workspace.switch.${i + 1}`])
-    ),
-  },
-  prefix: {
-    'h': 'pane.focus.west',
-    'j': 'pane.focus.south',
-    'k': 'pane.focus.north',
-    'l': 'pane.focus.east',
-    'm': 'mode.move',
-    'n': 'pane.new',
-    'enter': 'pane.new',
-    'x': 'pane.close',
-    'v': 'layout.mode.vertical',
-    'shift+h': 'layout.mode.horizontal',
-    't': 'layout.mode.stacked',
-    's': 'session.picker.toggle',
-    'g': 'aggregate.toggle',
-    '/': 'search.open',
-    ':': 'command.palette.toggle',
-    'z': 'pane.zoom',
-    ']': 'clipboard.paste',
-    'p': 'clipboard.paste',
-    '`': 'console.toggle',
-    'q': 'app.quit',
-    'd': 'app.detach',
-    '?': 'hints.toggle',
-    'escape': 'mode.cancel',
-    ...Object.fromEntries(
-      Array.from({ length: 9 }, (_, i) => [`${i + 1}`, `workspace.switch.${i + 1}`])
-    ),
-  },
-  move: {
-    'h': 'pane.move.west',
-    'j': 'pane.move.south',
-    'k': 'pane.move.north',
-    'l': 'pane.move.east',
-    'escape': 'mode.cancel',
-  },
-  search: {
-    'ctrl+n': 'search.next',
-    'ctrl+p': 'search.prev',
-    'enter': 'search.confirm',
-    'escape': 'search.cancel',
-    'backspace': 'search.delete',
-  },
-  commandPalette: {
-    'down': 'command.palette.down',
-    'up': 'command.palette.up',
-    'enter': 'command.palette.confirm',
-    'escape': 'command.palette.close',
-    'backspace': 'command.palette.delete',
-  },
-  templateOverlay: {
-    apply: {
-      'escape': 'template.close',
-      'tab': 'template.tab.save',
-      'down': 'template.list.down',
-      'up': 'template.list.up',
-      'enter': 'template.apply',
-      'ctrl+x': 'template.delete',
-      'ctrl+d': 'template.delete',
-    },
-    save: {
-      'escape': 'template.close',
-      'tab': 'template.tab.apply',
-      'enter': 'template.save',
-      'backspace': 'template.save.delete',
-    },
-  },
-  aggregate: {
-    list: {
-      'down': 'aggregate.list.down',
-      'j': 'aggregate.list.down',
-      'up': 'aggregate.list.up',
-      'k': 'aggregate.list.up',
-      'enter': 'aggregate.list.preview',
-      'tab': 'aggregate.list.jump',
-      'alt+escape': 'aggregate.list.close',
-      'alt+a': 'aggregate.list.toggle.scope',
-      'alt+x': 'aggregate.kill',
-      'backspace': 'aggregate.list.delete',
-    },
-    preview: {
-      'alt+escape': 'aggregate.preview.exit',
-      'alt+f': 'aggregate.preview.search',
-      'alt+x': 'aggregate.kill',
-    },
-    search: {
-      'enter': 'aggregate.search.confirm',
-      'escape': 'aggregate.search.cancel',
-      'ctrl+n': 'aggregate.search.next',
-      'ctrl+p': 'aggregate.search.prev',
-      'backspace': 'aggregate.search.delete',
-    },
-    prefix: {
-      'q': 'aggregate.prefix.quit',
-      'd': 'aggregate.prefix.detach',
-      'escape': 'aggregate.prefix.exit',
-      '/': 'aggregate.prefix.search',
-    },
-  },
-  sessionPicker: {
-    list: {
-      'escape': 'session.picker.close',
-      'down': 'session.picker.down',
-      'up': 'session.picker.up',
-      'enter': 'session.picker.select',
-      'backspace': 'session.picker.filter.delete',
-      'ctrl+n': 'session.picker.create',
-      'ctrl+r': 'session.picker.rename',
-      'ctrl+x': 'session.picker.delete',
-      'ctrl+d': 'session.picker.delete',
-    },
-    rename: {
-      'escape': 'session.picker.rename.cancel',
-      'enter': 'session.picker.rename.confirm',
-      'backspace': 'session.picker.rename.delete',
-    },
-  },
-  confirmation: {
-    'escape': 'confirm.cancel',
-    'enter': 'confirm.accept',
-    'left': 'confirm.focus.confirm',
-    'h': 'confirm.focus.confirm',
-    'right': 'confirm.focus.cancel',
-    'l': 'confirm.focus.cancel',
-    'tab': 'confirm.focus.cancel',
-  },
-};
+export { DEFAULT_KEYBINDINGS } from './keybindings/defaults';
 
 const MODIFIER_ALIASES: Record<string, 'ctrl' | 'alt' | 'shift' | 'meta'> = {
   ctrl: 'ctrl',

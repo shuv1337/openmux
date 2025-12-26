@@ -3,6 +3,7 @@
  * Converts keyboard events to terminal escape sequences
  */
 import type { ITerminalEmulator } from '../../terminal/emulator-interface'
+import type { KeyboardEvent } from '../../core/keyboard-event'
 import { encodeKeyForEmulator } from '../../terminal/key-encoder'
 
 export interface KeyProcessorDeps {
@@ -11,23 +12,11 @@ export interface KeyProcessorDeps {
   writeToFocused: (data: string) => void
 }
 
-export interface KeyEvent {
-  name: string
-  ctrl?: boolean
-  shift?: boolean
-  option?: boolean
-  meta?: boolean
-  sequence?: string
-  baseCode?: number
-  eventType?: "press" | "repeat" | "release"
-  repeated?: boolean
-}
-
 /**
  * Process keyboard input in normal mode and forward to PTY
  */
 export function processNormalModeKey(
-  event: KeyEvent,
+  event: KeyboardEvent,
   deps: KeyProcessorDeps
 ): void {
   // Clear any active selection when user types
@@ -38,10 +27,10 @@ export function processNormalModeKey(
   const emulator = deps.getFocusedEmulator()
   const sequence = encodeKeyForEmulator(
     {
-      key: event.name,
+      key: event.key,
       ctrl: event.ctrl,
       shift: event.shift,
-      alt: event.option,
+      alt: event.alt,
       meta: event.meta,
       sequence: event.sequence,
       baseCode: event.baseCode,

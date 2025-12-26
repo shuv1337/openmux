@@ -8,7 +8,7 @@ import type {
   TerminalScrollState,
   DirtyTerminalUpdate,
 } from "../../core/types";
-import type { ITerminalEmulator, SearchMatch, SearchResult, TerminalModes } from "../emulator-interface";
+import type { ITerminalEmulator, SearchResult, TerminalModes } from "../emulator-interface";
 import type { TerminalColors } from "../terminal-colors";
 import { createTitleParser } from "../title-parser";
 import { stripProblematicOscSequences } from "./osc-stripping";
@@ -23,7 +23,8 @@ import {
   createEmptyTerminalState,
   createEmptyDirtyUpdate,
 } from "../emulator-utils";
-import { extractLineText, getModes } from "./utils";
+import { getModes } from "./utils";
+import { searchTerminal } from "./terminal-search";
 
 const SCROLLBACK_LIMIT = 2000;
 
@@ -310,60 +311,12 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
   // ==========================================================================
 
   async search(query: string, options?: { limit?: number }): Promise<SearchResult> {
-    const limit = options?.limit ?? 500;
-    const matches: SearchMatch[] = [];
-    let hasMore = false;
-
-    if (!query) {
-      return { matches, hasMore };
-    }
-
-    const lowerQuery = query.toLowerCase();
-    const scrollbackLength = this.terminal.getScrollbackLength();
-
-    for (let offset = 0; offset < scrollbackLength; offset++) {
-      if (matches.length >= limit) {
-        hasMore = true;
-        break;
-      }
-
-      const cells = this.fetchScrollbackLine(offset);
-      if (!cells) continue;
-
-      const text = extractLineText(cells).toLowerCase();
-      let pos = 0;
-      while ((pos = text.indexOf(lowerQuery, pos)) !== -1) {
-        if (matches.length >= limit) {
-          hasMore = true;
-          break;
-        }
-        matches.push({
-          lineIndex: offset,
-          startCol: pos,
-          endCol: pos + query.length,
-        });
-        pos += 1;
-      }
-    }
-
-    if (!hasMore) {
-      const state = this.getTerminalState();
-      for (let y = 0; y < state.rows; y++) {
-        const line = state.cells[y] ?? createEmptyRow(state.cols, this.colors);
-        const text = extractLineText(line).toLowerCase();
-        let pos = 0;
-        while ((pos = text.indexOf(lowerQuery, pos)) !== -1) {
-          matches.push({
-            lineIndex: scrollbackLength + y,
-            startCol: pos,
-            endCol: pos + query.length,
-          });
-          pos += 1;
-        }
-      }
-    }
-
-    return { matches, hasMore };
+    return searchTerminal(query, options, {
+      getScrollbackLength: () => this.terminal.getScrollbackLength(),
+      getScrollbackLine: (offset) => this.fetchScrollbackLine(offset),
+      getTerminalState: () => this.getTerminalState(),
+      createEmptyRow: (cols) => createEmptyRow(cols, this.colors),
+    });
   }
 
   // ==========================================================================

@@ -4,6 +4,7 @@
  */
 import type { SearchState } from '../../contexts/search/types'
 import { matchKeybinding, type ResolvedKeybindingMap } from '../../core/keybindings'
+import type { KeyboardEvent } from '../../core/keyboard-event'
 
 export interface SearchKeyboardDeps {
   exitSearchMode: (restore: boolean) => void
@@ -15,32 +16,21 @@ export interface SearchKeyboardDeps {
   keybindings: ResolvedKeybindingMap
 }
 
-export interface KeyEvent {
-  name: string
-  ctrl?: boolean
-  shift?: boolean
-  option?: boolean
-  meta?: boolean
-  sequence?: string
-  eventType?: "press" | "repeat" | "release"
-  repeated?: boolean
-}
-
 /**
  * Handle keyboard input in search mode
  * @returns true if the key was handled, false if not
  */
 export function handleSearchKeyboard(
-  event: KeyEvent,
+  event: KeyboardEvent,
   deps: SearchKeyboardDeps
 ): boolean {
   if (event.eventType === "release") {
     return true
   }
   const action = matchKeybinding(deps.keybindings, {
-    key: event.name,
+    key: event.key,
     ctrl: event.ctrl,
-    alt: event.option,
+    alt: event.alt,
     shift: event.shift,
     meta: event.meta,
   })
@@ -82,7 +72,7 @@ export function handleSearchKeyboard(
   // Single printable character - add to search query
   const searchCharCode = event.sequence?.charCodeAt(0) ?? 0
   const isPrintable = event.sequence?.length === 1 && searchCharCode >= 32 && searchCharCode < 127
-  if (isPrintable && !event.ctrl && !event.option && !event.meta) {
+  if (isPrintable && !event.ctrl && !event.alt && !event.meta) {
     deps.setSearchQuery(currentSearchState.query + event.sequence)
     return true
   }
