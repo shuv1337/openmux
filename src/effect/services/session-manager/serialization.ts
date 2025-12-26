@@ -3,15 +3,58 @@
  */
 
 import { Effect } from "effect"
-import type { WorkspaceState } from "./types"
+import type { WorkspaceLayoutNode, WorkspaceState } from "./types"
 import type {
   SessionMetadata} from "../../models";
 import {
   SerializedSession,
   SerializedWorkspace,
-  SerializedPaneData
+  SerializedPaneData,
+  SerializedSplitNode,
+  type SerializedLayoutNode
 } from "../../models"
 import { WorkspaceId } from "../../types"
+
+function isSplitNode(node: WorkspaceLayoutNode): node is Extract<WorkspaceLayoutNode, { type: "split" }> {
+  return (node as { type?: string }).type === "split"
+}
+
+type WorkspacePaneNode = Exclude<WorkspaceLayoutNode, { type: "split" }>
+
+function forEachPane(
+  node: WorkspaceLayoutNode | null,
+  visit: (pane: WorkspacePaneNode) => void
+): void {
+  if (!node) return
+  if (isSplitNode(node)) {
+    forEachPane(node.first, visit)
+    forEachPane(node.second, visit)
+    return
+  }
+  visit(node as WorkspacePaneNode)
+}
+
+function serializeLayoutNode(
+  node: WorkspaceLayoutNode,
+  cwdMap: Map<string, string>
+): SerializedLayoutNode {
+  if (isSplitNode(node)) {
+    return SerializedSplitNode.make({
+      type: "split",
+      id: node.id,
+      direction: node.direction,
+      ratio: node.ratio,
+      first: serializeLayoutNode(node.first, cwdMap),
+      second: serializeLayoutNode(node.second, cwdMap),
+    })
+  }
+
+  return SerializedPaneData.make({
+    id: node.id,
+    title: node.title,
+    cwd: node.ptyId ? cwdMap.get(node.ptyId) ?? process.cwd() : process.cwd(),
+  })
+}
 
 /**
  * Extract auto-name from path (last directory component)
@@ -43,22 +86,18 @@ export function collectCwdMap(
     const cwdMap = new Map<string, string>()
 
     for (const workspace of workspaces.values()) {
-      const mainPane = workspace.mainPane
-      if (mainPane?.ptyId) {
-        const ptyId = mainPane.ptyId
-        const cwd = yield* Effect.promise(() =>
-          getCwd(ptyId).catch(() => process.cwd())
-        )
-        cwdMap.set(ptyId, cwd)
+      const panes: WorkspacePaneNode[] = []
+      forEachPane(workspace.mainPane, (pane) => panes.push(pane))
+      for (const node of workspace.stackPanes) {
+        forEachPane(node, (pane) => panes.push(pane))
       }
-      for (const pane of workspace.stackPanes) {
-        if (pane.ptyId) {
-          const ptyId = pane.ptyId
-          const cwd = yield* Effect.promise(() =>
-            getCwd(ptyId).catch(() => process.cwd())
-          )
-          cwdMap.set(ptyId, cwd)
-        }
+
+      for (const pane of panes) {
+        if (!pane.ptyId) continue
+        const cwd = yield* Effect.promise(() =>
+          getCwd(pane.ptyId!).catch(() => process.cwd())
+        )
+        cwdMap.set(pane.ptyId, cwd)
       }
     }
 
@@ -79,25 +118,8 @@ export function serializeWorkspace(
     return null
   }
 
-  const mainPane = workspace.mainPane
-    ? SerializedPaneData.make({
-        id: workspace.mainPane.id,
-        title: workspace.mainPane.title,
-        cwd: workspace.mainPane.ptyId
-          ? cwdMap.get(workspace.mainPane.ptyId) ?? process.cwd()
-          : process.cwd(),
-      })
-    : null
-
-  const stackPanes = workspace.stackPanes.map((pane) =>
-    SerializedPaneData.make({
-      id: pane.id,
-      title: pane.title,
-      cwd: pane.ptyId
-        ? cwdMap.get(pane.ptyId) ?? process.cwd()
-        : process.cwd(),
-    })
-  )
+  const mainPane = workspace.mainPane ? serializeLayoutNode(workspace.mainPane, cwdMap) : null
+  const stackPanes = workspace.stackPanes.map((pane) => serializeLayoutNode(pane, cwdMap))
 
   return SerializedWorkspace.make({
     id: WorkspaceId.make(id),

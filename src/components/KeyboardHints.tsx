@@ -73,6 +73,8 @@ export function KeyboardHints(props: KeyboardHintsProps) {
 
     return [
       { key: formatComboSet(getCombos(bindings, 'pane.new')), description: 'new pane' },
+      { key: formatComboSet(getCombos(bindings, 'pane.split.vertical')), description: 'split vertical' },
+      { key: formatComboSet(getCombos(bindings, 'pane.split.horizontal')), description: 'split horizontal' },
       { key: formatComboSet(navigationCombos), description: 'navigate panes' },
       { key: formatComboSet(getCombos(bindings, 'mode.move')), description: 'move pane' },
       { key: formatComboSet(workspaceCombos), description: 'switch workspace' },

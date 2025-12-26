@@ -7,8 +7,9 @@
  * - stacked: main pane left (50%), stack panes tabbed on right (only active visible)
  */
 
-import type { Rectangle, Workspace, PaneData, LayoutMode } from '../types';
+import type { Rectangle, Workspace, PaneData, LayoutMode, LayoutNode, SplitDirection } from '../types';
 import type { LayoutConfig } from '../config';
+import { collectPanes, containsPane, findPane, isSplitNode } from '../layout-tree';
 
 /**
  * Check if two rectangles are equal (structural equality)
@@ -31,6 +32,79 @@ function updatePaneRectangle(pane: PaneData, newRect: Rectangle | undefined): Pa
   return { ...pane, rectangle: newRect ? { ...newRect } : undefined };
 }
 
+function updateLayoutNodeRectangles(
+  node: LayoutNode,
+  rect: Rectangle | undefined,
+  gap: number
+): LayoutNode {
+  if (!isSplitNode(node)) {
+    return updatePaneRectangle(node, rect);
+  }
+
+  if (!rect) {
+    const updatedFirst = updateLayoutNodeRectangles(node.first, undefined, gap);
+    const updatedSecond = updateLayoutNodeRectangles(node.second, undefined, gap);
+    if (!node.rectangle && updatedFirst === node.first && updatedSecond === node.second) {
+      return node;
+    }
+    return {
+      ...node,
+      rectangle: undefined,
+      first: updatedFirst,
+      second: updatedSecond,
+    };
+  }
+
+  const { firstRect, secondRect } = splitRectangle(rect, node.direction, node.ratio, gap);
+  const updatedFirst = updateLayoutNodeRectangles(node.first, firstRect, gap);
+  const updatedSecond = updateLayoutNodeRectangles(node.second, secondRect, gap);
+  const rectChanged = !rectanglesEqual(node.rectangle, rect);
+
+  if (!rectChanged && updatedFirst === node.first && updatedSecond === node.second) {
+    return node;
+  }
+
+  return {
+    ...node,
+    rectangle: rect ? { ...rect } : undefined,
+    first: updatedFirst,
+    second: updatedSecond,
+  };
+}
+
+function splitRectangle(
+  rect: Rectangle,
+  direction: SplitDirection,
+  ratio: number,
+  gap: number
+): { firstRect: Rectangle; secondRect: Rectangle } {
+  if (direction === 'vertical') {
+    const firstWidth = Math.max(1, Math.floor((rect.width - gap) * ratio));
+    const secondWidth = Math.max(1, rect.width - firstWidth - gap);
+    return {
+      firstRect: { x: rect.x, y: rect.y, width: firstWidth, height: rect.height },
+      secondRect: {
+        x: rect.x + firstWidth + gap,
+        y: rect.y,
+        width: secondWidth,
+        height: rect.height,
+      },
+    };
+  }
+
+  const firstHeight = Math.max(1, Math.floor((rect.height - gap) * ratio));
+  const secondHeight = Math.max(1, rect.height - firstHeight - gap);
+  return {
+    firstRect: { x: rect.x, y: rect.y, width: rect.width, height: firstHeight },
+    secondRect: {
+      x: rect.x,
+      y: rect.y + firstHeight + gap,
+      width: rect.width,
+      height: secondHeight,
+    },
+  };
+}
+
 /**
  * Calculate rectangles for all panes in a workspace
  */
@@ -47,6 +121,7 @@ export function calculateMasterStackLayout(
     width: Math.max(1, viewport.width - padding.left - padding.right),
     height: Math.max(1, viewport.height - padding.top - padding.bottom),
   };
+  const gap = config.windowGap;
 
   // No panes - nothing to calculate
   if (!mainPane) {
@@ -55,21 +130,22 @@ export function calculateMasterStackLayout(
 
   // Zoomed mode - focused pane takes full viewport
   if (zoomed && focusedPaneId) {
-    const focusedIsMain = mainPane.id === focusedPaneId;
-    const focusedStackIndex = stackPanes.findIndex(p => p.id === focusedPaneId);
+    const focusedIsMain = containsPane(mainPane, focusedPaneId);
+    const focusedStackIndex = stackPanes.findIndex(p => containsPane(p, focusedPaneId));
 
     if (focusedIsMain) {
-      const updatedMain = updatePaneRectangle(mainPane, paddedViewport);
-      const updatedStack = stackPanes.map(p => updatePaneRectangle(p, undefined));
-      // Only create new workspace if something changed
+      const updatedMain = updateLayoutNodeRectangles(mainPane, paddedViewport, gap);
+      const updatedStack = stackPanes.map(p => updateLayoutNodeRectangles(p, undefined, gap));
       if (updatedMain === mainPane && updatedStack.every((p, i) => p === stackPanes[i])) {
         return workspace;
       }
       return { ...workspace, mainPane: updatedMain, stackPanes: updatedStack };
-    } else if (focusedStackIndex >= 0) {
-      const updatedMain = updatePaneRectangle(mainPane, undefined);
+    }
+
+    if (focusedStackIndex >= 0) {
+      const updatedMain = updateLayoutNodeRectangles(mainPane, undefined, gap);
       const updatedStack = stackPanes.map((p, i) =>
-        updatePaneRectangle(p, i === focusedStackIndex ? paddedViewport : undefined)
+        updateLayoutNodeRectangles(p, i === focusedStackIndex ? paddedViewport : undefined, gap)
       );
       if (updatedMain === mainPane && updatedStack.every((p, i) => p === stackPanes[i])) {
         return workspace;
@@ -80,13 +156,12 @@ export function calculateMasterStackLayout(
 
   // Single pane - takes full viewport
   if (stackPanes.length === 0) {
-    const updatedMain = updatePaneRectangle(mainPane, paddedViewport);
+    const updatedMain = updateLayoutNodeRectangles(mainPane, paddedViewport, gap);
     if (updatedMain === mainPane) return workspace;
     return { ...workspace, mainPane: updatedMain };
   }
 
   // Multiple panes - split based on layout mode
-  const gap = config.windowGap;
   const mainRatio = config.defaultSplitRatio;
 
   let mainRect: Rectangle;
@@ -140,7 +215,7 @@ export function calculateMasterStackLayout(
   );
 
   // Update main pane with structural sharing
-  const updatedMain = updatePaneRectangle(mainPane, mainRect);
+  const updatedMain = updateLayoutNodeRectangles(mainPane, mainRect, gap);
 
   // Only create new workspace if something changed
   const stackChanged = updatedStackPanes.some((p, i) => p !== stackPanes[i]);
@@ -159,12 +234,12 @@ export function calculateMasterStackLayout(
  * Calculate rectangles for stack panes (with structural sharing)
  */
 function calculateStackPaneRectangles(
-  stackPanes: PaneData[],
+  stackPanes: LayoutNode[],
   stackArea: Rectangle,
   layoutMode: LayoutMode,
   activeStackIndex: number,
   gap: number
-): PaneData[] {
+): LayoutNode[] {
   if (stackPanes.length === 0) return stackPanes;
 
   if (layoutMode === 'stacked') {
@@ -176,7 +251,9 @@ function calculateStackPaneRectangles(
       width: stackArea.width,
       height: Math.max(1, stackArea.height - 1),
     };
-    return stackPanes.map((pane) => updatePaneRectangle(pane, stackedRect));
+    return stackPanes.map((pane, index) =>
+      updateLayoutNodeRectangles(pane, index === activeStackIndex ? stackedRect : undefined, gap)
+    );
   }
 
   if (layoutMode === 'vertical') {
@@ -198,7 +275,7 @@ function calculateStackPaneRectangles(
         width: stackArea.width,
         height,
       };
-      return updatePaneRectangle(pane, rect);
+      return updateLayoutNodeRectangles(pane, rect, gap);
     });
   }
 
@@ -220,7 +297,7 @@ function calculateStackPaneRectangles(
       width,
       height: stackArea.height,
     };
-    return updatePaneRectangle(pane, rect);
+    return updateLayoutNodeRectangles(pane, rect, gap);
   });
 }
 
@@ -230,9 +307,11 @@ function calculateStackPaneRectangles(
 export function getAllWorkspacePanes(workspace: Workspace): PaneData[] {
   const panes: PaneData[] = [];
   if (workspace.mainPane) {
-    panes.push(workspace.mainPane);
+    collectPanes(workspace.mainPane, panes);
   }
-  panes.push(...workspace.stackPanes);
+  for (const pane of workspace.stackPanes) {
+    collectPanes(pane, panes);
+  }
   return panes;
 }
 
@@ -240,7 +319,7 @@ export function getAllWorkspacePanes(workspace: Workspace): PaneData[] {
  * Get total pane count in a workspace
  */
 export function getWorkspacePaneCount(workspace: Workspace): number {
-  return (workspace.mainPane ? 1 : 0) + workspace.stackPanes.length;
+  return getAllWorkspacePanes(workspace).length;
 }
 
 /**
@@ -250,17 +329,21 @@ export function findPaneInWorkspace(
   workspace: Workspace,
   paneId: string
 ): PaneData | null {
-  if (workspace.mainPane?.id === paneId) {
-    return workspace.mainPane;
+  if (workspace.mainPane) {
+    const mainPane = findPane(workspace.mainPane, paneId);
+    if (mainPane) return mainPane;
   }
-  return workspace.stackPanes.find((p) => p.id === paneId) ?? null;
+  for (const pane of workspace.stackPanes) {
+    const found = findPane(pane, paneId);
+    if (found) return found;
+  }
+  return null;
 }
 
 /**
  * Get the index of a pane (main = 0, stack panes = 1+)
  */
 export function getPaneIndex(workspace: Workspace, paneId: string): number {
-  if (workspace.mainPane?.id === paneId) return 0;
-  const stackIndex = workspace.stackPanes.findIndex((p) => p.id === paneId);
-  return stackIndex >= 0 ? stackIndex + 1 : -1;
+  const allPanes = getAllWorkspacePanes(workspace);
+  return allPanes.findIndex((pane) => pane.id === paneId);
 }

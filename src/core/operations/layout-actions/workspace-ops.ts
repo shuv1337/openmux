@@ -5,7 +5,7 @@
 
 import type { Rectangle, WorkspaceId } from '../../types';
 import type { LayoutState, Workspaces } from './types';
-import { createWorkspace, updateWorkspace, recalculateLayout, syncPaneIdCounter } from './helpers';
+import { createWorkspace, updateWorkspace, recalculateLayout, syncPaneIdCounter, syncSplitIdCounter } from './helpers';
 
 /**
  * Handle SET_VIEWPORT action
@@ -63,6 +63,7 @@ export function handleLoadSession(
   }
   // Sync pane ID counter to avoid conflicts with existing pane IDs
   syncPaneIdCounter(newWorkspaces);
+  syncSplitIdCounter(newWorkspaces);
   return {
     ...state,
     workspaces: newWorkspaces,

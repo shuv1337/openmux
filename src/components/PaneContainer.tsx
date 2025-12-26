@@ -3,7 +3,7 @@
  */
 
 import { Show, For, Index, createMemo } from 'solid-js';
-import type { PaneData } from '../core/types';
+import type { PaneData, LayoutNode } from '../core/types';
 import { useLayout } from '../contexts/LayoutContext';
 import { useTerminal } from '../contexts/TerminalContext';
 import { useSession } from '../contexts/SessionContext';
@@ -11,6 +11,7 @@ import { useAggregateView } from '../contexts/AggregateViewContext';
 import { useTitle } from '../contexts/TitleContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getFocusedPane, isMainPaneFocused } from '../core/workspace-utils';
+import { collectPanes, findPane, getFirstPane } from '../core/layout-tree';
 import { Pane } from './Pane';
 
 export function PaneContainer() {
@@ -30,6 +31,26 @@ export function PaneContainer() {
   const isZoomed = createMemo(() => workspace().zoomed);
   const activeStackIndex = createMemo(() => workspace().activeStackIndex);
 
+  const mainPanes = createMemo(() => {
+    const panes: PaneData[] = [];
+    const root = mainPane();
+    if (root) collectPanes(root, panes);
+    return panes;
+  });
+
+  const visibleStackPanes = createMemo(() => {
+    const panes: PaneData[] = [];
+    if (layoutMode() === 'stacked') {
+      const active = stackPanes()[activeStackIndex()];
+      if (active) collectPanes(active, panes);
+      return panes;
+    }
+    for (const pane of stackPanes()) {
+      collectPanes(pane, panes);
+    }
+    return panes;
+  });
+
   const handlePaneClick = (paneId: string) => {
     focusPane(paneId);
   };
@@ -44,12 +65,16 @@ export function PaneContainer() {
   };
 
   // Don't show "No panes" message while session is switching or aggregate view is open (prevents bleed-through)
-  const showNoPanesMessage = () => !mainPane() && !session.state.switching && !aggregateState.showAggregateView;
+  const showNoPanesMessage = () =>
+    mainPanes().length === 0 &&
+    stackPanes().length === 0 &&
+    !session.state.switching &&
+    !aggregateState.showAggregateView;
 
   return (
     <box style={{ flexGrow: 1, position: 'relative' }}>
       <Show
-        when={mainPane()}
+        when={mainPanes().length > 0 || stackPanes().length > 0}
         fallback={
           <Show when={showNoPanesMessage()}>
             <box
@@ -75,14 +100,18 @@ export function PaneContainer() {
                 flexGrow: 1,
               }}
             >
-              {/* Render main pane */}
-              <PaneRenderer
-                pane={mainPane()!}
-                isFocused={focusedPaneId() === mainPane()!.id}
-                isMain={true}
-                onFocus={handlePaneClick}
-                onMouseInput={handleMouseInput}
-              />
+              {/* Render main panes */}
+              <Index each={mainPanes()}>
+                {(pane) => (
+                  <PaneRenderer
+                    pane={pane()}
+                    isFocused={focusedPaneId() === pane().id}
+                    isMain={true}
+                    onFocus={handlePaneClick}
+                    onMouseInput={handleMouseInput}
+                  />
+                )}
+              </Index>
 
               {/* Render stack panes */}
               <Show
@@ -91,7 +120,7 @@ export function PaneContainer() {
                   /* Use Index instead of For - tracks by position not reference.
                      This prevents component recreation when array reference changes
                      but individual panes stay the same (just their rectangles update) */
-                  <Index each={stackPanes()}>
+                  <Index each={visibleStackPanes()}>
                     {(pane) => (
                       <PaneRenderer
                         pane={pane()}
@@ -104,7 +133,7 @@ export function PaneContainer() {
                   </Index>
                 }
               >
-                {/* Stacked mode: render tab headers and only the active pane */}
+                {/* Stacked mode: render tab headers and only the active stack entry */}
                 <StackedPanesRenderer
                   stackPanes={stackPanes()}
                   activeStackIndex={activeStackIndex()}
@@ -157,6 +186,7 @@ interface PaneRendererProps {
   pane: PaneData;
   isFocused: boolean;
   isMain: boolean;
+  hideTitle?: boolean;
   onFocus: (paneId: string) => void;
   onMouseInput: (ptyId: string, data: string) => void;
 }
@@ -184,6 +214,7 @@ function PaneRenderer(props: PaneRendererProps) {
       width={rect().width}
       height={rect().height}
       ptyId={props.pane.ptyId}
+      hideTitle={props.hideTitle}
       onClick={handleClick}
       onMouseInput={handleMouseInput}
     />
@@ -191,7 +222,7 @@ function PaneRenderer(props: PaneRendererProps) {
 }
 
 interface StackedPanesRendererProps {
-  stackPanes: PaneData[];
+  stackPanes: LayoutNode[];
   activeStackIndex: number;
   focusedPaneId: string | null;
   onFocus: (paneId: string) => void;
@@ -201,25 +232,15 @@ interface StackedPanesRendererProps {
 function StackedPanesRenderer(props: StackedPanesRendererProps) {
   const theme = useTheme();
   const titleCtx = useTitle();
-  const activePane = () => props.stackPanes[props.activeStackIndex];
-  const rect = () => activePane()?.rectangle ?? { x: 0, y: 0, width: 40, height: 12 };
-
-  const handleClick = () => {
-    const pane = activePane();
-    if (pane) {
-      props.onFocus(pane.id);
-    }
-  };
+  const activeEntry = () => props.stackPanes[props.activeStackIndex];
+  const rect = () => activeEntry()?.rectangle ?? { x: 0, y: 0, width: 40, height: 12 };
+  const activePanes = createMemo(() => {
+    const entry = activeEntry();
+    return entry ? collectPanes(entry) : [];
+  });
 
   const handleTabClick = (paneId: string) => {
     props.onFocus(paneId);
-  };
-
-  const handleMouseInput = (data: string) => {
-    const pane = activePane();
-    if (pane?.ptyId) {
-      props.onMouseInput(pane.ptyId, data);
-    }
   };
 
   // Calculate visible tabs based on scroll offset
@@ -231,11 +252,13 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
     // Build tab info with positions
     const tabItems = props.stackPanes.map((pane, index) => {
       const isActive = index === props.activeStackIndex;
-      // Get title from TitleContext (avoids layout store re-renders)
-      const title = titleCtx.getTitle(pane.id) ?? pane.title ?? 'pane';
+      const labelPane = props.focusedPaneId ? findPane(pane, props.focusedPaneId) : null;
+      const fallbackPane = labelPane ?? getFirstPane(pane);
+      const paneId = fallbackPane?.id ?? `stack-${index}`;
+      const title = fallbackPane ? (titleCtx.getTitle(fallbackPane.id) ?? fallbackPane.title ?? 'pane') : 'pane';
       // Use consistent space padding for all tabs (background fill indicates active)
       const label = ` ${title} `;
-      return { pane, label, width: label.length, isActive, index };
+      return { paneId, label, width: label.length, isActive, index };
     });
 
     let pos = 0;
@@ -258,7 +281,7 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
     }
 
     // Filter and trim tabs to fit visible area
-    const result: Array<{ pane: PaneData; label: string; isActive: boolean }> = [];
+    const result: Array<{ paneId: string; label: string; isActive: boolean }> = [];
     for (const tab of tabsWithPos) {
       const visibleStart = scrollOffset;
       const visibleEnd = scrollOffset + visibleWidth;
@@ -272,7 +295,7 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
       const visibleLabel = tab.label.slice(labelStart, labelEnd);
 
       if (visibleLabel.length > 0) {
-        result.push({ pane: tab.pane, label: visibleLabel, isActive: tab.isActive });
+        result.push({ paneId: tab.paneId, label: visibleLabel, isActive: tab.isActive });
       }
     }
 
@@ -293,12 +316,16 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
   };
 
   // Whether the stacked pane area is focused (vs main pane)
-  const isPaneFocused = () => props.focusedPaneId === activePane()?.id;
+  const isPaneFocused = () => {
+    const entry = activeEntry();
+    if (!entry || !props.focusedPaneId) return false;
+    return !!findPane(entry, props.focusedPaneId);
+  };
   // Active tab background color based on focus state
   const activeTabBg = () => isPaneFocused() ? theme.pane.focusedBorderColor : theme.pane.borderColor;
 
   return (
-    <Show when={activePane()}>
+    <Show when={activeEntry()}>
       {/* Tab headers for stacked panes (positioned above the pane rectangle) */}
       <box
         style={{
@@ -311,14 +338,14 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
         }}
       >
         <For each={tabs()}>
-          {({ pane, label, isActive }) => (
+          {({ paneId, label, isActive }) => (
             <text
               fg={isActive ? '#FFFFFF' : '#666666'}
               bg={isActive ? activeTabBg() : undefined}
               selectable={false}
               onMouseDown={(e: { preventDefault: () => void }) => {
                 e.preventDefault();
-                handleTabClick(pane.id);
+                handleTabClick(paneId);
               }}
             >
               {label}
@@ -327,20 +354,19 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
         </For>
       </box>
 
-      {/* Active pane (rectangle already accounts for tab header via layout calculation) */}
-      <Pane
-        id={activePane()!.id}
-        title={activePane()!.title}
-        isFocused={props.focusedPaneId === activePane()!.id}
-        x={rect().x}
-        y={rect().y}
-        width={rect().width}
-        height={rect().height}
-        ptyId={activePane()!.ptyId}
-        hideTitle={true}
-        onClick={handleClick}
-        onMouseInput={handleMouseInput}
-      />
+      {/* Active stack entry (rectangle already accounts for tab header via layout calculation) */}
+      <Index each={activePanes()}>
+        {(pane) => (
+          <PaneRenderer
+            pane={pane()}
+            isFocused={props.focusedPaneId === pane().id}
+            isMain={false}
+            hideTitle={true}
+            onFocus={props.onFocus}
+            onMouseInput={props.onMouseInput}
+          />
+        )}
+      </Index>
 
       {/* Connector: fills the gap between active tab and pane border using upper half block */}
       <Show when={activeTabInfo()}>

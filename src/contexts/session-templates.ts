@@ -3,14 +3,19 @@
  */
 
 import type { Workspaces } from '../core/operations/layout-actions';
-import type { LayoutMode, WorkspaceId } from '../core/types';
+import type { LayoutMode, WorkspaceId, LayoutNode, PaneData } from '../core/types';
 import { normalizeTemplateId } from '../core/template-utils';
+import { isSplitNode } from '../core/layout-tree';
 import { WorkspaceId as EffectWorkspaceId } from '../effect/types';
 import {
   TemplateSession,
   TemplateDefaults,
   TemplateWorkspace,
   TemplatePaneData,
+  TemplateLayoutPane,
+  TemplateLayoutSplit,
+  TemplateWorkspaceLayout,
+  type TemplateLayoutNode,
 } from '../effect/models';
 import { buildLayoutFromTemplate } from '../effect/bridge';
 
@@ -60,77 +65,93 @@ export async function buildTemplateFromWorkspaces(params: {
   const shellPath = params.shellPath ?? '';
   const shellName = shellPath ? shellPath.split('/').pop() : null;
 
+  const resolvePaneMetadata = async (pane: PaneData) => {
+    let cwd = params.fallbackCwd;
+    let command: string | undefined;
+    if (pane.ptyId) {
+      try {
+        cwd = await params.getCwd(pane.ptyId);
+      } catch {
+        cwd = params.fallbackCwd;
+      }
+      try {
+        command = await params.getForegroundProcess(pane.ptyId);
+      } catch {
+        command = undefined;
+      }
+    }
+    return {
+      cwd,
+      command: normalizeCommand(command, shellPath, shellName),
+    };
+  };
+
+  const buildLayoutNode = async (
+    node: LayoutNode,
+    leafMetadata: Array<{ cwd: string; command?: string }>
+  ): Promise<TemplateLayoutNode> => {
+    if (isSplitNode(node)) {
+      const first = await buildLayoutNode(node.first, leafMetadata);
+      const second = await buildLayoutNode(node.second, leafMetadata);
+      return TemplateLayoutSplit.make({
+        type: 'split',
+        direction: node.direction,
+        ratio: node.ratio,
+        first,
+        second,
+      });
+    }
+
+    const metadata = await resolvePaneMetadata(node);
+    leafMetadata.push(metadata);
+    return TemplateLayoutPane.make({
+      type: 'pane',
+      cwd: metadata.cwd,
+      command: metadata.command,
+    });
+  };
+
   for (const entry of workspaceEntries) {
     const workspace = entry.workspace;
     if (!workspace) continue;
     const workspaceId = EffectWorkspaceId.make(entry.id);
     const panes: TemplatePaneData[] = [];
+    const leafMetadata: Array<{ cwd: string; command?: string }> = [];
 
-    if (workspace.mainPane) {
-      let cwd = params.fallbackCwd;
-      let command: string | undefined;
-      if (workspace.mainPane.ptyId) {
-        try {
-          cwd = await params.getCwd(workspace.mainPane.ptyId);
-        } catch {
-          cwd = params.fallbackCwd;
-        }
-        try {
-          command = await params.getForegroundProcess(workspace.mainPane.ptyId);
-        } catch {
-          command = undefined;
-        }
-      }
-      panes.push(
-        TemplatePaneData.make({
-          role: 'main',
-          cwd,
-          command: normalizeCommand(command, shellPath, shellName),
-        })
-      );
-      if (!unifiedCwd) {
-        unifiedCwd = cwd;
-      } else if (unifiedCwd !== cwd) {
-        cwdIsUniform = false;
-      }
-    }
-
+    const mainLayout = workspace.mainPane
+      ? await buildLayoutNode(workspace.mainPane, leafMetadata)
+      : null;
+    const stackLayout: TemplateLayoutNode[] = [];
     for (const pane of workspace.stackPanes) {
-      let cwd = params.fallbackCwd;
-      let command: string | undefined;
-      if (pane.ptyId) {
-        try {
-          cwd = await params.getCwd(pane.ptyId);
-        } catch {
-          cwd = params.fallbackCwd;
-        }
-        try {
-          command = await params.getForegroundProcess(pane.ptyId);
-        } catch {
-          command = undefined;
-        }
-      }
+      stackLayout.push(await buildLayoutNode(pane, leafMetadata));
+    }
+
+    for (const [index, metadata] of leafMetadata.entries()) {
       panes.push(
         TemplatePaneData.make({
-          role: 'stack',
-          cwd,
-          command: normalizeCommand(command, shellPath, shellName),
+          role: index === 0 ? 'main' : 'stack',
+          cwd: metadata.cwd,
+          command: metadata.command,
         })
       );
       if (!unifiedCwd) {
-        unifiedCwd = cwd;
-      } else if (unifiedCwd !== cwd) {
+        unifiedCwd = metadata.cwd;
+      } else if (unifiedCwd !== metadata.cwd) {
         cwdIsUniform = false;
       }
     }
 
-    maxPaneCount = Math.max(maxPaneCount, panes.length);
+    maxPaneCount = Math.max(maxPaneCount, leafMetadata.length);
 
     templateWorkspaces.push(
       TemplateWorkspace.make({
         id: workspaceId,
         layoutMode: workspace.layoutMode,
         panes,
+        layout: TemplateWorkspaceLayout.make({
+          main: mainLayout,
+          stack: stackLayout,
+        }),
       })
     );
   }

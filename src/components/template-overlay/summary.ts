@@ -3,7 +3,8 @@
  */
 
 import type { Workspaces } from '../../core/operations/layout-actions';
-import type { TemplateSession } from '../../effect/models';
+import type { TemplateSession, TemplateLayoutNode, TemplateWorkspaceLayout } from '../../effect/models';
+import { collectPanes } from '../../core/layout-tree';
 import { pathTail } from './formatting';
 
 export type SaveSummaryLine =
@@ -32,10 +33,14 @@ export function buildTemplateSummary(workspaces: Workspaces): TemplateSummary {
     const workspace = entry.workspace!;
     const panes: Array<{ id: string; ptyId?: string }> = [];
     if (workspace.mainPane) {
-      panes.push({ id: workspace.mainPane.id, ptyId: workspace.mainPane.ptyId });
+      for (const pane of collectPanes(workspace.mainPane)) {
+        panes.push({ id: pane.id, ptyId: pane.ptyId });
+      }
     }
     for (const pane of workspace.stackPanes) {
-      panes.push({ id: pane.id, ptyId: pane.ptyId });
+      for (const leaf of collectPanes(pane)) {
+        panes.push({ id: leaf.id, ptyId: leaf.ptyId });
+      }
     }
     summaries.push({
       id: entry.id,
@@ -94,11 +99,35 @@ export function buildSaveSummaryLines(params: {
   return lines;
 }
 
+function countTemplateLayoutNode(node: TemplateLayoutNode | null): number {
+  if (!node) return 0;
+  if (node.type === 'split') {
+    return countTemplateLayoutNode(node.first) + countTemplateLayoutNode(node.second);
+  }
+  return 1;
+}
+
+function countTemplateLayout(layout: TemplateWorkspaceLayout | undefined): number {
+  if (!layout) return 0;
+  let total = countTemplateLayoutNode(layout.main);
+  for (const node of layout.stack) {
+    total += countTemplateLayoutNode(node);
+  }
+  return total;
+}
+
 export function getTemplateStats(template: TemplateSession): { workspaceCount: number; paneCount: number } {
   if (template.workspaces.length > 0) {
     let paneCount = 0;
     for (const workspace of template.workspaces) {
-      paneCount += workspace.panes.length;
+      const layoutCount = countTemplateLayout(workspace.layout);
+      if (layoutCount > 0) {
+        paneCount += layoutCount;
+      } else if (workspace.panes?.length) {
+        paneCount += workspace.panes.length;
+      } else {
+        paneCount += template.defaults.paneCount;
+      }
     }
     return {
       workspaceCount: template.workspaces.length,

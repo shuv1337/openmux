@@ -2,7 +2,7 @@
  * Types for layout reducer
  */
 
-import type { Direction, Rectangle, Workspace, WorkspaceId, LayoutMode, NodeId } from '../../types';
+import type { Direction, Rectangle, Workspace, WorkspaceId, LayoutMode, NodeId, SplitDirection } from '../../types';
 import type { LayoutConfig } from '../../config';
 
 /** Workspaces stored as plain object for better SolidJS reactivity */
@@ -22,6 +22,7 @@ export type LayoutAction =
   | { type: 'NAVIGATE'; direction: Direction }
   | { type: 'MOVE_PANE'; direction: Direction }
   | { type: 'NEW_PANE'; ptyId?: string; title?: string }
+  | { type: 'SPLIT_PANE'; direction: SplitDirection; ptyId?: string; title?: string }
   | { type: 'CLOSE_PANE' }
   | { type: 'CLOSE_PANE_BY_ID'; paneId: NodeId }
   | { type: 'SET_VIEWPORT'; viewport: Rectangle }

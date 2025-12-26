@@ -55,11 +55,29 @@ export class SerializedPaneData extends Schema.Class<SerializedPaneData>("Serial
   cwd: Schema.String,
 }) {}
 
+/** Serializable layout node types */
+export type SerializedLayoutNode = SerializedPaneData | SerializedSplitNode
+
+/** Recursive layout node schema */
+export const SerializedLayoutNodeSchema: Schema.Schema<SerializedLayoutNode> = Schema.suspend(
+  () => Schema.Union(SerializedPaneData, SerializedSplitNode)
+)
+
+/** Serialized split node for persistence */
+export class SerializedSplitNode extends Schema.Class<SerializedSplitNode>("SerializedSplitNode")({
+  type: Schema.Literal("split"),
+  id: Schema.String,
+  direction: Schema.Literal("horizontal", "vertical"),
+  ratio: Schema.Number,
+  first: SerializedLayoutNodeSchema,
+  second: SerializedLayoutNodeSchema,
+}) {}
+
 /** Serialized workspace for persistence - matches legacy core/types.ts */
 export class SerializedWorkspace extends Schema.Class<SerializedWorkspace>("SerializedWorkspace")({
   id: WorkspaceId,
-  mainPane: Schema.NullOr(SerializedPaneData),
-  stackPanes: Schema.Array(SerializedPaneData),
+  mainPane: Schema.NullOr(SerializedLayoutNodeSchema),
+  stackPanes: Schema.Array(SerializedLayoutNodeSchema),
   focusedPaneId: Schema.NullOr(Schema.String),
   activeStackIndex: Schema.Int,
   layoutMode: LayoutMode,
@@ -107,11 +125,42 @@ export class TemplatePaneData extends Schema.Class<TemplatePaneData>("TemplatePa
   command: Schema.optional(Schema.String),
 }) {}
 
+/** Template layout pane definition for split layouts */
+export class TemplateLayoutPane extends Schema.Class<TemplateLayoutPane>("TemplateLayoutPane")({
+  type: Schema.Literal("pane"),
+  cwd: Schema.optional(Schema.String),
+  command: Schema.optional(Schema.String),
+}) {}
+
+/** Template layout node */
+export type TemplateLayoutNode = TemplateLayoutPane | TemplateLayoutSplit
+
+/** Recursive template layout node schema */
+export const TemplateLayoutNodeSchema: Schema.Schema<TemplateLayoutNode> = Schema.suspend(
+  () => Schema.Union(TemplateLayoutPane, TemplateLayoutSplit)
+)
+
+/** Template layout split definition */
+export class TemplateLayoutSplit extends Schema.Class<TemplateLayoutSplit>("TemplateLayoutSplit")({
+  type: Schema.Literal("split"),
+  direction: Schema.Literal("horizontal", "vertical"),
+  ratio: Schema.Number,
+  first: TemplateLayoutNodeSchema,
+  second: TemplateLayoutNodeSchema,
+}) {}
+
+/** Template workspace layout definition */
+export class TemplateWorkspaceLayout extends Schema.Class<TemplateWorkspaceLayout>("TemplateWorkspaceLayout")({
+  main: Schema.NullOr(TemplateLayoutNodeSchema),
+  stack: Schema.Array(TemplateLayoutNodeSchema),
+}) {}
+
 /** Template workspace definition */
 export class TemplateWorkspace extends Schema.Class<TemplateWorkspace>("TemplateWorkspace")({
   id: WorkspaceId,
   layoutMode: LayoutMode,
-  panes: Schema.Array(TemplatePaneData),
+  panes: Schema.optional(Schema.Array(TemplatePaneData)),
+  layout: Schema.optional(TemplateWorkspaceLayout),
 }) {}
 
 /** Template defaults for workspace/pane counts */

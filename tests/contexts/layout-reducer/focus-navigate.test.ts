@@ -85,7 +85,7 @@ describe('Layout Reducer', () => {
   });
 
   describe('NAVIGATE action', () => {
-    describe('vertical/stacked layout', () => {
+    describe('vertical layout', () => {
       it('should navigate east from main to stack', () => {
         const mainPane: PaneData = { id: 'pane-1' };
         const stackPane: PaneData = { id: 'pane-2' };
@@ -168,7 +168,7 @@ describe('Layout Reducer', () => {
         expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-3');
       });
 
-      it('should navigate to correct stack pane using activeStackIndex', () => {
+      it('should navigate to closest stack pane from main', () => {
         const mainPane: PaneData = { id: 'pane-1' };
         const stackPanes: PaneData[] = [
           { id: 'pane-2' },
@@ -184,7 +184,34 @@ describe('Layout Reducer', () => {
         });
 
         const newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'east' });
+        expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-3');
+      });
+    });
+
+    describe('stacked layout', () => {
+      it('should cycle stack panes with north/south', () => {
+        const mainPane: PaneData = { id: 'pane-1' };
+        const stackPanes: PaneData[] = [
+          { id: 'pane-2' },
+          { id: 'pane-3' },
+          { id: 'pane-4' },
+        ];
+        const workspace = createWorkspaceWithPanes(1, mainPane, stackPanes, {
+          focusedPaneId: 'pane-2',
+          activeStackIndex: 0,
+          layoutMode: 'stacked',
+        });
+        const state = createInitialState({
+          workspaces: { 1: workspace },
+        });
+
+        let newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'north' });
         expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-4');
+        expect(newState.workspaces[1]!.activeStackIndex).toBe(2);
+
+        newState = layoutReducer(newState, { type: 'NAVIGATE', direction: 'south' });
+        expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-2');
+        expect(newState.workspaces[1]!.activeStackIndex).toBe(0);
       });
     });
 

@@ -4,6 +4,7 @@
 
 import type { WorkspaceId } from '../../core/types';
 import type { Workspaces } from '../../core/operations/layout-actions';
+import { collectPanes, containsPane } from '../../core/layout-tree';
 
 /**
  * Get the last segment of a path (directory name)
@@ -23,14 +24,15 @@ export function findPtyLocation(
   for (const [idStr, workspace] of Object.entries(workspaces)) {
     if (!workspace) continue;
     const workspaceId = Number(idStr) as WorkspaceId;
-    // Check main pane
-    if (workspace.mainPane?.ptyId === ptyId) {
-      return { workspaceId, paneId: workspace.mainPane.id };
-    }
-    // Check stack panes
-    for (const pane of workspace.stackPanes) {
-      if (pane.ptyId === ptyId) {
-        return { workspaceId, paneId: pane.id };
+    const nodes = [];
+    if (workspace.mainPane) nodes.push(workspace.mainPane);
+    nodes.push(...workspace.stackPanes);
+    for (const node of nodes) {
+      const panes = collectPanes(node);
+      for (const pane of panes) {
+        if (pane.ptyId === ptyId) {
+          return { workspaceId, paneId: pane.id };
+        }
       }
     }
   }
@@ -47,11 +49,11 @@ export function findPaneLocation(
   for (const [idStr, workspace] of Object.entries(workspaces)) {
     if (!workspace) continue;
     const workspaceId = Number(idStr) as WorkspaceId;
-    if (workspace.mainPane?.id === paneId) {
+    if (workspace.mainPane && containsPane(workspace.mainPane, paneId)) {
       return { workspaceId };
     }
     for (const pane of workspace.stackPanes) {
-      if (pane.id === paneId) {
+      if (containsPane(pane, paneId)) {
         return { workspaceId };
       }
     }

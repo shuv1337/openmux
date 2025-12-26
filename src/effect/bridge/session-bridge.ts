@@ -7,10 +7,13 @@ import { Effect } from "effect"
 import { runEffect } from "../runtime"
 import { SessionManager } from "../services"
 import { SessionId } from "../types"
-import type { SerializedSession, SessionMetadata ,
+import type {
+  SerializedSession,
+  SessionMetadata,
   SerializedSession as EffectSerializedSession,
   SerializedWorkspace,
-  SerializedPaneData} from "../models"
+  SerializedLayoutNode,
+} from "../models"
 import {
   SessionMetadata as EffectSessionMetadata,
 } from "../models"
@@ -19,8 +22,10 @@ import type {
   Workspace,
   WorkspaceId,
   PaneData,
+  LayoutNode,
 } from "../../core/types"
 import type { Workspaces } from "../../core/operations/layout-actions"
+import type { WorkspaceState } from "../services/session-manager/types"
 
 // =============================================================================
 // Core Session Functions
@@ -234,15 +239,30 @@ export async function deleteSessionLegacy(id: string): Promise<void> {
 // Session Serialization Functions
 // =============================================================================
 
-/**
- * Deserialize a pane from Effect format to legacy format.
- */
-function deserializePane(serialized: SerializedPaneData): PaneData {
-  return {
-    id: serialized.id,
-    title: serialized.title,
-    // ptyId is intentionally omitted - will be created on session load
+function deserializeLayoutNode(serialized: SerializedLayoutNode): LayoutNode {
+  if ((serialized as { type?: string }).type === "split") {
+    const split = serialized as SerializedLayoutNode & {
+      id: string
+      direction: "horizontal" | "vertical"
+      ratio: number
+      first: SerializedLayoutNode
+      second: SerializedLayoutNode
+    }
+    return {
+      type: "split",
+      id: split.id,
+      direction: split.direction,
+      ratio: split.ratio,
+      first: deserializeLayoutNode(split.first),
+      second: deserializeLayoutNode(split.second),
+    }
   }
+
+  const pane = serialized as SerializedLayoutNode & { id: string; title?: string }
+  return {
+    id: pane.id,
+    title: pane.title,
+  } satisfies PaneData
 }
 
 /**
@@ -251,8 +271,8 @@ function deserializePane(serialized: SerializedPaneData): PaneData {
 function deserializeWorkspace(serialized: SerializedWorkspace): Workspace {
   return {
     id: serialized.id as WorkspaceId,
-    mainPane: serialized.mainPane ? deserializePane(serialized.mainPane) : null,
-    stackPanes: serialized.stackPanes.map(deserializePane),
+    mainPane: serialized.mainPane ? deserializeLayoutNode(serialized.mainPane) : null,
+    stackPanes: serialized.stackPanes.map(deserializeLayoutNode),
     focusedPaneId: serialized.focusedPaneId,
     activeStackIndex: serialized.activeStackIndex,
     layoutMode: serialized.layoutMode,
@@ -265,12 +285,22 @@ function deserializeWorkspace(serialized: SerializedWorkspace): Workspace {
  */
 function extractCwdMap(session: EffectSerializedSession): Map<string, string> {
   const cwdMap = new Map<string, string>()
-  for (const ws of session.workspaces) {
-    if (ws.mainPane) {
-      cwdMap.set(ws.mainPane.id, ws.mainPane.cwd)
+  const collectCwds = (node: SerializedLayoutNode | null) => {
+    if (!node) return
+    if ((node as { type?: string }).type === "split") {
+      const split = node as SerializedLayoutNode & { first: SerializedLayoutNode; second: SerializedLayoutNode }
+      collectCwds(split.first)
+      collectCwds(split.second)
+      return
     }
+    const pane = node as SerializedLayoutNode & { id: string; cwd: string }
+    cwdMap.set(pane.id, pane.cwd)
+  }
+
+  for (const ws of session.workspaces) {
+    collectCwds(ws.mainPane)
     for (const pane of ws.stackPanes) {
-      cwdMap.set(pane.id, pane.cwd)
+      collectCwds(pane)
     }
   }
   return cwdMap
@@ -299,29 +329,14 @@ export async function saveCurrentSession(
       })
 
       // Convert Workspaces object to ReadonlyMap<number, WorkspaceState>
-      const workspaceState = new Map<number, {
-        mainPane: { id: string; ptyId?: string; title?: string } | null
-        stackPanes: Array<{ id: string; ptyId?: string; title?: string }>
-        focusedPaneId?: string
-        layoutMode: "vertical" | "horizontal" | "stacked"
-        activeStackIndex: number
-        zoomed: boolean
-      }>()
+      const workspaceState = new Map<number, WorkspaceState>()
 
       for (const [idStr, ws] of Object.entries(workspaces)) {
         if (!ws) continue
         const id = Number(idStr)
         workspaceState.set(id, {
-          mainPane: ws.mainPane ? {
-            id: ws.mainPane.id,
-            ptyId: ws.mainPane.ptyId,
-            title: ws.mainPane.title,
-          } : null,
-          stackPanes: ws.stackPanes.map(p => ({
-            id: p.id,
-            ptyId: p.ptyId,
-            title: p.title,
-          })),
+          mainPane: ws.mainPane ?? null,
+          stackPanes: ws.stackPanes,
           focusedPaneId: ws.focusedPaneId ?? undefined,
           layoutMode: ws.layoutMode,
           activeStackIndex: ws.activeStackIndex,
