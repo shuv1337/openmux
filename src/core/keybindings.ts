@@ -20,6 +20,10 @@ export interface KeybindingsConfig {
   move: KeybindingMap;
   search: KeybindingMap;
   commandPalette: KeybindingMap;
+  templateOverlay: {
+    apply: KeybindingMap;
+    save: KeybindingMap;
+  };
   aggregate: {
     list: KeybindingMap;
     preview: KeybindingMap;
@@ -46,6 +50,10 @@ export interface ResolvedKeybindings {
   move: ResolvedKeybindingMap;
   search: ResolvedKeybindingMap;
   commandPalette: ResolvedKeybindingMap;
+  templateOverlay: {
+    apply: ResolvedKeybindingMap;
+    save: ResolvedKeybindingMap;
+  };
   aggregate: {
     list: ResolvedKeybindingMap;
     preview: ResolvedKeybindingMap;
@@ -136,6 +144,25 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
     'backspace': 'command.palette.delete',
     'alt+p': 'command.palette.close',
   },
+  templateOverlay: {
+    apply: {
+      'escape': 'template.close',
+      'tab': 'template.tab.save',
+      'down': 'template.list.down',
+      'j': 'template.list.down',
+      'up': 'template.list.up',
+      'k': 'template.list.up',
+      'enter': 'template.apply',
+      'x': 'template.delete',
+      'ctrl+d': 'template.delete',
+    },
+    save: {
+      'escape': 'template.close',
+      'tab': 'template.tab.apply',
+      'enter': 'template.save',
+      'backspace': 'template.save.delete',
+    },
+  },
   aggregate: {
     list: {
       'down': 'aggregate.list.down',
@@ -216,6 +243,7 @@ const KEY_ALIASES: Record<string, string> = {
   escape: 'escape',
   return: 'enter',
   enter: 'enter',
+  kp_enter: 'enter',
   backspace: 'backspace',
   bs: 'backspace',
   tab: 'tab',
@@ -399,6 +427,10 @@ export function resolveKeybindings(config: KeybindingsConfig): ResolvedKeybindin
     move: resolveKeybindingMap(config.move),
     search: resolveKeybindingMap(config.search),
     commandPalette: resolveKeybindingMap(config.commandPalette),
+    templateOverlay: {
+      apply: resolveKeybindingMap(config.templateOverlay.apply),
+      save: resolveKeybindingMap(config.templateOverlay.save),
+    },
     aggregate: {
       list: resolveKeybindingMap(config.aggregate.list),
       preview: resolveKeybindingMap(config.aggregate.preview),
@@ -424,42 +456,41 @@ export function matchKeybinding(
 function formatKeyName(key: string): string {
   switch (key) {
     case 'escape':
-      return 'Esc';
+      return 'esc';
     case 'enter':
-      return 'Enter';
+      return 'enter';
     case 'backspace':
-      return 'Backspace';
+      return 'backspace';
+    case 'delete':
+      return 'delete';
     case 'tab':
-      return 'Tab';
+      return 'tab';
     case 'space':
-      return 'Space';
+      return 'space';
     case 'pageup':
-      return 'PageUp';
+      return 'pageup';
     case 'pagedown':
-      return 'PageDown';
+      return 'pagedown';
     case 'left':
-      return 'Left';
+      return '\u2190';
     case 'right':
-      return 'Right';
+      return '\u2192';
     case 'up':
-      return 'Up';
+      return '\u2191';
     case 'down':
-      return 'Down';
+      return '\u2193';
     default:
-      if (key.length === 1 && /[a-z]/.test(key)) {
-        return key.toUpperCase();
-      }
-      return key;
+      return key.toLowerCase();
   }
 }
 
 function formatModifiers(mods: ParsedCombo): string {
   const labels: string[] = [];
-  if (mods.ctrl) labels.push('Ctrl');
-  if (mods.alt) labels.push('Alt');
-  if (mods.shift) labels.push('Shift');
-  if (mods.meta) labels.push('Cmd');
-  return labels.join('+');
+  if (mods.ctrl) labels.push('^');
+  if (mods.alt) labels.push('\u2325');
+  if (mods.shift) labels.push('\u21e7');
+  if (mods.meta) labels.push('\u2318');
+  return labels.join('');
 }
 
 export function formatKeyCombo(combo: string): string {
@@ -467,7 +498,7 @@ export function formatKeyCombo(combo: string): string {
   if (!parsed) return combo;
   const mods = formatModifiers(parsed);
   const key = formatKeyName(parsed.key);
-  return mods ? `${mods}+${key}` : key;
+  return mods ? `${mods}${key}` : key;
 }
 
 export function formatComboSet(combos: string[]): string {
@@ -484,27 +515,28 @@ export function formatComboSet(combos: string[]): string {
     const uniqueKeys = Array.from(new Set(keys));
 
     if (uniqueKeys.length === 9 && uniqueKeys.every((key) => /^[1-9]$/.test(key))) {
-      return modKey ? `${modKey}+1-9` : '1-9';
+      return modKey ? `${modKey}1-9` : '1-9';
     }
 
     const isHjkl = ['h', 'j', 'k', 'l'].every((key) => uniqueKeys.includes(key));
     if (isHjkl) {
-      return modKey ? `${modKey}+hjkl` : 'hjkl';
+      return modKey ? `${modKey}hjkl` : 'hjkl';
     }
 
     const isArrows = ['up', 'down', 'left', 'right'].every((key) => uniqueKeys.includes(key));
     if (isArrows) {
-      return modKey ? `${modKey}+Arrows` : 'Arrows';
+      const arrowLabel = ['up', 'down', 'left', 'right'].map((key) => formatKeyName(key)).join('/');
+      return modKey ? `${modKey}${arrowLabel}` : arrowLabel;
     }
 
     const isBracketPair = uniqueKeys.length === 2 && uniqueKeys.includes('[') && uniqueKeys.includes(']');
     if (isBracketPair) {
-      return modKey ? `${modKey}+[/]` : '[/]';
+      return modKey ? `${modKey}[/]` : '[/]';
     }
 
     const keyLabels = uniqueKeys.map((key) => formatKeyName(key));
     const combinedKeys = keyLabels.join('/');
-    return modKey ? `${modKey}+${combinedKeys}` : combinedKeys;
+    return modKey ? `${modKey}${combinedKeys}` : combinedKeys;
   }
 
   return combos.map(formatKeyCombo).join('/');

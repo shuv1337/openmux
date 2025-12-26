@@ -113,6 +113,13 @@ const BASE_COMMANDS: CommandPaletteCommand[] = [
     keywords: ['session', 'picker'],
   },
   {
+    id: 'template.overlay.toggle',
+    title: 'Templates',
+    description: 'Open the templates overlay',
+    action: 'template.overlay.toggle',
+    keywords: ['template', 'layout', 'session'],
+  },
+  {
     id: 'aggregate.toggle',
     title: 'Aggregate view',
     description: 'Open global PTY list',

@@ -32,6 +32,14 @@ export interface ConfirmationHandlerDeps {
   // Session actions
   onQuit: () => Promise<void>;
 
+  // Template actions
+  onConfirmApplyTemplate?: () => Promise<void> | void;
+  onCancelApplyTemplate?: () => void;
+  onConfirmOverwriteTemplate?: () => Promise<void> | void;
+  onCancelOverwriteTemplate?: () => void;
+  onConfirmDeleteTemplate?: () => Promise<void> | void;
+  onCancelDeleteTemplate?: () => void;
+
 }
 
 /**
@@ -49,6 +57,12 @@ export function createConfirmationHandlers(deps: ConfirmationHandlerDeps) {
     enterConfirmMode,
     exitConfirmMode,
     onQuit,
+    onConfirmApplyTemplate,
+    onCancelApplyTemplate,
+    onConfirmOverwriteTemplate,
+    onCancelOverwriteTemplate,
+    onConfirmDeleteTemplate,
+    onCancelDeleteTemplate,
   } = deps;
 
   /**
@@ -74,6 +88,30 @@ export function createConfirmationHandlers(deps: ConfirmationHandlerDeps) {
     setPendingKillPtyId(ptyId);
     enterConfirmMode('kill_pty');
     setConfirmationState({ visible: true, type: 'kill_pty' });
+  };
+
+  /**
+   * Request template apply (show confirmation)
+   */
+  const handleRequestApplyTemplate = () => {
+    enterConfirmMode('apply_template');
+    setConfirmationState({ visible: true, type: 'apply_template' });
+  };
+
+  /**
+   * Request template delete (show confirmation)
+   */
+  const handleRequestDeleteTemplate = () => {
+    enterConfirmMode('delete_template');
+    setConfirmationState({ visible: true, type: 'delete_template' });
+  };
+
+  /**
+   * Request template overwrite (show confirmation)
+   */
+  const handleRequestOverwriteTemplate = () => {
+    enterConfirmMode('overwrite_template');
+    setConfirmationState({ visible: true, type: 'overwrite_template' });
   };
 
   /**
@@ -105,6 +143,12 @@ export function createConfirmationHandlers(deps: ConfirmationHandlerDeps) {
         destroyPTY(ptyId);
         setPendingKillPtyId(null);
       }
+    } else if (type === 'apply_template') {
+      await onConfirmApplyTemplate?.();
+    } else if (type === 'overwrite_template') {
+      await onConfirmOverwriteTemplate?.();
+    } else if (type === 'delete_template') {
+      await onConfirmDeleteTemplate?.();
     }
   };
 
@@ -112,15 +156,28 @@ export function createConfirmationHandlers(deps: ConfirmationHandlerDeps) {
    * Handle cancel confirmation
    */
   const handleCancelConfirmation = () => {
+    const { type } = confirmationState();
     exitConfirmMode();
     setConfirmationState({ visible: false, type: 'close_pane' });
     setPendingKillPtyId(null);
+    if (type === 'apply_template') {
+      onCancelApplyTemplate?.();
+    }
+    if (type === 'overwrite_template') {
+      onCancelOverwriteTemplate?.();
+    }
+    if (type === 'delete_template') {
+      onCancelDeleteTemplate?.();
+    }
   };
 
   return {
     handleRequestClosePane,
     handleRequestQuit,
     handleRequestKillPty,
+    handleRequestApplyTemplate,
+    handleRequestOverwriteTemplate,
+    handleRequestDeleteTemplate,
     handleConfirmAction,
     handleCancelConfirmation,
   };

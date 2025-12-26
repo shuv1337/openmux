@@ -6,7 +6,7 @@ import { Show, For, createMemo } from 'solid-js';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLayout } from '../contexts/LayoutContext';
 import { useKeyboardState } from '../contexts/KeyboardContext';
-import { useSessionState } from '../contexts/SessionContext';
+import { useSession, useSessionState } from '../contexts/SessionContext';
 import type { KeyMode, WorkspaceId, LayoutMode } from '../core/types';
 
 interface StatusBarProps {
@@ -18,6 +18,7 @@ export function StatusBar(props: StatusBarProps) {
   const theme = useTheme();
   const layout = useLayout();
   const { state: kbState } = useKeyboardState();
+  const session = useSession();
   const sessionState = useSessionState();
   const commandColor = () => theme.searchAccentColor;
   const sessionColor = () => theme.pane.focusedBorderColor;
@@ -57,6 +58,9 @@ export function StatusBar(props: StatusBarProps) {
         </Show>
         <Show when={sessionState.showSessionPicker}>
           <text fg={sessionColor()}>[SESSIONS]</text>
+        </Show>
+        <Show when={session.showTemplateOverlay}>
+          <text fg={sessionColor()}>[TEMPLATES]</text>
         </Show>
         <Show when={layout.activeWorkspace.zoomed}>
           <text fg="#666666">[ZOOMED]</text>

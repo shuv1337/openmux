@@ -164,7 +164,7 @@ export function SessionPicker(props: SessionPickerProps) {
       const confirm = formatComboSet(getCombos(bindings, 'session.picker.rename.confirm'));
       const cancel = formatComboSet(getCombos(bindings, 'session.picker.rename.cancel'));
       const remove = formatComboSet(getCombos(bindings, 'session.picker.rename.delete'));
-      return `Type:rename ${confirm}:confirm ${cancel}:cancel ${remove}:delete`;
+      return `type:rename ${confirm}:confirm ${cancel}:cancel ${remove}:delete`;
     }
 
     const bindings = config.keybindings().sessionPicker.list;
@@ -188,9 +188,9 @@ export function SessionPicker(props: SessionPickerProps) {
 
   // Calculate overlay dimensions
   const overlayWidth = () => Math.min(60, props.width - 4);
-  // Height: search(1) + separator(1) + sessions/empty(max 1) + separator(1) + footer(1) + border(2) + padding(2) = 9 minimum
+  // Height: search(1) + separator(1) + sessions/empty(max 1) + separator(1) + footer(1) + gap(1) + border(2) + padding(2) = 10 minimum
   const sessionRowCount = () => Math.max(1, session.filteredSessions.length); // At least 1 for "No sessions found"
-  const overlayHeight = () => Math.min(sessionRowCount() + 7, props.height - 4);
+  const overlayHeight = () => Math.min(sessionRowCount() + 8, props.height - 4);
   const overlayX = () => Math.floor((props.width - overlayWidth()) / 2);
   const overlayY = () => Math.floor((props.height - overlayHeight()) / 2);
 
@@ -259,6 +259,9 @@ export function SessionPicker(props: SessionPickerProps) {
           </box>
           <box style={{ height: 1 }}>
             <text fg="#666666">{buildHintText()}</text>
+          </box>
+          <box style={{ height: 1 }}>
+            <text>{' '.repeat(overlayWidth() - 4)}</text>
           </box>
         </box>
       </box>

@@ -5,6 +5,7 @@
 import {
   createContext,
   useContext,
+  createSignal,
   createEffect,
   createMemo,
   onMount,
@@ -27,7 +28,17 @@ import {
   switchToSession,
   getSessionSummary,
   setActiveSessionIdForShim,
+  listTemplates,
+  saveTemplate as saveTemplateDefinition,
+  deleteTemplate,
+  buildLayoutFromTemplate,
 } from '../effect/bridge';
+import {
+  TemplateSession,
+  TemplateDefaults,
+  TemplateWorkspace,
+  TemplatePaneData,
+} from '../effect/models';
 import {
   type SessionState,
   type SessionAction,
@@ -75,6 +86,26 @@ interface SessionContextValue {
   navigateUp: () => void;
   /** Navigate down in picker */
   navigateDown: () => void;
+  /** Show template overlay */
+  showTemplateOverlay: boolean;
+  /** Templates list */
+  templates: TemplateSession[];
+  /** Open template overlay */
+  openTemplateOverlay: () => void;
+  /** Toggle template overlay */
+  toggleTemplateOverlay: () => void;
+  /** Close template overlay */
+  closeTemplateOverlay: () => void;
+  /** Refresh templates list */
+  refreshTemplates: () => Promise<void>;
+  /** Apply a template */
+  applyTemplate: (template: TemplateSession) => Promise<void>;
+  /** Save current session as a template */
+  saveTemplate: (name: string) => Promise<string | null>;
+  /** Delete a template */
+  deleteTemplate: (templateId: string) => Promise<void>;
+  /** Check if current layout is empty */
+  isLayoutEmpty: () => boolean;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -101,12 +132,16 @@ interface SessionProviderProps extends ParentProps {
   onBeforeSwitch: (currentSessionId: string) => Promise<void>;
   /** Callback to cleanup PTYs when a session is deleted */
   onDeleteSession: (sessionId: string) => void;
+  /** Reset layout and PTYs before applying a template */
+  resetLayoutForTemplate: () => Promise<void>;
   /** Layout version counter - triggers save when changed */
   layoutVersion?: Accessor<number>;
 }
 
 export function SessionProvider(props: SessionProviderProps) {
   const [state, setState] = createStore<SessionState>(createInitialState());
+  const [showTemplateOverlay, setShowTemplateOverlay] = createSignal(false);
+  const [templates, setTemplates] = createSignal<TemplateSession[]>([]);
   const config = useConfig();
 
   // Helper to dispatch actions through the reducer
@@ -131,6 +166,159 @@ export function SessionProvider(props: SessionProviderProps) {
       }
     }
     dispatch({ type: 'SET_SUMMARIES', summaries });
+  };
+
+  const refreshTemplates = async () => {
+    const list = await listTemplates();
+    setTemplates(list);
+  };
+
+  const openTemplateOverlay = () => {
+    setShowTemplateOverlay(true);
+    refreshTemplates();
+  };
+
+  const closeTemplateOverlay = () => {
+    setShowTemplateOverlay(false);
+  };
+
+  const toggleTemplateOverlay = () => {
+    if (showTemplateOverlay()) {
+      closeTemplateOverlay();
+    } else {
+      openTemplateOverlay();
+    }
+  };
+
+  const isLayoutEmpty = () => {
+    const workspaces = props.getWorkspaces();
+    return Object.values(workspaces).every((workspace) =>
+      !workspace || (!workspace.mainPane && workspace.stackPanes.length === 0)
+    );
+  };
+
+  const applyTemplate = async (template: TemplateSession) => {
+    const activeSessionId = state.activeSessionId;
+    if (!activeSessionId) return;
+
+    await props.resetLayoutForTemplate();
+    const layout = buildLayoutFromTemplate(template);
+    await props.onSessionLoad(layout.workspaces, layout.activeWorkspaceId, layout.cwdMap, activeSessionId);
+  };
+
+  const saveTemplate = async (nameInput: string): Promise<string | null> => {
+    const name = nameInput.trim();
+    if (!name) return null;
+
+    const workspaces = props.getWorkspaces();
+    const workspaceEntries = Object.entries(workspaces)
+      .map(([idStr, workspace]) => ({ id: Number(idStr), workspace }))
+      .filter(({ workspace }) => workspace && (workspace.mainPane || workspace.stackPanes.length > 0))
+      .sort((a, b) => a.id - b.id);
+
+    if (workspaceEntries.length === 0) {
+      return null;
+    }
+
+    const now = Date.now();
+    const templateId = name
+      .toLowerCase()
+      .replace(/[^a-z0-9-_]+/g, '-')
+      .replace(/^-+|-+$/g, '') || `template-${now}`;
+
+    const fallbackCwd = process.env.OPENMUX_ORIGINAL_CWD ?? process.cwd();
+
+    const templateWorkspaces: TemplateWorkspace[] = [];
+    let maxPaneCount = 1;
+    let unifiedCwd: string | null = null;
+    let cwdIsUniform = true;
+
+    for (const entry of workspaceEntries) {
+      const workspace = entry.workspace;
+      if (!workspace) continue;
+      const workspaceId = entry.id as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+      const panes: TemplatePaneData[] = [];
+
+      if (workspace.mainPane) {
+        let cwd = fallbackCwd;
+        if (workspace.mainPane.ptyId) {
+          try {
+            cwd = await props.getCwd(workspace.mainPane.ptyId);
+          } catch {
+            cwd = fallbackCwd;
+          }
+        }
+        panes.push(
+          TemplatePaneData.make({
+            role: 'main',
+            cwd,
+          })
+        );
+        if (!unifiedCwd) {
+          unifiedCwd = cwd;
+        } else if (unifiedCwd !== cwd) {
+          cwdIsUniform = false;
+        }
+      }
+
+      for (const pane of workspace.stackPanes) {
+        let cwd = fallbackCwd;
+        if (pane.ptyId) {
+          try {
+            cwd = await props.getCwd(pane.ptyId);
+          } catch {
+            cwd = fallbackCwd;
+          }
+        }
+        panes.push(
+          TemplatePaneData.make({
+            role: 'stack',
+            cwd,
+          })
+        );
+        if (!unifiedCwd) {
+          unifiedCwd = cwd;
+        } else if (unifiedCwd !== cwd) {
+          cwdIsUniform = false;
+        }
+      }
+
+      maxPaneCount = Math.max(maxPaneCount, panes.length);
+
+      templateWorkspaces.push(
+        TemplateWorkspace.make({
+          id: workspaceId,
+          layoutMode: workspace.layoutMode,
+          panes,
+        })
+      );
+    }
+
+    const defaults = TemplateDefaults.make({
+      workspaceCount: Math.min(9, Math.max(1, workspaceEntries.length)),
+      paneCount: maxPaneCount,
+      layoutMode: config.config().layout.defaultLayoutMode,
+      cwd: cwdIsUniform && unifiedCwd ? unifiedCwd : undefined,
+    });
+
+    const template = TemplateSession.make({
+      version: 1,
+      id: templateId,
+      name,
+      createdAt: now,
+      updatedAt: now,
+      defaults,
+      workspaces: templateWorkspaces,
+    });
+
+    await saveTemplateDefinition(template);
+    await refreshTemplates();
+    return templateId;
+  };
+
+  const deleteTemplateById = async (templateId: string) => {
+    await deleteTemplate(templateId);
+    await refreshTemplates();
   };
 
   // Initialize on mount
@@ -393,6 +581,16 @@ export function SessionProvider(props: SessionProviderProps) {
     updateRenameValue,
     navigateUp,
     navigateDown,
+    get showTemplateOverlay() { return showTemplateOverlay(); },
+    get templates() { return templates(); },
+    openTemplateOverlay,
+    toggleTemplateOverlay,
+    closeTemplateOverlay,
+    refreshTemplates,
+    applyTemplate,
+    saveTemplate,
+    deleteTemplate: deleteTemplateById,
+    isLayoutEmpty,
   };
 
   return (

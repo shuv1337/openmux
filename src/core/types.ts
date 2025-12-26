@@ -219,7 +219,13 @@ export interface SelectionBounds {
 export type KeyMode = 'normal' | 'prefix' | 'search' | 'aggregate' | 'confirm' | 'move';
 
 /** Confirmation dialog type */
-export type ConfirmationType = 'close_pane' | 'exit' | 'kill_pty';
+export type ConfirmationType =
+  | 'close_pane'
+  | 'exit'
+  | 'kill_pty'
+  | 'apply_template'
+  | 'overwrite_template'
+  | 'delete_template';
 
 /**
  * Keyboard state

@@ -28,6 +28,7 @@ import { SessionPicker } from './components/SessionPicker';
 import { SearchOverlay } from './components/SearchOverlay';
 import { AggregateView } from './components/AggregateView';
 import { CommandPalette, type CommandPaletteState } from './components/CommandPalette';
+import { TemplateOverlay } from './components/TemplateOverlay';
 import { SessionBridge } from './components/SessionBridge';
 import { getFocusedPtyId } from './core/workspace-utils';
 import { DEFAULT_COMMAND_PALETTE_COMMANDS, type CommandPaletteCommand } from './core/command-palette';
@@ -63,7 +64,8 @@ function AppContent() {
   // Don't destructure isInitialized - it's a reactive getter that loses reactivity when destructured
   const terminal = useTerminal();
   const { createPTY, destroyPTY, resizePTY, setPanePosition, writeToFocused, writeToPTY, pasteToFocused, getFocusedCwd, getFocusedEmulator, destroyAllPTYs, getSessionCwd, getEmulatorSync } = terminal;
-  const { togglePicker, state: sessionState, saveSession } = useSession();
+  const session = useSession();
+  const { togglePicker, toggleTemplateOverlay, state: sessionState, saveSession } = session;
   // Keep selection/search contexts to access reactive getters
   const selection = useSelection();
   const { clearAllSelections } = selection;
@@ -151,6 +153,47 @@ function AppContent() {
   // Track pending kill PTY ID for aggregate view kill confirmation
   const [pendingKillPtyId, setPendingKillPtyId] = createSignal<string | null>(null);
 
+  const [pendingTemplateApply, setPendingTemplateApply] = createSignal<(() => Promise<void>) | null>(null);
+  const [pendingTemplateOverwrite, setPendingTemplateOverwrite] =
+    createSignal<(() => Promise<void>) | null>(null);
+  const [pendingTemplateDelete, setPendingTemplateDelete] = createSignal<(() => Promise<void>) | null>(null);
+
+  const handleConfirmTemplateApply = async () => {
+    const pending = pendingTemplateApply();
+    if (pending) {
+      await pending();
+    }
+    setPendingTemplateApply(null);
+  };
+
+  const handleCancelTemplateApply = () => {
+    setPendingTemplateApply(null);
+  };
+
+  const handleConfirmTemplateOverwrite = async () => {
+    const pending = pendingTemplateOverwrite();
+    if (pending) {
+      await pending();
+    }
+    setPendingTemplateOverwrite(null);
+  };
+
+  const handleCancelTemplateOverwrite = () => {
+    setPendingTemplateOverwrite(null);
+  };
+
+  const handleConfirmTemplateDelete = async () => {
+    const pending = pendingTemplateDelete();
+    if (pending) {
+      await pending();
+    }
+    setPendingTemplateDelete(null);
+  };
+
+  const handleCancelTemplateDelete = () => {
+    setPendingTemplateDelete(null);
+  };
+
   // Create confirmation handlers
   const confirmationHandlers = createConfirmationHandlers({
     confirmationState,
@@ -163,6 +206,12 @@ function AppContent() {
     enterConfirmMode,
     exitConfirmMode,
     onQuit: handleQuit,
+    onConfirmApplyTemplate: handleConfirmTemplateApply,
+    onCancelApplyTemplate: handleCancelTemplateApply,
+    onConfirmOverwriteTemplate: handleConfirmTemplateOverwrite,
+    onCancelOverwriteTemplate: handleCancelTemplateOverwrite,
+    onConfirmDeleteTemplate: handleConfirmTemplateDelete,
+    onCancelDeleteTemplate: handleCancelTemplateDelete,
   });
 
   // Create paste handler for bracketed paste from host terminal
@@ -247,6 +296,25 @@ function AppContent() {
     togglePicker();
   };
 
+  const handleToggleTemplateOverlay = () => {
+    toggleTemplateOverlay();
+  };
+
+  const requestTemplateApplyConfirm = (applyTemplate: () => Promise<void>) => {
+    setPendingTemplateApply(() => applyTemplate);
+    confirmationHandlers.handleRequestApplyTemplate();
+  };
+
+  const requestTemplateOverwriteConfirm = (overwriteTemplate: () => Promise<void>) => {
+    setPendingTemplateOverwrite(() => overwriteTemplate);
+    confirmationHandlers.handleRequestOverwriteTemplate();
+  };
+
+  const requestTemplateDeleteConfirm = (deleteTemplate: () => Promise<void>) => {
+    setPendingTemplateDelete(() => deleteTemplate);
+    confirmationHandlers.handleRequestDeleteTemplate();
+  };
+
   // Toggle debug console
   const handleToggleConsole = () => {
     renderer.console.toggle();
@@ -283,6 +351,7 @@ function AppContent() {
         onRequestQuit: confirmationHandlers.handleRequestQuit,
         onRequestClosePane: confirmationHandlers.handleRequestClosePane,
         onToggleSessionPicker: handleToggleSessionPicker,
+        onToggleTemplateOverlay: handleToggleTemplateOverlay,
         onEnterSearch: handleEnterSearch,
         onToggleConsole: handleToggleConsole,
         onToggleAggregateView: handleToggleAggregateView,
@@ -313,6 +382,7 @@ function AppContent() {
     onRequestQuit: confirmationHandlers.handleRequestQuit,
     onRequestClosePane: confirmationHandlers.handleRequestClosePane,
     onToggleSessionPicker: handleToggleSessionPicker,
+    onToggleTemplateOverlay: handleToggleTemplateOverlay,
     onEnterSearch: handleEnterSearch,
     onToggleConsole: handleToggleConsole,
     onToggleAggregateView: handleToggleAggregateView,
@@ -520,7 +590,7 @@ function AppContent() {
       });
 
       // If not handled by multiplexer and in normal mode, forward to PTY
-      if (!handled && keyboardHandler.mode === 'normal' && !sessionState.showSessionPicker) {
+      if (!handled && keyboardHandler.mode === 'normal' && !sessionState.showSessionPicker && !session.showTemplateOverlay) {
         processNormalModeKey(normalizedEvent, {
           clearAllSelections,
           getFocusedEmulator,
@@ -550,6 +620,15 @@ function AppContent() {
 
       {/* Session picker overlay */}
       <SessionPicker width={width()} height={height()} />
+
+      {/* Template overlay */}
+      <TemplateOverlay
+        width={width()}
+        height={height()}
+        onRequestApplyConfirm={requestTemplateApplyConfirm}
+        onRequestOverwriteConfirm={requestTemplateOverwriteConfirm}
+        onRequestDeleteConfirm={requestTemplateDeleteConfirm}
+      />
 
       {/* Command palette overlay */}
       <CommandPalette

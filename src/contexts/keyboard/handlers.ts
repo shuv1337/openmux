@@ -85,6 +85,9 @@ export function handleNormalModeAction(
     case 'session.picker.toggle':
       options.onToggleSessionPicker?.();
       return true;
+    case 'template.overlay.toggle':
+      options.onToggleTemplateOverlay?.();
+      return true;
     case 'search.open':
       if (options.onEnterSearch) {
         keyboard.enterSearchMode();
@@ -188,6 +191,10 @@ export function handlePrefixModeAction(
       return true;
     case 'session.picker.toggle':
       options.onToggleSessionPicker?.();
+      exitPrefix();
+      return true;
+    case 'template.overlay.toggle':
+      options.onToggleTemplateOverlay?.();
       exitPrefix();
       return true;
     case 'clipboard.paste':

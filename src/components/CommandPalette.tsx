@@ -6,7 +6,7 @@ import { Show, For, createMemo, createEffect } from 'solid-js';
 import { type SetStoreFunction } from 'solid-js/store';
 import { useConfig } from '../contexts/ConfigContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { matchKeybinding } from '../core/keybindings';
+import { formatComboSet, matchKeybinding, type ResolvedKeybindingMap } from '../core/keybindings';
 import type { CommandPaletteCommand } from '../core/command-palette';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
 import type { KeyboardEvent } from '../effect/bridge';
@@ -24,6 +24,10 @@ interface CommandPaletteProps {
   state: CommandPaletteState;
   setState: SetStoreFunction<CommandPaletteState>;
   onExecute: (command: CommandPaletteCommand) => void;
+}
+
+function getCombos(bindings: ResolvedKeybindingMap, action: string): string[] {
+  return bindings.byAction.get(action) ?? [];
 }
 
 function filterCommands(commands: CommandPaletteCommand[], query: string): CommandPaletteCommand[] {
@@ -178,6 +182,17 @@ export function CommandPalette(props: CommandPaletteProps) {
     return `${props.state.selectedIndex + 1}/${resultCount()}`;
   };
 
+  const hintText = () => {
+    const bindings = config.keybindings().commandPalette;
+    const nav = formatComboSet([
+      ...getCombos(bindings, 'command.palette.up'),
+      ...getCombos(bindings, 'command.palette.down'),
+    ]);
+    const run = formatComboSet(getCombos(bindings, 'command.palette.confirm'));
+    const close = formatComboSet(getCombos(bindings, 'command.palette.close'));
+    return `${nav}:nav ${run}:run ${close}:close`;
+  };
+
   return (
     <Show when={props.state.show}>
       <box
@@ -208,7 +223,7 @@ export function CommandPalette(props: CommandPaletteProps) {
             <text fg="#444444">  </text>
             <text fg={resultCount() > 0 ? '#88FF88' : '#888888'}>{matchDisplay()}</text>
             <text fg="#444444">  </text>
-            <text fg="#666666">Up/Down:nav Enter:run Esc:close</text>
+            <text fg="#666666">{hintText()}</text>
           </box>
 
           <Show when={visibleCommands().length > 0}>

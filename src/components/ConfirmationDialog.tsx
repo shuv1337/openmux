@@ -34,6 +34,18 @@ const MESSAGES: Record<ConfirmationType, { title: string; message: string }> = {
     title: ' Kill PTY ',
     message: 'Kill this PTY and terminate its process?',
   },
+  apply_template: {
+    title: ' Apply Template ',
+    message: 'Replace current layout with the selected template?',
+  },
+  overwrite_template: {
+    title: ' Overwrite Template ',
+    message: 'Overwrite the existing template with this name?',
+  },
+  delete_template: {
+    title: ' Delete Template ',
+    message: 'Delete this template? This cannot be undone.',
+  },
 };
 
 export function ConfirmationDialog(props: ConfirmationDialogProps) {

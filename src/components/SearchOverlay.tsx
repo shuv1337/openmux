@@ -6,8 +6,10 @@
  */
 
 import { Show, type Accessor } from 'solid-js';
+import { useConfig } from '../contexts/ConfigContext';
 import { useSearch } from '../contexts/SearchContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { formatComboSet, type ResolvedKeybindingMap } from '../core/keybindings';
 import type { SearchState } from '../contexts/search/types';
 
 interface SearchOverlayProps {
@@ -15,8 +17,13 @@ interface SearchOverlayProps {
   height: number;
 }
 
+function getCombos(bindings: ResolvedKeybindingMap, action: string): string[] {
+  return bindings.byAction.get(action) ?? [];
+}
+
 export function SearchOverlay(props: SearchOverlayProps) {
   const theme = useTheme();
+  const config = useConfig();
   // Keep search context to access searchState reactively (it's a getter)
   const search = useSearch();
   const accentColor = () => theme.searchAccentColor;
@@ -39,6 +46,16 @@ export function SearchOverlay(props: SearchOverlayProps) {
     } else {
       return `${currentMatchIndex + 1}/${matches.length}`;
     }
+  };
+
+  const hintText = () => {
+    const bindings = config.keybindings().search;
+    const nav = formatComboSet([
+      ...getCombos(bindings, 'search.next'),
+      ...getCombos(bindings, 'search.prev'),
+    ]);
+    const cancel = formatComboSet(getCombos(bindings, 'search.cancel'));
+    return `${nav}:nav ${cancel}:cancel`;
   };
 
   return (
@@ -70,7 +87,7 @@ export function SearchOverlay(props: SearchOverlayProps) {
             <text fg="#444444">  </text>
             <text fg={state().matches.length > 0 ? '#88FF88' : '#888888'}>{matchDisplay()}</text>
             <text fg="#444444">  </text>
-            <text fg="#666666">^n/^p:nav Esc:cancel</text>
+            <text fg="#666666">{hintText()}</text>
           </box>
         </box>
       )}

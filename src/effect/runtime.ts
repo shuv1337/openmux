@@ -4,7 +4,7 @@
  */
 import { Effect, Layer, ManagedRuntime, Runtime } from "effect"
 import { AppConfig, ThemeConfig } from "./Config"
-import { Clipboard, FileSystem, Pty, SessionStorage, SessionManager } from "./services"
+import { Clipboard, FileSystem, Pty, SessionStorage, SessionManager, TemplateStorage } from "./services"
 import { isShimProcess } from "../shim/mode"
 
 // =============================================================================
@@ -30,6 +30,11 @@ const SessionLayer = SessionStorage.layer.pipe(
   Layer.provide(Layer.merge(FileSystem.layer, ConfigLayer))
 )
 
+/** Template layer (depends on FileSystem and Config) */
+const TemplateLayer = TemplateStorage.layer.pipe(
+  Layer.provide(Layer.merge(FileSystem.layer, ConfigLayer))
+)
+
 /** Session manager layer (depends on SessionStorage and Pty) */
 const SessionManagerLayer = SessionManager.layer.pipe(
   Layer.provide(Layer.merge(SessionLayer, PtyLayer))
@@ -41,6 +46,7 @@ export const AppLayer = Layer.mergeAll(
   IoLayer,
   PtyLayer,
   SessionLayer,
+  TemplateLayer,
   SessionManagerLayer
 )
 
@@ -56,6 +62,8 @@ const TestPtyLayer = Pty.testLayer
 
 const TestSessionLayer = SessionStorage.testLayer
 
+const TestTemplateLayer = TemplateStorage.testLayer
+
 const TestSessionManagerLayer = SessionManager.testLayer
 
 export const TestAppLayer = Layer.mergeAll(
@@ -63,6 +71,7 @@ export const TestAppLayer = Layer.mergeAll(
   TestIoLayer,
   TestPtyLayer,
   TestSessionLayer,
+  TestTemplateLayer,
   TestSessionManagerLayer
 )
 
@@ -78,6 +87,7 @@ export type AppServices =
   | FileSystem
   | Pty
   | SessionStorage
+  | TemplateStorage
   | SessionManager
 
 // =============================================================================

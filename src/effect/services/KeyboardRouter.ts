@@ -22,7 +22,12 @@ export type KeyHandler = (e: KeyEvent) => boolean
 /**
  * Overlay types that can register keyboard handlers
  */
-export type OverlayType = "confirmationDialog" | "commandPalette" | "sessionPicker" | "aggregateView"
+export type OverlayType =
+  | "confirmationDialog"
+  | "commandPalette"
+  | "templateOverlay"
+  | "sessionPicker"
+  | "aggregateView"
 
 /**
  * Priority determines which handler gets called first
@@ -31,6 +36,7 @@ export type OverlayType = "confirmationDialog" | "commandPalette" | "sessionPick
 const OVERLAY_PRIORITY: Record<OverlayType, number> = {
   confirmationDialog: 30, // Highest - modal dialogs take precedence
   commandPalette: 25,
+  templateOverlay: 22,
   sessionPicker: 20,
   aggregateView: 10,
 }

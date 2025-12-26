@@ -42,20 +42,20 @@ export function KeyboardHints(props: KeyboardHintsProps) {
     ];
 
     return [
-      { key: formatComboSet(navigationCombos), description: 'Navigate panes' },
-      { key: formatComboSet(getCombos(bindings, 'mode.move')), description: 'Move pane' },
-      { key: formatComboSet(getCombos(bindings, 'pane.new')), description: 'New pane' },
-      { key: formatComboSet(workspaceCombos), description: 'Switch workspace' },
-      { key: formatComboSet(getCombos(bindings, 'session.picker.toggle')), description: 'Session picker' },
-      { key: formatComboSet(getCombos(bindings, 'aggregate.toggle')), description: 'Aggregate view' },
-      { key: formatComboSet(getCombos(bindings, 'search.open')), description: 'Search in scrollback' },
-      { key: formatComboSet(getCombos(bindings, 'command.palette.toggle')), description: 'Command palette' },
-      { key: formatComboSet(cycleCombos), description: 'Cycle layout mode' },
-      { key: formatComboSet(getCombos(bindings, 'pane.zoom')), description: 'Toggle zoom' },
-      { key: formatComboSet(getCombos(bindings, 'pane.close')), description: 'Close pane' },
-      { key: 'Ctrl/Cmd+V', description: 'Paste' },
-      { key: 'Click', description: 'Focus pane' },
-      { key: formatKeyCombo(config.keybindings().prefixKey), description: 'Enter prefix mode' },
+      { key: formatComboSet(navigationCombos), description: 'navigate panes' },
+      { key: formatComboSet(getCombos(bindings, 'mode.move')), description: 'move pane' },
+      { key: formatComboSet(getCombos(bindings, 'pane.new')), description: 'new pane' },
+      { key: formatComboSet(workspaceCombos), description: 'switch workspace' },
+      { key: formatComboSet(getCombos(bindings, 'session.picker.toggle')), description: 'session picker' },
+      { key: formatComboSet(getCombos(bindings, 'aggregate.toggle')), description: 'aggregate view' },
+      { key: formatComboSet(getCombos(bindings, 'search.open')), description: 'search in scrollback' },
+      { key: formatComboSet(getCombos(bindings, 'command.palette.toggle')), description: 'command palette' },
+      { key: formatComboSet(cycleCombos), description: 'cycle layout mode' },
+      { key: formatComboSet(getCombos(bindings, 'pane.zoom')), description: 'toggle zoom' },
+      { key: formatComboSet(getCombos(bindings, 'pane.close')), description: 'close pane' },
+      { key: '^v/\u2318v', description: 'paste' },
+      { key: 'click', description: 'focus pane' },
+      { key: formatKeyCombo(config.keybindings().prefixKey), description: 'enter prefix mode' },
     ];
   };
 
@@ -77,23 +77,23 @@ export function KeyboardHints(props: KeyboardHintsProps) {
     ];
 
     return [
-      { key: formatComboSet(getCombos(bindings, 'pane.new')), description: 'New pane' },
-      { key: formatComboSet(navigationCombos), description: 'Navigate panes' },
-      { key: formatComboSet(getCombos(bindings, 'mode.move')), description: 'Move pane' },
-      { key: formatComboSet(workspaceCombos), description: 'Switch workspace' },
-      { key: formatComboSet(getCombos(bindings, 'session.picker.toggle')), description: 'Session picker' },
-      { key: formatComboSet(getCombos(bindings, 'aggregate.toggle')), description: 'Aggregate view' },
-      { key: formatComboSet(getCombos(bindings, 'search.open')), description: 'Search in scrollback' },
-      { key: formatComboSet(getCombos(bindings, 'command.palette.toggle')), description: 'Command palette' },
-      { key: formatComboSet(layoutModeCombos), description: 'Layout: vert/horiz/stack' },
-      { key: formatComboSet(getCombos(bindings, 'pane.zoom')), description: 'Toggle zoom' },
-      { key: formatComboSet(getCombos(bindings, 'pane.close')), description: 'Close pane' },
-      { key: formatComboSet(getCombos(bindings, 'clipboard.paste')), description: 'Paste' },
-      { key: formatComboSet(getCombos(bindings, 'console.toggle')), description: 'Toggle debug console' },
-      { key: formatComboSet(getCombos(bindings, 'app.quit')), description: 'Quit openmux' },
-      { key: formatComboSet(getCombos(bindings, 'app.detach')), description: 'Detach' },
-      { key: formatComboSet(getCombos(bindings, 'hints.toggle')), description: 'Toggle hints' },
-      { key: formatComboSet(getCombos(bindings, 'mode.cancel')), description: 'Exit prefix mode' },
+      { key: formatComboSet(getCombos(bindings, 'pane.new')), description: 'new pane' },
+      { key: formatComboSet(navigationCombos), description: 'navigate panes' },
+      { key: formatComboSet(getCombos(bindings, 'mode.move')), description: 'move pane' },
+      { key: formatComboSet(workspaceCombos), description: 'switch workspace' },
+      { key: formatComboSet(getCombos(bindings, 'session.picker.toggle')), description: 'session picker' },
+      { key: formatComboSet(getCombos(bindings, 'aggregate.toggle')), description: 'aggregate view' },
+      { key: formatComboSet(getCombos(bindings, 'search.open')), description: 'search in scrollback' },
+      { key: formatComboSet(getCombos(bindings, 'command.palette.toggle')), description: 'command palette' },
+      { key: formatComboSet(layoutModeCombos), description: 'layout: vert/horiz/stack' },
+      { key: formatComboSet(getCombos(bindings, 'pane.zoom')), description: 'toggle zoom' },
+      { key: formatComboSet(getCombos(bindings, 'pane.close')), description: 'close pane' },
+      { key: formatComboSet(getCombos(bindings, 'clipboard.paste')), description: 'paste' },
+      { key: formatComboSet(getCombos(bindings, 'console.toggle')), description: 'toggle debug console' },
+      { key: formatComboSet(getCombos(bindings, 'app.quit')), description: 'quit openmux' },
+      { key: formatComboSet(getCombos(bindings, 'app.detach')), description: 'detach' },
+      { key: formatComboSet(getCombos(bindings, 'hints.toggle')), description: 'toggle hints' },
+      { key: formatComboSet(getCombos(bindings, 'mode.cancel')), description: 'exit prefix mode' },
     ];
   };
 
@@ -104,22 +104,22 @@ export function KeyboardHints(props: KeyboardHintsProps) {
       ...getCombos(bindings, 'pane.move.north'),
     ];
     return [
-      { key: formatComboSet(getCombos(bindings, 'pane.move.west')), description: 'Move to master' },
-      { key: formatComboSet(getCombos(bindings, 'pane.move.east')), description: 'Move to stack' },
-      { key: formatComboSet(verticalCombos), description: 'Move down/up' },
-      { key: formatComboSet(getCombos(bindings, 'mode.cancel')), description: 'Cancel' },
+      { key: formatComboSet(getCombos(bindings, 'pane.move.west')), description: 'move to master' },
+      { key: formatComboSet(getCombos(bindings, 'pane.move.east')), description: 'move to stack' },
+      { key: formatComboSet(verticalCombos), description: 'move down/up' },
+      { key: formatComboSet(getCombos(bindings, 'mode.cancel')), description: 'cancel' },
     ];
   };
 
   const searchHints = () => {
     const bindings = config.keybindings().search;
     return [
-      { key: 'Type', description: 'Enter search query' },
-      { key: formatComboSet(getCombos(bindings, 'search.next')), description: 'Next match' },
-      { key: formatComboSet(getCombos(bindings, 'search.prev')), description: 'Previous match' },
-      { key: formatComboSet(getCombos(bindings, 'search.confirm')), description: 'Confirm and exit' },
-      { key: formatComboSet(getCombos(bindings, 'search.cancel')), description: 'Cancel and restore' },
-      { key: formatComboSet(getCombos(bindings, 'search.delete')), description: 'Delete character' },
+      { key: 'type', description: 'enter search query' },
+      { key: formatComboSet(getCombos(bindings, 'search.next')), description: 'next match' },
+      { key: formatComboSet(getCombos(bindings, 'search.prev')), description: 'previous match' },
+      { key: formatComboSet(getCombos(bindings, 'search.confirm')), description: 'confirm and exit' },
+      { key: formatComboSet(getCombos(bindings, 'search.cancel')), description: 'cancel and restore' },
+      { key: formatComboSet(getCombos(bindings, 'search.delete')), description: 'delete character' },
     ];
   };
 

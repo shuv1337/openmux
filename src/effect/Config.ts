@@ -15,6 +15,7 @@ export interface AppConfigShape {
   readonly stackRatio: number
   readonly defaultShell: string
   readonly sessionStoragePath: string
+  readonly templateStoragePath: string
 }
 
 export class AppConfig extends Context.Tag("@openmux/AppConfig")<
@@ -57,6 +58,7 @@ export class AppConfig extends Context.Tag("@openmux/AppConfig")<
         stackRatio,
         defaultShell,
         sessionStoragePath: `${home}/.config/openmux/sessions`,
+        templateStoragePath: `${home}/.config/openmux/templates`,
       })
     })
   )
@@ -69,6 +71,7 @@ export class AppConfig extends Context.Tag("@openmux/AppConfig")<
     stackRatio: 0.5,
     defaultShell: "/bin/bash",
     sessionStoragePath: "/tmp/openmux-test/sessions",
+    templateStoragePath: "/tmp/openmux-test/templates",
   })
 }
 

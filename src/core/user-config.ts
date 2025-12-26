@@ -140,6 +140,10 @@ function mergeKeybindings(base: KeybindingsConfig, overrides?: Partial<Keybindin
     move: mergeKeybindingMap(base.move, overrides.move),
     search: mergeKeybindingMap(base.search, overrides.search),
     commandPalette: mergeKeybindingMap(base.commandPalette, overrides.commandPalette),
+    templateOverlay: {
+      apply: mergeKeybindingMap(base.templateOverlay.apply, overrides.templateOverlay?.apply),
+      save: mergeKeybindingMap(base.templateOverlay.save, overrides.templateOverlay?.save),
+    },
     aggregate: {
       list: mergeKeybindingMap(base.aggregate.list, overrides.aggregate?.list),
       preview: mergeKeybindingMap(base.aggregate.preview, overrides.aggregate?.preview),

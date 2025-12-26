@@ -19,8 +19,14 @@ interface SessionBridgeProps extends ParentProps {}
 
 export function SessionBridge(props: SessionBridgeProps) {
   const layout = useLayout();
-  const { loadSession } = layout;
-  const { suspendSession, resumeSession, cleanupSessionPtys, getSessionCwd } = useTerminal();
+  const { loadSession, clearAll } = layout;
+  const {
+    suspendSession,
+    resumeSession,
+    cleanupSessionPtys,
+    getSessionCwd,
+    destroyAllPTYs,
+  } = useTerminal();
 
   // In Solid, we don't need refs for stable callbacks - there are no stale closures
 
@@ -89,6 +95,32 @@ export function SessionBridge(props: SessionBridgeProps) {
     cleanupSessionPtys(sessionId);
   };
 
+  const resetLayoutForTemplate = async () => {
+    clearAll();
+
+    const timeoutMs = 1000;
+    const pollIntervalMs = 25;
+    const start = Date.now();
+
+    const isEmpty = () => {
+      const workspaces = layout.state.workspaces;
+      return Object.values(workspaces).every(
+        (workspace) => !workspace || (!workspace.mainPane && workspace.stackPanes.length === 0)
+      );
+    };
+
+    while (!isEmpty()) {
+      if (Date.now() - start > timeoutMs) break;
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    destroyAllPTYs();
+    clearPtyTracking();
+    clearSessionCwdMap();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+
   return (
     <SessionProvider
       getCwd={getCwd}
@@ -97,6 +129,7 @@ export function SessionBridge(props: SessionBridgeProps) {
       onSessionLoad={onSessionLoad}
       onBeforeSwitch={onBeforeSwitch}
       onDeleteSession={onDeleteSession}
+      resetLayoutForTemplate={resetLayoutForTemplate}
       layoutVersion={() => layout.layoutVersion}
     >
       {props.children}

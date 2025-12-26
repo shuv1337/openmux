@@ -94,14 +94,14 @@ export function getHintsText(
     const cancel = formatComboSet(getCombos(aggregateBindings.search, 'aggregate.search.cancel'));
     const next = formatComboSet(getCombos(aggregateBindings.search, 'aggregate.search.next'));
     const prev = formatComboSet(getCombos(aggregateBindings.search, 'aggregate.search.prev'));
-    return `${confirm}: confirm | ${cancel}: cancel | ${next}/${prev}: next/prev`;
+    return `${confirm}:confirm ${cancel}:cancel ${next}/${prev}:next/prev`;
   }
 
   if (previewMode) {
     const back = formatComboSet(getCombos(aggregateBindings.preview, 'aggregate.preview.exit'));
     const search = formatComboSet(getCombos(aggregateBindings.preview, 'aggregate.preview.search'));
     const kill = formatComboSet(getCombos(aggregateBindings.preview, 'aggregate.kill'));
-    return `${back}: back | ${search}: search | ${kill}: kill`;
+    return `${back}:back ${search}:search ${kill}:kill`;
   }
 
   const navCombos = [
@@ -113,7 +113,7 @@ export function getHintsText(
   const jump = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.list.jump'));
   const kill = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.kill'));
   const close = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.list.close'));
-  return `${navigate}: navigate | ${interact}: interact | ${jump}: jump | ${kill}: kill | ${close}: close`;
+  return `${navigate}:nav ${interact}:preview ${jump}:jump ${kill}:kill ${close}:close`;
 }
 
 /**

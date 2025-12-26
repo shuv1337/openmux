@@ -97,6 +97,42 @@ export class SessionIndex extends Schema.Class<SessionIndex>("SessionIndex")({
 }
 
 // =============================================================================
+// Template Models
+// =============================================================================
+
+/** Template pane definition for layout templates */
+export class TemplatePaneData extends Schema.Class<TemplatePaneData>("TemplatePaneData")({
+  role: Schema.Literal("main", "stack"),
+  cwd: Schema.optional(Schema.String),
+}) {}
+
+/** Template workspace definition */
+export class TemplateWorkspace extends Schema.Class<TemplateWorkspace>("TemplateWorkspace")({
+  id: WorkspaceId,
+  layoutMode: LayoutMode,
+  panes: Schema.Array(TemplatePaneData),
+}) {}
+
+/** Template defaults for workspace/pane counts */
+export class TemplateDefaults extends Schema.Class<TemplateDefaults>("TemplateDefaults")({
+  workspaceCount: Schema.Int.pipe(Schema.between(1, 9)),
+  paneCount: Schema.Int.pipe(Schema.greaterThan(0)),
+  layoutMode: LayoutMode,
+  cwd: Schema.optional(Schema.String),
+}) {}
+
+/** Full template session definition */
+export class TemplateSession extends Schema.Class<TemplateSession>("TemplateSession")({
+  version: Schema.Literal(1),
+  id: Schema.String,
+  name: Schema.String,
+  createdAt: Schema.Number,
+  updatedAt: Schema.Number,
+  defaults: TemplateDefaults,
+  workspaces: Schema.Array(TemplateWorkspace),
+}) {}
+
+// =============================================================================
 // Terminal State Models
 // =============================================================================
 
@@ -117,4 +153,3 @@ export class CursorPosition extends Schema.Class<CursorPosition>("CursorPosition
   y: Schema.Int,
   visible: Schema.Boolean,
 }) {}
-

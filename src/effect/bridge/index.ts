@@ -58,6 +58,15 @@ export {
   loadSessionData,
 } from "./session-bridge"
 
+// Template operations
+export {
+  listTemplates,
+  loadTemplate,
+  saveTemplate,
+  deleteTemplate,
+  buildLayoutFromTemplate,
+} from "./template-bridge"
+
 // Aggregate view operations
 export { listAllPtysWithMetadata, getPtyMetadata, type ListAllPtysOptions } from "./aggregate-bridge"
 

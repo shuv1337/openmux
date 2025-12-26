@@ -28,7 +28,7 @@ describe('keybindings', () => {
   });
 
   it('formats grouped combos', () => {
-    expect(formatComboSet(['alt+h', 'alt+j', 'alt+k', 'alt+l'])).toBe('Alt+hjkl');
+    expect(formatComboSet(['alt+h', 'alt+j', 'alt+k', 'alt+l'])).toBe('\u2325hjkl');
     expect(formatComboSet([
       'alt+1',
       'alt+2',
@@ -39,6 +39,6 @@ describe('keybindings', () => {
       'alt+7',
       'alt+8',
       'alt+9',
-    ])).toBe('Alt+1-9');
+    ])).toBe('\u23251-9');
   });
 });
