@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.54](https://github.com/monotykamary/openmux/compare/v0.2.53...v0.2.54) (2025-12-26)
+
+
+### Bug Fixes
+
+* restore stacked layout theme hook ([902529b](https://github.com/monotykamary/openmux/commit/902529bd5233da30260c72eba7dde0e8b11ca8d4))
+
 ### [0.2.53](https://github.com/monotykamary/openmux/compare/v0.2.52...v0.2.53) (2025-12-26)
 
 
