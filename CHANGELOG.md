@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.55](https://github.com/monotykamary/openmux/compare/v0.2.54...v0.2.55) (2025-12-26)
+
+
+### Bug Fixes
+
+* **pty:** close panes on exit and detect child exit ([e351fab](https://github.com/monotykamary/openmux/commit/e351fab8217c9e8a2da8815ef69da46ac668656d))
+
 ### [0.2.54](https://github.com/monotykamary/openmux/compare/v0.2.53...v0.2.54) (2025-12-26)
 
 
