@@ -20,6 +20,7 @@ import type { KeyboardContextValue, KeyboardHandlerOptions } from './keyboard/ty
 import { handleNormalModeAction, handlePrefixModeAction, handleMoveModeAction } from './keyboard/handlers';
 import { useConfig } from './ConfigContext';
 import { eventToCombo, matchKeybinding } from '../core/keybindings';
+import type { KeyboardEvent } from '../core/keyboard-event';
 
 // Re-export types for convenience
 export type { KeyboardContextValue, KeyboardHandlerOptions } from './keyboard/types';
@@ -173,15 +174,7 @@ export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
   const layout = useLayout();
   const config = useConfig();
 
-  const handleKeyDown = (event: {
-    key: string;
-    ctrl?: boolean;
-    alt?: boolean;
-    shift?: boolean;
-    meta?: boolean;
-    eventType?: "press" | "repeat" | "release";
-    repeated?: boolean;
-  }) => {
+  const handleKeyDown = (event: KeyboardEvent) => {
     const { key, ctrl, alt, shift, meta } = event;
     const keybindings = config.keybindings();
     const keyEvent = { key, ctrl, alt, shift, meta };

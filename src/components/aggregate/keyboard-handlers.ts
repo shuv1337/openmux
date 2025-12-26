@@ -4,20 +4,10 @@
  */
 
 import { writeToPty } from '../../effect/bridge';
+import type { KeyboardEvent } from '../../effect/bridge';
 import type { ITerminalEmulator } from '../../terminal/emulator-interface';
 import { encodeKeyForEmulator } from '../../terminal/key-encoder';
 import { eventToCombo, matchKeybinding, type ResolvedKeybindings } from '../../core/keybindings';
-
-export interface KeyboardEvent {
-  key: string;
-  ctrl?: boolean;
-  alt?: boolean;
-  shift?: boolean;
-  sequence?: string;
-  baseCode?: number;
-  eventType?: "press" | "repeat" | "release";
-  repeated?: boolean;
-}
 
 export interface AggregateKeyboardDeps {
   // State getters

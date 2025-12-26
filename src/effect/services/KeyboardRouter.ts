@@ -7,19 +7,12 @@
 // Types
 // =============================================================================
 
+import type { KeyboardEvent } from '../../core/keyboard-event'
+
 /**
  * Keyboard event shape passed to handlers
  */
-export interface KeyEvent {
-  key: string
-  ctrl?: boolean
-  alt?: boolean
-  shift?: boolean
-  sequence?: string
-  baseCode?: number
-  eventType?: "press" | "repeat" | "release"
-  repeated?: boolean
-}
+export type KeyEvent = KeyboardEvent
 
 /**
  * Handler function type - returns true if event was handled

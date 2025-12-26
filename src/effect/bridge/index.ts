@@ -74,6 +74,7 @@ export {
 // Keyboard router operations
 export {
   type KeyEvent,
+  type KeyboardEvent,
   type KeyHandler,
   type OverlayType,
   registerKeyboardHandler,

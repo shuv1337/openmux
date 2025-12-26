@@ -7,6 +7,7 @@ import * as KeyboardRouter from "../services/KeyboardRouter"
 
 // Re-export types
 export type { KeyEvent, KeyHandler, OverlayType } from "../services/KeyboardRouter"
+export type { KeyboardEvent } from "../../core/keyboard-event"
 
 /**
  * Register a keyboard handler for an overlay.

@@ -6,7 +6,7 @@
 import { createEffect, onCleanup } from 'solid-js';
 import {
   registerKeyboardHandler,
-  type KeyEvent,
+  type KeyboardEvent,
   type KeyHandler,
   type OverlayType,
 } from '../../effect/bridge';
@@ -14,7 +14,7 @@ import {
 type OverlayKeyboardHandlerOptions = {
   overlay: OverlayType;
   isActive: () => boolean;
-  handler: (event: KeyEvent) => boolean;
+  handler: (event: KeyboardEvent) => boolean;
   ignoreRelease?: boolean;
 };
 

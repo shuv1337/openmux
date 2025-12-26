@@ -7,6 +7,7 @@ import type { ConfirmationType } from '../core/types';
 import { useConfig } from '../contexts/ConfigContext';
 import { matchKeybinding } from '../core/keybindings';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
+import type { KeyboardEvent } from '../effect/bridge';
 
 export type { ConfirmationType };
 
@@ -47,13 +48,7 @@ export function ConfirmationDialog(props: ConfirmationDialogProps) {
   });
 
   // Handle keyboard input when dialog is open
-  const handleKeyDown = (event: {
-    key: string;
-    ctrl?: boolean;
-    alt?: boolean;
-    shift?: boolean;
-    eventType?: "press" | "repeat" | "release";
-  }) => {
+  const handleKeyDown = (event: KeyboardEvent) => {
     const { key } = event;
     const action = matchKeybinding(appConfig.keybindings().confirmation, {
       key,

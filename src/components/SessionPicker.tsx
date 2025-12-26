@@ -9,6 +9,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { formatComboSet, matchKeybinding, type ResolvedKeybindingMap } from '../core/keybindings';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
+import type { KeyboardEvent } from '../effect/bridge';
 
 interface SessionPickerProps {
   width: number;
@@ -57,14 +58,7 @@ export function SessionPicker(props: SessionPickerProps) {
   } = session;
 
   // Handle keyboard input when picker is open
-  const handleKeyDown = (event: {
-    key: string;
-    ctrl?: boolean;
-    alt?: boolean;
-    shift?: boolean;
-    eventType?: "press" | "repeat" | "release";
-    repeated?: boolean;
-  }) => {
+  const handleKeyDown = (event: KeyboardEvent) => {
     const { key } = event;
     const bindings = config.keybindings().sessionPicker;
     const action = matchKeybinding(state.isRenaming ? bindings.rename : bindings.list, {

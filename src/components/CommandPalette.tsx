@@ -9,6 +9,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { matchKeybinding } from '../core/keybindings';
 import type { CommandPaletteCommand } from '../core/command-palette';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
+import type { KeyboardEvent } from '../effect/bridge';
 
 export interface CommandPaletteState {
   show: boolean;
@@ -77,15 +78,7 @@ export function CommandPalette(props: CommandPaletteProps) {
     props.onExecute(command);
   };
 
-  const handleKeyDown = (event: {
-    key: string;
-    ctrl?: boolean;
-    alt?: boolean;
-    shift?: boolean;
-    sequence?: string;
-    eventType?: "press" | "repeat" | "release";
-    repeated?: boolean;
-  }) => {
+  const handleKeyDown = (event: KeyboardEvent) => {
     const bindings = config.keybindings().commandPalette;
     const action = matchKeybinding(bindings, {
       key: event.key,
