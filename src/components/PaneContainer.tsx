@@ -9,6 +9,7 @@ import { useTerminal } from '../contexts/TerminalContext';
 import { useSession } from '../contexts/SessionContext';
 import { useAggregateView } from '../contexts/AggregateViewContext';
 import { useTitle } from '../contexts/TitleContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { getFocusedPane, isMainPaneFocused } from '../core/workspace-utils';
 import { Pane } from './Pane';
 

@@ -322,7 +322,6 @@ function CommandRow(props: CommandRowProps) {
   const keybindingText = () => fitRight(props.keybinding, keybindingWidth());
   const titleWidth = () => Math.max(0, props.maxWidth - (keybindingWidth() ? keybindingWidth() + 1 : 0));
   const left = () => fitLine(`  ${props.command.title}${details()}`, titleWidth());
-  const line = () => keybindingWidth() ? `${left()} ${keybindingText()}` : left();
   const fg = () => props.isSelected ? '#FFFFFF' : '#CCCCCC';
   const bindingFg = () => (
     props.isSelected
