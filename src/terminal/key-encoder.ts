@@ -15,7 +15,11 @@ export interface TerminalKeyEvent {
   meta?: boolean;
   sequence?: string;
   baseCode?: number;
+  eventType?: KeyEventType;
+  repeated?: boolean;
 }
+
+type KeyEventType = "press" | "repeat" | "release";
 
 type KeyEncoderOptions = {
   cursorKeyApplication: boolean;
@@ -29,7 +33,9 @@ type KeyEncoderOptions = {
 const GHOSTTY_SUCCESS = 0;
 const GHOSTTY_OUT_OF_MEMORY = -1;
 
+const KEY_ACTION_RELEASE = 0;
 const KEY_ACTION_PRESS = 1;
+const KEY_ACTION_REPEAT = 2;
 
 const MOD_SHIFT = 1 << 0;
 const MOD_CTRL = 1 << 1;
@@ -200,8 +206,9 @@ class GhosttyKeyEncoder {
     const mods = resolveMods(event);
     const utf8 = getPrintableSequence(event.sequence);
     const unshifted = resolveUnshiftedCodepoint(event);
+    const action = resolveAction(event);
 
-    ghostty.symbols.ghostty_key_event_set_action(this.event, KEY_ACTION_PRESS);
+    ghostty.symbols.ghostty_key_event_set_action(this.event, action);
     ghostty.symbols.ghostty_key_event_set_key(this.event, key);
     ghostty.symbols.ghostty_key_event_set_mods(this.event, mods);
     ghostty.symbols.ghostty_key_event_set_consumed_mods(this.event, 0);
@@ -298,6 +305,12 @@ function resolveMods(event: TerminalKeyEvent): number {
   return mods;
 }
 
+function resolveAction(event: TerminalKeyEvent): number {
+  if (event.eventType === "release") return KEY_ACTION_RELEASE;
+  if (event.eventType === "repeat" || event.repeated) return KEY_ACTION_REPEAT;
+  return KEY_ACTION_PRESS;
+}
+
 function getPrintableSequence(sequence?: string): string {
   if (!sequence) return "";
   for (const char of sequence) {
@@ -354,7 +367,9 @@ export function encodeKeyForEmulator(
   emulator: ITerminalEmulator | null
 ): string {
   if (!emulator) return "";
+  const action = resolveAction(event);
   if (
+    action !== KEY_ACTION_RELEASE &&
     event.sequence === "\n" &&
     !event.ctrl &&
     !event.alt &&

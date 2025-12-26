@@ -40,6 +40,7 @@ function buildPackedUpdate(header: ShimHeader, payloads: Buffer[]): SerializedDi
     alternateScreen: boolean;
     mouseTracking: boolean;
     cursorKeyMode: number;
+    kittyKeyboardFlags?: number;
     inBandResize: boolean;
   } | undefined;
 
@@ -63,6 +64,7 @@ function buildPackedUpdate(header: ShimHeader, payloads: Buffer[]): SerializedDi
     alternateScreen: packedMeta.alternateScreen,
     mouseTracking: packedMeta.mouseTracking,
     cursorKeyMode: packedMeta.cursorKeyMode as 0 | 1,
+    kittyKeyboardFlags: packedMeta.kittyKeyboardFlags ?? 0,
     inBandResize: packedMeta.inBandResize,
   };
 }

@@ -143,6 +143,7 @@ function createServerHandlers(options?: ShimServerOptions) {
           alternateScreen: packed.alternateScreen,
           mouseTracking: packed.mouseTracking,
           cursorKeyMode: packed.cursorKeyMode,
+          kittyKeyboardFlags: packed.kittyKeyboardFlags,
           inBandResize: packed.inBandResize,
         },
         scrollState: {
@@ -219,6 +220,7 @@ function createServerHandlers(options?: ShimServerOptions) {
         alternateScreen: result.state.alternateScreen,
         mouseTracking: result.state.mouseTracking,
         cursorKeyMode: result.state.cursorKeyMode ?? 'normal',
+        kittyKeyboardFlags: result.state.kittyKeyboardFlags ?? 0,
         inBandResize: false,
       };
 

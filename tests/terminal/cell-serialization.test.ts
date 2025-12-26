@@ -203,6 +203,7 @@ describe('cell-serialization', () => {
         alternateScreen: true,
         mouseTracking: false,
         cursorKeyMode: 'application',
+        kittyKeyboardFlags: 3,
       };
 
       const update: DirtyTerminalUpdate = {
@@ -216,6 +217,7 @@ describe('cell-serialization', () => {
         alternateScreen: true,
         mouseTracking: false,
         cursorKeyMode: 'application',
+        kittyKeyboardFlags: 3,
       };
 
       const packed = packDirtyUpdate(update);
@@ -226,6 +228,7 @@ describe('cell-serialization', () => {
       expect(unpacked.fullState?.cells[0][0].char).toBe('X');
       expect(unpacked.fullState?.cells[1][1].char).toBe('W');
       expect(unpacked.cursorKeyMode).toBe('application');
+      expect(unpacked.kittyKeyboardFlags).toBe(3);
     });
   });
 
@@ -243,6 +246,7 @@ describe('cell-serialization', () => {
         alternateScreen: false,
         mouseTracking: false,
         cursorKeyMode: 'normal',
+        kittyKeyboardFlags: 5,
       };
 
       const packed = packTerminalState(state);
@@ -254,6 +258,7 @@ describe('cell-serialization', () => {
       expect(unpacked.cells[0][0].char).toBe('H');
       expect(unpacked.cells[1][1].char).toBe('o');
       expect(unpacked.cells[2][2].char).toBe('r');
+      expect(unpacked.kittyKeyboardFlags).toBe(5);
     });
   });
 });

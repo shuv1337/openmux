@@ -179,10 +179,16 @@ export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
     alt?: boolean;
     shift?: boolean;
     meta?: boolean;
+    eventType?: "press" | "repeat" | "release";
+    repeated?: boolean;
   }) => {
     const { key, ctrl, alt, shift, meta } = event;
     const keybindings = config.keybindings();
     const keyEvent = { key, ctrl, alt, shift, meta };
+
+    if (event.eventType === "release") {
+      return false;
+    }
 
     // Note: We do NOT intercept Ctrl+V here. Applications like Claude Code need to
     // receive Ctrl+V directly so they can trigger their own clipboard reading (which

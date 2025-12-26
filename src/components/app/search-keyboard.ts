@@ -22,6 +22,8 @@ export interface KeyEvent {
   option?: boolean
   meta?: boolean
   sequence?: string
+  eventType?: "press" | "repeat" | "release"
+  repeated?: boolean
 }
 
 /**
@@ -32,6 +34,9 @@ export function handleSearchKeyboard(
   event: KeyEvent,
   deps: SearchKeyboardDeps
 ): boolean {
+  if (event.eventType === "release") {
+    return true
+  }
   const action = matchKeybinding(deps.keybindings, {
     key: event.name,
     ctrl: event.ctrl,

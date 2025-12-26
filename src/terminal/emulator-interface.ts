@@ -204,6 +204,8 @@ export interface SerializedDirtyUpdate {
   mouseTracking: boolean;
   /** 0 = normal, 1 = application */
   cursorKeyMode: 0 | 1;
+  /** Kitty keyboard protocol flags (bitset). */
+  kittyKeyboardFlags?: number;
   /** DECSET 2048 - in-band resize notifications */
   inBandResize: boolean;
 }

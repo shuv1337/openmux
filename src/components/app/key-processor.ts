@@ -19,6 +19,8 @@ export interface KeyEvent {
   meta?: boolean
   sequence?: string
   baseCode?: number
+  eventType?: "press" | "repeat" | "release"
+  repeated?: boolean
 }
 
 /**
@@ -29,7 +31,9 @@ export function processNormalModeKey(
   deps: KeyProcessorDeps
 ): void {
   // Clear any active selection when user types
-  deps.clearAllSelections()
+  if (event.eventType !== "release") {
+    deps.clearAllSelections()
+  }
 
   const emulator = deps.getFocusedEmulator()
   const sequence = encodeKeyForEmulator(
@@ -41,6 +45,8 @@ export function processNormalModeKey(
       meta: event.meta,
       sequence: event.sequence,
       baseCode: event.baseCode,
+      eventType: event.eventType,
+      repeated: event.repeated,
     },
     emulator
   )

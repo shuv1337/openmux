@@ -15,6 +15,8 @@ export interface KeyboardEvent {
   shift?: boolean;
   sequence?: string;
   baseCode?: number;
+  eventType?: "press" | "repeat" | "release";
+  repeated?: boolean;
 }
 
 export interface AggregateKeyboardDeps {
@@ -105,6 +107,10 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
    * Returns true if key was handled
    */
   const handleSearchModeKeys = (event: KeyboardEvent): boolean => {
+    if (event.eventType === "release") {
+      return true;
+    }
+
     const keybindings = getKeybindings();
     const action = matchKeybinding(keybindings.aggregate.search, {
       key: event.key,
@@ -158,12 +164,39 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     return true;
   };
 
+  const forwardToPreviewPty = (event: KeyboardEvent): boolean => {
+    const selectedPtyId = getSelectedPtyId();
+    if (selectedPtyId) {
+      const emulator = getEmulatorSync(selectedPtyId);
+      const inputStr = encodeKeyForEmulator(
+        {
+          key: event.key,
+          ctrl: event.ctrl,
+          alt: event.alt,
+          shift: event.shift,
+          sequence: event.sequence,
+          baseCode: event.baseCode,
+          eventType: event.eventType,
+          repeated: event.repeated,
+        },
+        emulator
+      );
+      if (inputStr) {
+        writeToPty(selectedPtyId, inputStr);
+      }
+    }
+    return true;
+  };
+
   /**
    * Handle preview mode keyboard input
    * Returns true if key was handled
    */
   const handlePreviewModeKeys = (event: KeyboardEvent): boolean => {
-    const { key } = event;
+    if (event.eventType === "release") {
+      return forwardToPreviewPty(event);
+    }
+
     const keybindings = getKeybindings();
     const action = matchKeybinding(keybindings.aggregate.preview, {
       key: event.key,
@@ -192,25 +225,7 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     }
 
     // Forward key to PTY using Ghostty encoder for modifier-aware encoding
-    const selectedPtyId = getSelectedPtyId();
-    if (selectedPtyId) {
-      const emulator = getEmulatorSync(selectedPtyId);
-      const inputStr = encodeKeyForEmulator(
-        {
-          key,
-          ctrl: event.ctrl,
-          alt: event.alt,
-          shift: event.shift,
-          sequence: event.sequence,
-          baseCode: event.baseCode,
-        },
-        emulator
-      );
-      if (inputStr) {
-        writeToPty(selectedPtyId, inputStr);
-      }
-    }
-    return true;
+    return forwardToPreviewPty(event);
   };
 
   /**
@@ -283,7 +298,6 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
   const handleKeyDown = (event: KeyboardEvent): boolean => {
     if (!getShowAggregateView()) return false;
 
-    const { key } = event;
     const keybindings = getKeybindings();
     const combo = eventToCombo({
       key: event.key,
@@ -295,6 +309,13 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     // Handle search mode first (when active in preview)
     if (getInSearchMode() && getPreviewMode()) {
       return handleSearchModeKeys(event);
+    }
+
+    if (event.eventType === "release") {
+      if (getPreviewMode()) {
+        return handlePreviewModeKeys(event);
+      }
+      return true;
     }
 
     // Global prefix key handling (works in both list and preview mode)

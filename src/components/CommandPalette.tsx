@@ -83,8 +83,11 @@ export function CommandPalette(props: CommandPaletteProps) {
     alt?: boolean;
     shift?: boolean;
     sequence?: string;
+    eventType?: "press" | "repeat" | "release";
+    repeated?: boolean;
   }) => {
     if (!props.state.show) return false;
+    if (event.eventType === "release") return true;
 
     const bindings = config.keybindings().commandPalette;
     const action = matchKeybinding(bindings, {

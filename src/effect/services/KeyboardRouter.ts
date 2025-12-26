@@ -17,6 +17,8 @@ export interface KeyEvent {
   shift?: boolean
   sequence?: string
   baseCode?: number
+  eventType?: "press" | "repeat" | "release"
+  repeated?: boolean
 }
 
 /**

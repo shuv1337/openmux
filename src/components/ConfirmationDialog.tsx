@@ -52,8 +52,10 @@ export function ConfirmationDialog(props: ConfirmationDialogProps) {
     ctrl?: boolean;
     alt?: boolean;
     shift?: boolean;
+    eventType?: "press" | "repeat" | "release";
   }) => {
     if (!props.visible) return false;
+    if (event.eventType === "release") return true;
 
     const { key } = event;
     const action = matchKeybinding(appConfig.keybindings().confirmation, {

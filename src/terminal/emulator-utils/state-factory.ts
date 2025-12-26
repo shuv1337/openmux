@@ -70,6 +70,7 @@ export function createEmptyTerminalState(
     alternateScreen: modes.alternateScreen,
     mouseTracking: modes.mouseTracking,
     cursorKeyMode: modes.cursorKeyMode,
+    kittyKeyboardFlags: 0,
   }
 }
 
@@ -102,6 +103,7 @@ export function createEmptyDirtyUpdate(
     alternateScreen: modes.alternateScreen,
     mouseTracking: modes.mouseTracking,
     cursorKeyMode: modes.cursorKeyMode,
+    kittyKeyboardFlags: 0,
     inBandResize: modes.inBandResize,
   }
 }

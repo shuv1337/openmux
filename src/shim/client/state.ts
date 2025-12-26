@@ -132,6 +132,7 @@ export function subscribeUnified(ptyId: string, callback: UnifiedSubscriber): ()
         alternateScreen: fullState.alternateScreen,
         mouseTracking: fullState.mouseTracking,
         cursorKeyMode: fullState.cursorKeyMode ?? 'normal',
+        kittyKeyboardFlags: fullState.kittyKeyboardFlags ?? 0,
         inBandResize: false,
       },
       scrollState,
@@ -213,6 +214,9 @@ function applyUnifiedUpdate(ptyId: string, update: UnifiedTerminalUpdate): void 
 
   if (update.terminalUpdate.isFull && update.terminalUpdate.fullState) {
     const fullState = update.terminalUpdate.fullState;
+    if (update.terminalUpdate.kittyKeyboardFlags !== undefined) {
+      fullState.kittyKeyboardFlags = update.terminalUpdate.kittyKeyboardFlags;
+    }
     ptyStates.set(ptyId, {
       terminalState: fullState,
       cachedRows: [...fullState.cells],
@@ -232,6 +236,7 @@ function applyUnifiedUpdate(ptyId: string, update: UnifiedTerminalUpdate): void 
       alternateScreen: update.terminalUpdate.alternateScreen,
       mouseTracking: update.terminalUpdate.mouseTracking,
       cursorKeyMode: update.terminalUpdate.cursorKeyMode,
+      kittyKeyboardFlags: update.terminalUpdate.kittyKeyboardFlags ?? existing.terminalState.kittyKeyboardFlags ?? 0,
     };
 
     ptyStates.set(ptyId, {

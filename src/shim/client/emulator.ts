@@ -105,6 +105,7 @@ export class RemoteEmulator implements ITerminalEmulator {
       alternateScreen: false,
       mouseTracking: false,
       cursorKeyMode: 'normal',
+      kittyKeyboardFlags: 0,
     };
   }
 
@@ -118,7 +119,7 @@ export class RemoteEmulator implements ITerminalEmulator {
   }
 
   getKittyKeyboardFlags(): number {
-    return 0;
+    return this.deps.getPtyState(this.ptyId)?.terminalState?.kittyKeyboardFlags ?? 0;
   }
 
   isMouseTrackingEnabled(): boolean {

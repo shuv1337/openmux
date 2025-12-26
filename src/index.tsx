@@ -32,14 +32,18 @@ async function main() {
     onMount(() => {
       // Enable kitty keyboard protocol AFTER renderer setup
       // Flag 1 = disambiguate escape codes (detect Alt+key without breaking regular input)
+      // Flag 2 = report key releases/repeats
       // Flag 8 was too aggressive - it reports ALL keys as escape codes, breaking shift
       // Must be done after createCliRenderer since setupTerminal() resets modes
       // See: https://sw.kovidgoyal.net/kitty/keyboard-protocol/
-      renderer.enableKittyKeyboard(1);
-      process.stdout.write('\x1b[>1u');
+      renderer.enableKittyKeyboard(3);
+      // Use set mode to ensure report_events is enabled in Ghostty.
+      const stdout = (renderer as any).stdout ?? process.stdout;
+      const writeOut = (renderer as any).realStdoutWrite ?? stdout.write.bind(stdout);
+      writeOut.call(stdout, '\x1b[=3;1u');
       // Force flush
-      if (process.stdout.isTTY) {
-        (process.stdout as any)._handle?.flush?.();
+      if (stdout.isTTY) {
+        (stdout as any)._handle?.flush?.();
       }
     });
 
@@ -76,6 +80,7 @@ async function main() {
       useMouse: true, // Enable mouse tracking to properly consume mouse escape sequences
       enableMouseMovement: true, // Track mouse movement for drag and hover events
       useConsole: true, // Enable debug console (toggle with prefix + `)
+      useKittyKeyboard: { events: true },
       consoleOptions: {
         position: ConsolePosition.BOTTOM,
         sizePercent: 30,

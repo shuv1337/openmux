@@ -219,7 +219,8 @@ export function unpackRow(buffer: ArrayBuffer): TerminalCell[] {
  * - byte 18:     alternateScreen (u8)
  * - byte 19:     mouseTracking (u8)
  * - byte 20:     cursorKeyMode (u8, 0=normal, 1=application)
- * - bytes 21-27: reserved
+ * - byte 21:     kittyKeyboardFlags (u8)
+ * - bytes 22-27: reserved
  * - bytes 28+:   cell data (rows * cols * CELL_SIZE)
  */
 const STATE_HEADER_SIZE = 28;
@@ -245,6 +246,7 @@ export function packTerminalState(state: TerminalState): ArrayBuffer {
   view.setUint8(18, state.alternateScreen ? 1 : 0);
   view.setUint8(19, state.mouseTracking ? 1 : 0);
   view.setUint8(20, state.cursorKeyMode === 'application' ? 1 : 0);
+  view.setUint8(21, state.kittyKeyboardFlags ?? 0);
 
   // Cell data (row by row)
   let offset = STATE_HEADER_SIZE;
@@ -285,6 +287,7 @@ export function unpackTerminalState(buffer: ArrayBuffer): TerminalState {
   const alternateScreen = view.getUint8(18) === 1;
   const mouseTracking = view.getUint8(19) === 1;
   const cursorKeyMode = view.getUint8(20) === 1 ? 'application' : 'normal';
+  const kittyKeyboardFlags = view.getUint8(21);
 
   // Cell data
   const cells: TerminalCell[][] = new Array(rows);
@@ -312,6 +315,7 @@ export function unpackTerminalState(buffer: ArrayBuffer): TerminalState {
     alternateScreen,
     mouseTracking,
     cursorKeyMode,
+    kittyKeyboardFlags,
   };
 }
 
@@ -367,6 +371,7 @@ export function packDirtyUpdate(update: DirtyTerminalUpdate): SerializedDirtyUpd
     alternateScreen: update.alternateScreen,
     mouseTracking: update.mouseTracking,
     cursorKeyMode: update.cursorKeyMode === 'application' ? 1 : 0,
+    kittyKeyboardFlags: update.kittyKeyboardFlags ?? 0,
     inBandResize: update.inBandResize,
   };
 }
@@ -427,6 +432,7 @@ export function unpackDirtyUpdate(
     alternateScreen: packed.alternateScreen,
     mouseTracking: packed.mouseTracking,
     cursorKeyMode: packed.cursorKeyMode === 1 ? 'application' : 'normal',
+    kittyKeyboardFlags: packed.kittyKeyboardFlags ?? 0,
     inBandResize: packed.inBandResize,
   };
 }

@@ -144,6 +144,8 @@ export interface TerminalState {
   mouseTracking: boolean;
   /** Cursor key mode (DECCKM) - when 'application', arrow keys send \x1bOx instead of \x1b[x */
   cursorKeyMode?: 'normal' | 'application';
+  /** Kitty keyboard protocol flags (bitset). */
+  kittyKeyboardFlags?: number;
   title?: string;
 }
 
@@ -183,6 +185,8 @@ export interface DirtyTerminalUpdate {
   alternateScreen: boolean;
   mouseTracking: boolean;
   cursorKeyMode: 'normal' | 'application';
+  /** Kitty keyboard protocol flags (bitset). */
+  kittyKeyboardFlags?: number;
   /** DECSET 2048 - in-band resize notifications (used by neovim) */
   inBandResize: boolean;
 }

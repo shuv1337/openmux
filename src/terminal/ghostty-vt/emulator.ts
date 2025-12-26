@@ -391,6 +391,7 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
     this.scrollbackSnapshotDirty = false;
     const cursor = this.terminal.getCursor();
     const scrollbackLength = this.terminal.getScrollbackLength();
+    const kittyKeyboardFlags = this.terminal.getKittyKeyboardFlags();
     const isAtScrollbackLimit = scrollbackLength >= SCROLLBACK_LIMIT;
     const prevModes = this.modes;
     const newModes = getModes(this.terminal);
@@ -433,6 +434,7 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
         alternateScreen: newModes.alternateScreen,
         mouseTracking: newModes.mouseTracking,
         cursorKeyMode: newModes.cursorKeyMode,
+        kittyKeyboardFlags,
       };
       this.cachedState = fullState;
     } else if (viewport) {
@@ -456,6 +458,7 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
         this.cachedState.alternateScreen = newModes.alternateScreen;
         this.cachedState.mouseTracking = newModes.mouseTracking;
         this.cachedState.cursorKeyMode = newModes.cursorKeyMode;
+        this.cachedState.kittyKeyboardFlags = kittyKeyboardFlags;
       }
     } else if (this.cachedState) {
       this.cachedState.cursor = {
@@ -467,6 +470,7 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
       this.cachedState.alternateScreen = newModes.alternateScreen;
       this.cachedState.mouseTracking = newModes.mouseTracking;
       this.cachedState.cursorKeyMode = newModes.cursorKeyMode;
+      this.cachedState.kittyKeyboardFlags = kittyKeyboardFlags;
     }
 
     const update: DirtyTerminalUpdate = {
@@ -485,6 +489,7 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
       alternateScreen: newModes.alternateScreen,
       mouseTracking: newModes.mouseTracking,
       cursorKeyMode: newModes.cursorKeyMode,
+      kittyKeyboardFlags,
       inBandResize: newModes.inBandResize,
     };
 

@@ -83,6 +83,9 @@ function AppContent() {
     meta?: boolean;
     sequence?: string;
     baseCode?: number;
+    eventType?: 'press' | 'repeat' | 'release';
+    repeated?: boolean;
+    source?: 'raw' | 'kitty';
   }) => {
     const sequence = event.sequence ?? '';
     const metaIsAlt = !!event.meta && !event.option && sequence.startsWith('\x1b');
@@ -466,7 +469,7 @@ function AppContent() {
 
   // Handle keyboard input
   useKeyboard(
-    (event: { name: string; ctrl?: boolean; shift?: boolean; option?: boolean; meta?: boolean; sequence?: string; baseCode?: number }) => {
+    (event: { name: string; ctrl?: boolean; shift?: boolean; option?: boolean; meta?: boolean; sequence?: string; baseCode?: number; eventType?: 'press' | 'repeat' | 'release'; repeated?: boolean; source?: 'raw' | 'kitty' }) => {
       const normalizedEvent = normalizeKeyEvent(event);
       // Route to overlays via KeyboardRouter (handles confirmation, session picker, aggregate view)
       // Use event.sequence for printable chars (handles shift for uppercase/symbols)
@@ -482,6 +485,8 @@ function AppContent() {
         shift: normalizedEvent.shift,
         sequence: normalizedEvent.sequence,
         baseCode: normalizedEvent.baseCode,
+        eventType: normalizedEvent.eventType,
+        repeated: normalizedEvent.repeated,
       });
 
       // If an overlay handled the key, don't process further
@@ -510,6 +515,8 @@ function AppContent() {
         shift: normalizedEvent.shift,
         alt: normalizedEvent.option, // OpenTUI uses 'option' for Alt key
         meta: normalizedEvent.meta,
+        eventType: normalizedEvent.eventType,
+        repeated: normalizedEvent.repeated,
       });
 
       // If not handled by multiplexer and in normal mode, forward to PTY
@@ -520,7 +527,8 @@ function AppContent() {
           writeToFocused,
         });
       }
-    }
+    },
+    { release: true }
   );
 
   return (

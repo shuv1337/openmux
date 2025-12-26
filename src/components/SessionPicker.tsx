@@ -62,8 +62,11 @@ export function SessionPicker(props: SessionPickerProps) {
     ctrl?: boolean;
     alt?: boolean;
     shift?: boolean;
+    eventType?: "press" | "repeat" | "release";
+    repeated?: boolean;
   }) => {
     if (!state.showSessionPicker) return false;
+    if (event.eventType === "release") return true;
 
     const { key } = event;
     const bindings = config.keybindings().sessionPicker;
