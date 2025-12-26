@@ -22,6 +22,7 @@ export interface AggregateKeyboardDeps {
 
   // State setters
   setFilterQuery: (query: string) => void;
+  toggleShowInactive: () => void;
   setInSearchMode: (value: boolean) => void;
   setPrefixActive: (value: boolean) => void;
 
@@ -69,6 +70,7 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
   getKeybindings,
   getEmulatorSync,
     setFilterQuery,
+    toggleShowInactive,
     setInSearchMode,
     setPrefixActive,
     closeAggregateView,
@@ -249,6 +251,11 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
 
     if (action === 'aggregate.list.jump') {
       handleJumpToPty();
+      return true;
+    }
+
+    if (action === 'aggregate.list.toggle.scope') {
+      toggleShowInactive();
       return true;
     }
 

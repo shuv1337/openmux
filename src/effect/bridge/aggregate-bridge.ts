@@ -15,6 +15,7 @@ interface PtyMetadata {
   gitBranch: string | undefined
   gitDiffStats: GitDiffStats | undefined
   foregroundProcess: string | undefined
+  shell: string | undefined
   workspaceId: number | undefined
   paneId: string | undefined
 }
@@ -65,6 +66,7 @@ const fetchPtyMetadata = (ptyId: PtyId, options: FetchPtyMetadataOptions = {}) =
       gitBranch,
       gitDiffStats,
       foregroundProcess,
+      shell: session.shell,
       workspaceId: undefined, // Will be enriched by AggregateView
       paneId: undefined,      // Will be enriched by AggregateView
     })

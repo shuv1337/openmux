@@ -164,6 +164,7 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
       'enter': 'aggregate.list.preview',
       'tab': 'aggregate.list.jump',
       'alt+escape': 'aggregate.list.close',
+      'alt+a': 'aggregate.list.toggle.scope',
       'alt+x': 'aggregate.kill',
       'backspace': 'aggregate.list.delete',
     },

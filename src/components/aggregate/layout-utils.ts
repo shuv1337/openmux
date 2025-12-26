@@ -85,7 +85,8 @@ function getCombos(bindings: ResolvedKeybindingMap, action: string): string[] {
 export function getHintsText(
   inSearchMode: boolean,
   previewMode: boolean,
-  keybindings: ResolvedKeybindings
+  keybindings: ResolvedKeybindings,
+  showInactive: boolean
 ): string {
   const aggregateBindings = keybindings.aggregate;
 
@@ -111,9 +112,11 @@ export function getHintsText(
   const navigate = formatComboSet(navCombos);
   const interact = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.list.preview'));
   const jump = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.list.jump'));
+  const toggleScope = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.list.toggle.scope'));
   const kill = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.kill'));
   const close = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.list.close'));
-  return `${navigate}:nav ${interact}:preview ${jump}:jump ${kill}:kill ${close}:close`;
+  const scopeLabel = showInactive ? 'all' : 'active';
+  return `${navigate}:nav ${interact}:preview ${jump}:jump ${toggleScope}:scope(${scopeLabel}) ${kill}:kill ${close}:close`;
 }
 
 /**

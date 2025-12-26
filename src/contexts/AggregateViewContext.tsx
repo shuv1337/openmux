@@ -31,6 +31,7 @@ export interface PtyInfo {
   gitBranch: string | undefined;
   gitDiffStats: GitDiffStats | undefined;
   foregroundProcess: string | undefined;
+  shell: string | undefined;
   /** Workspace ID where this PTY is located (if found in current session) */
   workspaceId: number | undefined;
   /** Pane ID where this PTY is located (if found in current session) */
@@ -42,6 +43,8 @@ interface AggregateViewState {
   showAggregateView: boolean;
   /** Current filter query text */
   filterQuery: string;
+  /** Whether to include inactive PTYs in the list/search */
+  showInactive: boolean;
   /** All PTYs from all sessions */
   allPtys: PtyInfo[];
   /** PTYs matching the current filter */
@@ -63,6 +66,7 @@ interface AggregateViewState {
 const initialState: AggregateViewState = {
   showAggregateView: false,
   filterQuery: '',
+  showInactive: false,
   allPtys: [],
   matchedPtys: [],
   selectedIndex: 0,
@@ -110,6 +114,34 @@ function filterPtys(ptys: PtyInfo[], query: string): PtyInfo[] {
   });
 }
 
+/** Normalize process names for comparisons (strip paths, lowercase) */
+function normalizeProcessName(name: string | undefined): string {
+  if (!name) return '';
+  const trimmed = name.trim();
+  if (!trimmed) return '';
+  const base = trimmed.split('/').pop() ?? trimmed;
+  return base.toLowerCase();
+}
+
+/** Active PTY = foreground process is not just the shell */
+function isActivePty(pty: PtyInfo): boolean {
+  const processName = normalizeProcessName(pty.foregroundProcess);
+  if (!processName) return false;
+  const shellName = normalizeProcessName(pty.shell);
+  if (!shellName) return true;
+  return processName !== shellName;
+}
+
+/** Filter PTYs to only those with active foreground processes */
+function filterActivePtys(ptys: PtyInfo[]): PtyInfo[] {
+  return ptys.filter(isActivePty);
+}
+
+/** Apply active/inactive filtering based on scope flag */
+function getBasePtys(ptys: PtyInfo[], showInactive: boolean): PtyInfo[] {
+  return showInactive ? ptys : filterActivePtys(ptys);
+}
+
 /** Build an index map from ptyId to array index for O(1) lookups */
 function buildPtyIndex(ptys: PtyInfo[]): Map<string, number> {
   return new Map(ptys.map((p, i) => [p.ptyId, i]));
@@ -124,6 +156,7 @@ interface AggregateViewContextValue {
   openAggregateView: () => void;
   closeAggregateView: () => void;
   setFilterQuery: (query: string) => void;
+  toggleShowInactive: () => void;
   navigateUp: () => void;
   navigateDown: () => void;
   selectPty: (ptyId: string) => void;
@@ -156,7 +189,8 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     try {
       setState('isLoading', true);
       const ptys = await listAllPtysWithMetadata();
-      const matchedPtys = filterPtys(ptys, state.filterQuery);
+      const basePtys = getBasePtys(ptys, state.showInactive);
+      const matchedPtys = filterPtys(basePtys, state.filterQuery);
 
       // Build O(1) lookup indexes
       const allPtysIndex = buildPtyIndex(ptys);
@@ -266,21 +300,23 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
           }
           // Preserve gitDiffStats from initial load (we skip it during polling)
         }
-        // Also update matchedPtys if filter is active
-        for (let i = 0; i < s.matchedPtys.length; i++) {
-          const oldPty = s.matchedPtys[i];
-          const newPty = newPtysMap.get(oldPty.ptyId);
-          if (!newPty) continue;
+        const basePtys = getBasePtys(s.allPtys, s.showInactive);
+        const matchedPtys = filterPtys(basePtys, s.filterQuery);
+        const matchedPtysIndex = buildPtyIndex(matchedPtys);
+        const currentSelectedPtyId = s.selectedPtyId;
+        const currentPtyIndex = currentSelectedPtyId ? matchedPtysIndex.get(currentSelectedPtyId) : undefined;
+        const currentPtyStillExists = currentPtyIndex !== undefined;
+        const newSelectedIndex = currentPtyStillExists
+          ? currentPtyIndex
+          : Math.min(s.selectedIndex, Math.max(0, matchedPtys.length - 1));
+        const selectedPtyId = matchedPtys[newSelectedIndex]?.ptyId ?? null;
 
-          if (oldPty.foregroundProcess !== newPty.foregroundProcess) {
-            s.matchedPtys[i].foregroundProcess = newPty.foregroundProcess;
-          }
-          if (oldPty.gitBranch !== newPty.gitBranch) {
-            s.matchedPtys[i].gitBranch = newPty.gitBranch;
-          }
-          if (oldPty.cwd !== newPty.cwd) {
-            s.matchedPtys[i].cwd = newPty.cwd;
-          }
+        s.matchedPtys = matchedPtys;
+        s.matchedPtysIndex = matchedPtysIndex;
+        s.selectedIndex = newSelectedIndex;
+        s.selectedPtyId = selectedPtyId;
+        if (!currentPtyStillExists || selectedPtyId === null) {
+          s.previewMode = false;
         }
       }));
     } finally {
@@ -336,9 +372,10 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
       s.showAggregateView = true;
       s.filterQuery = '';
       s.selectedIndex = 0;
-      s.matchedPtys = s.allPtys;
-      s.matchedPtysIndex = s.allPtysIndex; // Share index since matchedPtys === allPtys
-      s.selectedPtyId = s.allPtys[0]?.ptyId ?? null;
+      const basePtys = getBasePtys(s.allPtys, s.showInactive);
+      s.matchedPtys = basePtys;
+      s.matchedPtysIndex = buildPtyIndex(basePtys);
+      s.selectedPtyId = basePtys[0]?.ptyId ?? null;
     }));
   };
 
@@ -352,7 +389,8 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
   };
 
   const setFilterQuery = (query: string) => {
-    const matchedPtys = filterPtys(state.allPtys, query);
+    const basePtys = getBasePtys(state.allPtys, state.showInactive);
+    const matchedPtys = filterPtys(basePtys, query);
     const matchedPtysIndex = buildPtyIndex(matchedPtys);
     setState(produce((s) => {
       s.filterQuery = query;
@@ -360,6 +398,30 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
       s.matchedPtysIndex = matchedPtysIndex;
       s.selectedIndex = 0;
       s.selectedPtyId = matchedPtys[0]?.ptyId ?? null;
+    }));
+  };
+
+  const toggleShowInactive = () => {
+    setState(produce((s) => {
+      s.showInactive = !s.showInactive;
+      const basePtys = getBasePtys(s.allPtys, s.showInactive);
+      const matchedPtys = filterPtys(basePtys, s.filterQuery);
+      const matchedPtysIndex = buildPtyIndex(matchedPtys);
+      const currentSelectedPtyId = s.selectedPtyId;
+      const currentPtyIndex = currentSelectedPtyId ? matchedPtysIndex.get(currentSelectedPtyId) : undefined;
+      const currentPtyStillExists = currentPtyIndex !== undefined;
+      const newSelectedIndex = currentPtyStillExists
+        ? currentPtyIndex
+        : Math.min(s.selectedIndex, Math.max(0, matchedPtys.length - 1));
+      const selectedPtyId = matchedPtys[newSelectedIndex]?.ptyId ?? null;
+
+      s.matchedPtys = matchedPtys;
+      s.matchedPtysIndex = matchedPtysIndex;
+      s.selectedIndex = newSelectedIndex;
+      s.selectedPtyId = selectedPtyId;
+      if (!currentPtyStillExists || selectedPtyId === null) {
+        s.previewMode = false;
+      }
     }));
   };
 
@@ -407,6 +469,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     openAggregateView,
     closeAggregateView,
     setFilterQuery,
+    toggleShowInactive,
     navigateUp,
     navigateDown,
     selectPty,

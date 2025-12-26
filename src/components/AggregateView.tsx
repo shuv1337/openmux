@@ -47,6 +47,7 @@ export function AggregateView(props: AggregateViewProps) {
     state,
     closeAggregateView,
     setFilterQuery,
+    toggleShowInactive,
     navigateUp,
     navigateDown,
     enterPreviewMode,
@@ -178,6 +179,7 @@ export function AggregateView(props: AggregateViewProps) {
     getKeybindings: () => config.keybindings(),
     getEmulatorSync,
     setFilterQuery,
+    toggleShowInactive,
     setInSearchMode,
     setPrefixActive,
     closeAggregateView,
@@ -234,7 +236,7 @@ export function AggregateView(props: AggregateViewProps) {
   const hostBgColor = getHostBackgroundColor();
 
   // Build hints text based on mode
-  const hintsText = () => getHintsText(inSearchMode(), state.previewMode, config.keybindings());
+  const hintsText = () => getHintsText(inSearchMode(), state.previewMode, config.keybindings(), state.showInactive);
 
   // Build search/filter text
   const filterText = () => getFilterText(state.filterQuery);
