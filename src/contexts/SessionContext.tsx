@@ -15,6 +15,7 @@ import {
 } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import type { SessionId, SessionMetadata, WorkspaceId } from '../core/types';
+import { WorkspaceId as EffectWorkspaceId } from '../effect/types';
 import type { Workspaces } from '../core/operations/layout-actions';
 import { useConfig } from './ConfigContext';
 import {
@@ -257,7 +258,7 @@ export function SessionProvider(props: SessionProviderProps) {
     for (const entry of workspaceEntries) {
       const workspace = entry.workspace;
       if (!workspace) continue;
-      const workspaceId = entry.id as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+      const workspaceId = EffectWorkspaceId.make(entry.id);
       const panes: TemplatePaneData[] = [];
 
       if (workspace.mainPane) {

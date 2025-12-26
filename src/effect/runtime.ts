@@ -62,7 +62,9 @@ const TestPtyLayer = Pty.testLayer
 
 const TestSessionLayer = SessionStorage.testLayer
 
-const TestTemplateLayer = TemplateStorage.testLayer
+const TestTemplateLayer = TemplateStorage.testLayer.pipe(
+  Layer.provide(Layer.merge(FileSystem.testLayer, AppConfig.testLayer))
+)
 
 const TestSessionManagerLayer = SessionManager.testLayer
 
