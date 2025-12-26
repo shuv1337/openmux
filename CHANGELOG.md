@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.49](https://github.com/monotykamary/openmux/compare/v0.2.48...v0.2.49) (2025-12-26)
+
+
+### Bug Fixes
+
+* **keybindings:** adjust template overlay defaults ([252877a](https://github.com/monotykamary/openmux/commit/252877af7af9ca5c0a7756fd588161bc0932eca5))
+
 ### [0.2.48](https://github.com/monotykamary/openmux/compare/v0.2.47...v0.2.48) (2025-12-26)
 
 
