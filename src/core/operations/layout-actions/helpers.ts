@@ -2,12 +2,14 @@
  * Helper functions for layout reducer
  */
 
-import type { Rectangle, Workspace, WorkspaceId, LayoutMode } from '../../types';
+import type { Rectangle, Workspace, WorkspaceId, LayoutMode, LayoutNode } from '../../types';
 import type { LayoutConfig } from '../../config';
 import type { LayoutState, Workspaces } from './types';
 import { calculateMasterStackLayout } from '../master-stack-layout';
+import { collectPanes, isSplitNode } from '../../layout-tree';
 
 let paneIdCounter = 0;
+let splitIdCounter = 0;
 
 /**
  * Generate a unique pane ID
@@ -24,6 +26,13 @@ export function resetPaneIdCounter(): void {
 }
 
 /**
+ * Reset split ID counter (for testing)
+ */
+export function resetSplitIdCounter(): void {
+  splitIdCounter = 0;
+}
+
+/**
  * Sync pane ID counter with loaded panes to avoid ID conflicts
  * Called when loading a session with existing pane IDs
  */
@@ -31,20 +40,54 @@ export function syncPaneIdCounter(workspaces: Workspaces): void {
   let maxId = paneIdCounter;
   for (const workspace of Object.values(workspaces)) {
     if (!workspace) continue;
-    if (workspace.mainPane) {
-      const match = workspace.mainPane.id.match(/^pane-(\d+)$/);
-      if (match) {
-        maxId = Math.max(maxId, parseInt(match[1]!, 10));
-      }
-    }
-    for (const pane of workspace.stackPanes) {
-      const match = pane.id.match(/^pane-(\d+)$/);
-      if (match) {
-        maxId = Math.max(maxId, parseInt(match[1]!, 10));
+    const panes: LayoutNode[] = [];
+    if (workspace.mainPane) panes.push(workspace.mainPane);
+    panes.push(...workspace.stackPanes);
+    for (const node of panes) {
+      for (const pane of collectPanes(node)) {
+        const match = pane.id.match(/^pane-(\d+)$/);
+        if (match) {
+          maxId = Math.max(maxId, parseInt(match[1]!, 10));
+        }
       }
     }
   }
   paneIdCounter = maxId;
+}
+
+/**
+ * Generate a unique split ID
+ */
+export function generateSplitId(): string {
+  return `split-${++splitIdCounter}`;
+}
+
+/**
+ * Sync split ID counter with loaded splits to avoid ID conflicts
+ */
+export function syncSplitIdCounter(workspaces: Workspaces): void {
+  let maxId = splitIdCounter;
+  const scan = (node: LayoutNode | null) => {
+    if (!node) return;
+    if (isSplitNode(node)) {
+      const match = node.id.match(/^split-(\d+)$/);
+      if (match) {
+        maxId = Math.max(maxId, parseInt(match[1]!, 10));
+      }
+      scan(node.first);
+      scan(node.second);
+    }
+  };
+
+  for (const workspace of Object.values(workspaces)) {
+    if (!workspace) continue;
+    scan(workspace.mainPane);
+    for (const pane of workspace.stackPanes) {
+      scan(pane);
+    }
+  }
+
+  splitIdCounter = maxId;
 }
 
 /**

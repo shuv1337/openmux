@@ -6,10 +6,23 @@
 import { Effect } from "effect"
 import { runEffect } from "../runtime"
 import { TemplateStorage } from "../services"
-import type { TemplateSession, TemplateWorkspace, TemplatePaneData } from "../models"
+import type {
+  TemplateSession,
+  TemplateWorkspace,
+  TemplatePaneData,
+  TemplateLayoutNode,
+  TemplateWorkspaceLayout,
+} from "../models"
 import type { Workspaces } from "../../core/operations/layout-actions"
-import type { Workspace, PaneData, WorkspaceId } from "../../core/types"
-import { createWorkspace, generatePaneId, resetPaneIdCounter } from "../../core/operations/layout-actions/helpers"
+import type { Workspace, PaneData, WorkspaceId, LayoutNode } from "../../core/types"
+import { getFirstPane } from "../../core/layout-tree"
+import {
+  createWorkspace,
+  generatePaneId,
+  generateSplitId,
+  resetPaneIdCounter,
+  resetSplitIdCounter,
+} from "../../core/operations/layout-actions/helpers"
 
 // =============================================================================
 // Storage Functions
@@ -99,6 +112,71 @@ function resolveWorkspacePanes(
   return buildDefaultPanes(paneCount, defaultCwd)
 }
 
+function buildLayoutNodeFromTemplate(
+  node: TemplateLayoutNode,
+  cwdMap: Map<string, string>,
+  commandMap: Map<string, string>,
+  defaultCwd: string
+): LayoutNode {
+  if (node.type === "split") {
+    return {
+      type: "split",
+      id: generateSplitId(),
+      direction: node.direction,
+      ratio: node.ratio,
+      first: buildLayoutNodeFromTemplate(node.first, cwdMap, commandMap, defaultCwd),
+      second: buildLayoutNodeFromTemplate(node.second, cwdMap, commandMap, defaultCwd),
+    }
+  }
+
+  const paneId = generatePaneId()
+  const pane: PaneData = {
+    id: paneId,
+    title: "shell",
+  }
+  cwdMap.set(paneId, node.cwd ?? defaultCwd)
+  if (node.command) {
+    commandMap.set(paneId, node.command)
+  }
+  return pane
+}
+
+function buildWorkspaceFromTemplateLayout(
+  layout: TemplateWorkspaceLayout,
+  cwdMap: Map<string, string>,
+  commandMap: Map<string, string>,
+  defaultCwd: string
+): {
+  mainPane: LayoutNode | null
+  stackPanes: LayoutNode[]
+  focusedPaneId: string | null
+  activeStackIndex: number
+} {
+  let mainLayout = layout.main
+  let stackLayouts = layout.stack
+
+  if (!mainLayout && stackLayouts.length > 0) {
+    mainLayout = stackLayouts[0]!
+    stackLayouts = stackLayouts.slice(1)
+  }
+
+  const mainPane = mainLayout
+    ? buildLayoutNodeFromTemplate(mainLayout, cwdMap, commandMap, defaultCwd)
+    : null
+  const stackPanes = stackLayouts.map((node) =>
+    buildLayoutNodeFromTemplate(node, cwdMap, commandMap, defaultCwd)
+  )
+  const focusedPane =
+    getFirstPane(mainPane) ?? (stackPanes.length > 0 ? getFirstPane(stackPanes[0]!) : null)
+
+  return {
+    mainPane,
+    stackPanes,
+    focusedPaneId: focusedPane?.id ?? null,
+    activeStackIndex: stackPanes.length > 0 ? 0 : 0,
+  }
+}
+
 export function buildLayoutFromTemplate(
   template: TemplateSession
 ): {
@@ -108,6 +186,7 @@ export function buildLayoutFromTemplate(
   activeWorkspaceId: WorkspaceId
 } {
   resetPaneIdCounter()
+  resetSplitIdCounter()
   const cwdMap = new Map<string, string>()
   const commandMap = new Map<string, string>()
   const workspaces: Workspaces = {}
@@ -128,40 +207,54 @@ export function buildLayoutFromTemplate(
     const workspaceId = id as WorkspaceId
     const templateWorkspace = workspaceMap.get(id)
     const layoutMode = templateWorkspace?.layoutMode ?? template.defaults.layoutMode
-    const panes = resolveWorkspacePanes(
-      templateWorkspace,
-      template.defaults.paneCount,
-      template.defaults.cwd
-    )
 
     const workspace: Workspace = createWorkspace(workspaceId, layoutMode)
     const paneDefaultsCwd = template.defaults.cwd ?? process.cwd()
-
-    const mainPaneData = panes[0]
-    const mainPaneId = generatePaneId()
-    workspace.mainPane = {
-      id: mainPaneId,
-      title: "shell",
-    } satisfies PaneData
-    cwdMap.set(mainPaneId, mainPaneData.cwd ?? paneDefaultsCwd)
-    if (mainPaneData.command) {
-      commandMap.set(mainPaneId, mainPaneData.command)
-    }
-
-    const stackPanes: PaneData[] = []
-    for (const pane of panes.slice(1)) {
-      const paneId = generatePaneId()
-      stackPanes.push({ id: paneId, title: "shell" })
-      cwdMap.set(paneId, pane.cwd ?? paneDefaultsCwd)
-      if (pane.command) {
-        commandMap.set(paneId, pane.command)
+    const templateLayout = templateWorkspace?.layout
+    if (templateLayout && (templateLayout.main !== null || templateLayout.stack.length > 0)) {
+      const builtLayout = buildWorkspaceFromTemplateLayout(
+        templateLayout,
+        cwdMap,
+        commandMap,
+        paneDefaultsCwd
+      )
+      workspace.mainPane = builtLayout.mainPane
+      workspace.stackPanes = builtLayout.stackPanes
+      workspace.focusedPaneId = builtLayout.focusedPaneId
+      workspace.activeStackIndex = builtLayout.activeStackIndex
+      workspace.zoomed = false
+    } else {
+      const panes = resolveWorkspacePanes(
+        templateWorkspace,
+        template.defaults.paneCount,
+        template.defaults.cwd
+      )
+      const mainPaneData = panes[0]
+      const mainPaneId = generatePaneId()
+      workspace.mainPane = {
+        id: mainPaneId,
+        title: "shell",
+      } satisfies PaneData
+      cwdMap.set(mainPaneId, mainPaneData.cwd ?? paneDefaultsCwd)
+      if (mainPaneData.command) {
+        commandMap.set(mainPaneId, mainPaneData.command)
       }
-    }
 
-    workspace.stackPanes = stackPanes
-    workspace.focusedPaneId = mainPaneId
-    workspace.activeStackIndex = 0
-    workspace.zoomed = false
+      const stackPanes: PaneData[] = []
+      for (const pane of panes.slice(1)) {
+        const paneId = generatePaneId()
+        stackPanes.push({ id: paneId, title: "shell" })
+        cwdMap.set(paneId, pane.cwd ?? paneDefaultsCwd)
+        if (pane.command) {
+          commandMap.set(paneId, pane.command)
+        }
+      }
+
+      workspace.stackPanes = stackPanes
+      workspace.focusedPaneId = mainPaneId
+      workspace.activeStackIndex = 0
+      workspace.zoomed = false
+    }
 
     workspaces[workspaceId] = workspace
   }

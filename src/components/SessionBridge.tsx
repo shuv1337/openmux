@@ -9,6 +9,7 @@ import { useTerminal } from '../contexts/TerminalContext';
 import { SessionProvider } from '../contexts/SessionContext';
 import type { WorkspaceId } from '../core/types';
 import type { Workspaces } from '../core/operations/layout-actions';
+import { collectPanes } from '../core/layout-tree';
 import {
   clearPtyTracking,
   setSessionCwdMap,
@@ -64,16 +65,15 @@ export function SessionBridge(props: SessionBridgeProps) {
     if (restoredPtys && restoredPtys.size > 0) {
       for (const workspace of Object.values(workspaces)) {
         if (!workspace) continue;
-        if (workspace.mainPane) {
-          const ptyId = restoredPtys.get(workspace.mainPane.id);
-          if (ptyId) {
-            workspace.mainPane.ptyId = ptyId;
-          }
-        }
-        for (const pane of workspace.stackPanes) {
-          const ptyId = restoredPtys.get(pane.id);
-          if (ptyId) {
-            pane.ptyId = ptyId;
+        const nodes = [];
+        if (workspace.mainPane) nodes.push(workspace.mainPane);
+        nodes.push(...workspace.stackPanes);
+        for (const node of nodes) {
+          for (const pane of collectPanes(node)) {
+            const ptyId = restoredPtys.get(pane.id);
+            if (ptyId) {
+              pane.ptyId = ptyId;
+            }
           }
         }
       }

@@ -5,6 +5,7 @@
 import type { Workspace } from '../../types';
 import type { LayoutState } from './types';
 import { getActiveWorkspace, updateWorkspace, recalculateLayout } from './helpers';
+import { containsPane } from '../../layout-tree';
 
 /**
  * Handle FOCUS_PANE action
@@ -20,7 +21,8 @@ export function handleFocusPane(state: LayoutState, paneId: string): LayoutState
 
   // Update activeStackIndex if focusing a stack pane
   let activeStackIndex = workspace.activeStackIndex;
-  const stackIndex = workspace.stackPanes.findIndex(p => p.id === paneId);
+  const stackIndex = workspace.stackPanes.findIndex(p => containsPane(p, paneId));
+  const stackIndexChanged = stackIndex >= 0 && stackIndex !== workspace.activeStackIndex;
   if (stackIndex >= 0) {
     activeStackIndex = stackIndex;
   }
@@ -31,8 +33,10 @@ export function handleFocusPane(state: LayoutState, paneId: string): LayoutState
     activeStackIndex,
   };
 
+  // In stacked layout, switching active stack entry needs a layout pass to set rectangles.
+  const needsStackedRecalc = workspace.layoutMode === 'stacked' && stackIndexChanged;
   // If zoomed, recalculate layout so new focused pane gets fullscreen
-  if (workspace.zoomed) {
+  if (workspace.zoomed || needsStackedRecalc) {
     updated = recalculateLayout(updated, state.viewport, state.config);
   }
 

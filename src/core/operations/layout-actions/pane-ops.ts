@@ -6,6 +6,7 @@
 import type { Direction, LayoutMode, Workspace } from '../../types';
 import type { LayoutState } from './types';
 import { getActiveWorkspace, updateWorkspace, recalculateLayout } from './helpers';
+import { containsPane, swapPaneInDirection, updatePaneInNode } from '../../layout-tree';
 
 /**
  * Handle SET_LAYOUT_MODE action
@@ -29,16 +30,18 @@ export function handleSetPanePty(state: LayoutState, paneId: string, ptyId: stri
 
   let updated: Workspace = workspace;
 
-  if (workspace.mainPane?.id === paneId) {
+  if (workspace.mainPane && containsPane(workspace.mainPane, paneId)) {
     updated = {
       ...workspace,
-      mainPane: { ...workspace.mainPane, ptyId },
+      mainPane: updatePaneInNode(workspace.mainPane, paneId, pane => ({ ...pane, ptyId })),
     };
   } else {
     updated = {
       ...workspace,
-      stackPanes: workspace.stackPanes.map(p =>
-        p.id === paneId ? { ...p, ptyId } : p
+      stackPanes: workspace.stackPanes.map((pane) =>
+        containsPane(pane, paneId)
+          ? updatePaneInNode(pane, paneId, target => ({ ...target, ptyId }))
+          : pane
       ),
     };
   }
@@ -55,16 +58,18 @@ export function handleSetPaneTitle(state: LayoutState, paneId: string, title: st
 
   let updated: Workspace = workspace;
 
-  if (workspace.mainPane?.id === paneId) {
+  if (workspace.mainPane && containsPane(workspace.mainPane, paneId)) {
     updated = {
       ...workspace,
-      mainPane: { ...workspace.mainPane, title },
+      mainPane: updatePaneInNode(workspace.mainPane, paneId, pane => ({ ...pane, title })),
     };
   } else {
     updated = {
       ...workspace,
-      stackPanes: workspace.stackPanes.map(p =>
-        p.id === paneId ? { ...p, title } : p
+      stackPanes: workspace.stackPanes.map((pane) =>
+        containsPane(pane, paneId)
+          ? updatePaneInNode(pane, paneId, target => ({ ...target, title }))
+          : pane
       ),
     };
   }
@@ -79,10 +84,10 @@ export function handleSetPaneTitle(state: LayoutState, paneId: string, title: st
 export function handleSwapMain(state: LayoutState): LayoutState {
   const workspace = getActiveWorkspace(state);
   if (!workspace.mainPane || !workspace.focusedPaneId) return state;
-  if (workspace.focusedPaneId === workspace.mainPane.id) return state;
+  if (containsPane(workspace.mainPane, workspace.focusedPaneId)) return state;
 
   const focusedStackIndex = workspace.stackPanes.findIndex(
-    p => p.id === workspace.focusedPaneId
+    p => containsPane(p, workspace.focusedPaneId!)
   );
   if (focusedStackIndex === -1) return state;
 
@@ -109,9 +114,35 @@ export function handleMovePane(state: LayoutState, direction: Direction): Layout
   if (!workspace.mainPane || !workspace.focusedPaneId) return state;
 
   const focusedId = workspace.focusedPaneId;
-  const isMain = workspace.mainPane.id === focusedId;
-  const stackIndex = workspace.stackPanes.findIndex(p => p.id === focusedId);
+  const isMain = containsPane(workspace.mainPane, focusedId);
+  const stackIndex = workspace.stackPanes.findIndex(p => containsPane(p, focusedId));
   const stackCount = workspace.stackPanes.length;
+  const focusedRoot = stackIndex >= 0 ? workspace.stackPanes[stackIndex]! : workspace.mainPane;
+
+  if (focusedRoot) {
+    const result = swapPaneInDirection(focusedRoot, focusedId, direction);
+    if (result.swapped) {
+      let updated: Workspace;
+      if (stackIndex >= 0) {
+        const newStack = workspace.stackPanes.map((pane, index) =>
+          index === stackIndex ? result.node : pane
+        );
+        updated = {
+          ...workspace,
+          stackPanes: newStack,
+          activeStackIndex: stackIndex >= 0 ? stackIndex : workspace.activeStackIndex,
+        };
+      } else {
+        updated = {
+          ...workspace,
+          mainPane: result.node,
+        };
+      }
+
+      updated = recalculateLayout(updated, state.viewport, state.config);
+      return { ...state, workspaces: updateWorkspace(state, updated), layoutVersion: state.layoutVersion + 1 };
+    }
+  }
 
   if ((direction === 'north' || direction === 'south') && stackIndex === -1) {
     return state;

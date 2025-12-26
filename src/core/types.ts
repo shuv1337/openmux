@@ -34,13 +34,13 @@ export interface PaneData {
 
 /**
  * Workspace using master-stack layout (like Zellij)
- * - mainPane: the primary pane (left for vertical, top for horizontal)
- * - stackPanes: secondary panes arranged based on layout mode
+ * - mainPane: the primary layout node (left for vertical, top for horizontal)
+ * - stackPanes: secondary layout nodes arranged based on layout mode
  */
 export interface Workspace {
   id: WorkspaceId;
-  mainPane: PaneData | null;
-  stackPanes: PaneData[];
+  mainPane: LayoutNode | null;
+  stackPanes: LayoutNode[];
   focusedPaneId: NodeId | null;
   /** For stacked mode: which stack pane is visible */
   activeStackIndex: number;
@@ -100,7 +100,7 @@ export interface PaneNode {
 }
 
 /** Layout node - either a split or a pane */
-export type LayoutNode = SplitNode | PaneNode;
+export type LayoutNode = SplitNode | PaneData;
 
 /**
  * Terminal cell from libghostty-vt or fallback parser
@@ -318,11 +318,24 @@ export interface SerializedPaneData {
   cwd: string;
 }
 
+/** Serializable split node for persistence */
+export interface SerializedSplitNode {
+  type: 'split';
+  id: string;
+  direction: SplitDirection;
+  ratio: number;
+  first: SerializedLayoutNode;
+  second: SerializedLayoutNode;
+}
+
+/** Serializable layout node - pane or split */
+export type SerializedLayoutNode = SerializedPaneData | SerializedSplitNode;
+
 /** Serializable workspace state */
 export interface SerializedWorkspace {
   id: WorkspaceId;
-  mainPane: SerializedPaneData | null;
-  stackPanes: SerializedPaneData[];
+  mainPane: SerializedLayoutNode | null;
+  stackPanes: SerializedLayoutNode[];
   focusedPaneId: string | null;
   activeStackIndex: number;
   layoutMode: LayoutMode;

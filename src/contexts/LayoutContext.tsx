@@ -11,7 +11,7 @@ import {
   type ParentProps,
 } from 'solid-js';
 import { createStore, unwrap, reconcile, produce } from 'solid-js/store';
-import type { Workspace, WorkspaceId, PaneData, Direction, LayoutMode } from '../core/types';
+import type { Workspace, WorkspaceId, PaneData, Direction, LayoutMode, SplitDirection } from '../core/types';
 import type { LayoutConfig} from '../core/config';
 import { DEFAULT_CONFIG } from '../core/config';
 import {
@@ -19,6 +19,7 @@ import {
   getWorkspacePaneCount,
   calculateMasterStackLayout,
 } from '../core/operations/master-stack-layout';
+import { containsPane, updatePaneInNode } from '../core/layout-tree';
 import {
   layoutReducer,
   getActiveWorkspace,
@@ -45,6 +46,7 @@ interface LayoutContextValue {
   focusPane: (paneId: string) => void;
   navigate: (direction: Direction) => void;
   newPane: (title?: string) => void;
+  splitPane: (direction: SplitDirection, title?: string) => void;
   /** Create pane with PTY already attached - single render, no stutter */
   newPaneWithPty: (ptyId: string, title?: string) => string;
   closePane: () => void;
@@ -149,19 +151,26 @@ export function LayoutProvider(props: LayoutProviderProps) {
   // This avoids diffing the entire workspaces object for a single property change
   const applySetPanePty = (paneId: string, ptyId: string) => {
     const wsId = state.activeWorkspaceId;
-    const workspace = state.workspaces[wsId];
 
-    if (workspace?.mainPane?.id === paneId) {
-      // Direct path update for main pane
-      setState('workspaces', wsId, 'mainPane', 'ptyId', ptyId);
-    } else if (workspace) {
-      // Find stack pane index and update directly
-      const stackIndex = workspace.stackPanes.findIndex(p => p.id === paneId);
-      if (stackIndex !== -1) {
-        setState('workspaces', wsId, 'stackPanes', stackIndex, 'ptyId', ptyId);
+    setState(produce((draft) => {
+      const workspace = draft.workspaces[wsId];
+      if (!workspace) return;
+
+      if (workspace.mainPane && containsPane(workspace.mainPane, paneId)) {
+        workspace.mainPane = updatePaneInNode(
+          workspace.mainPane,
+          paneId,
+          pane => ({ ...pane, ptyId })
+        );
+        return;
       }
-    }
 
+      workspace.stackPanes = workspace.stackPanes.map((pane) =>
+        containsPane(pane, paneId)
+          ? updatePaneInNode(pane, paneId, target => ({ ...target, ptyId }))
+          : pane
+      );
+    }));
   };
 
   // Fast path for NEW_PANE - use produce for direct mutations instead of reconcile
@@ -195,16 +204,8 @@ export function LayoutProvider(props: LayoutProviderProps) {
         workspace.activeStackIndex = workspace.stackPanes.length - 1;
       }
 
-      // Recalculate layout and apply rectangles in-place
-      const calculated = calculateMasterStackLayout(workspace, draft.viewport, draft.config);
-      if (workspace.mainPane && calculated.mainPane) {
-        workspace.mainPane.rectangle = calculated.mainPane.rectangle;
-      }
-      for (let i = 0; i < workspace.stackPanes.length; i++) {
-        if (calculated.stackPanes[i]) {
-          workspace.stackPanes[i]!.rectangle = calculated.stackPanes[i]!.rectangle;
-        }
-      }
+      // Recalculate layout with split-aware rectangles
+      draft.workspaces[wsId] = calculateMasterStackLayout(workspace, draft.viewport, draft.config);
 
       draft.layoutVersion++;
     }));
@@ -277,6 +278,8 @@ export function LayoutProvider(props: LayoutProviderProps) {
   const focusPane = (paneId: string) => dispatch({ type: 'FOCUS_PANE', paneId });
   const navigate = (direction: Direction) => dispatch({ type: 'NAVIGATE', direction });
   const newPane = (title?: string) => dispatch({ type: 'NEW_PANE', title });
+  const splitPane = (direction: SplitDirection, title?: string) =>
+    dispatch({ type: 'SPLIT_PANE', direction, title });
   const closePane = () => dispatch({ type: 'CLOSE_PANE' });
   const closePaneById = (paneId: string) => dispatch({ type: 'CLOSE_PANE_BY_ID', paneId });
   const setViewport = (viewport: { x: number; y: number; width: number; height: number }) =>
@@ -341,6 +344,7 @@ export function LayoutProvider(props: LayoutProviderProps) {
     focusPane,
     navigate,
     newPane,
+    splitPane,
     newPaneWithPty,
     closePane,
     closePaneById,

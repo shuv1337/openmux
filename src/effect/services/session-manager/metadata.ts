@@ -9,6 +9,7 @@ import {
   SerializedSession,
   SessionMetadata,
   SessionIndex,
+  type SerializedLayoutNode,
 } from "../../models"
 import type { SessionId } from "../../types"
 import { getAutoName } from "./serialization"
@@ -22,6 +23,15 @@ export interface MetadataDeps {
  */
 export function createMetadataOperations(deps: MetadataDeps) {
   const { storage } = deps
+
+  const countPanes = (node: SerializedLayoutNode | null): number => {
+    if (!node) return 0
+    if ((node as { type?: string }).type === "split") {
+      const split = node as SerializedLayoutNode & { first: SerializedLayoutNode; second: SerializedLayoutNode }
+      return countPanes(split.first) + countPanes(split.second)
+    }
+    return 1
+  }
 
   const renameSession = Effect.fn("SessionManager.renameSession")(
     function* (id: SessionId, newName: string) {
@@ -100,8 +110,10 @@ export function createMetadataOperations(deps: MetadataDeps) {
       for (const ws of session.workspaces) {
         if (ws.mainPane || ws.stackPanes.length > 0) {
           workspaceCount++
-          if (ws.mainPane) paneCount++
-          paneCount += ws.stackPanes.length
+          paneCount += countPanes(ws.mainPane)
+          for (const pane of ws.stackPanes) {
+            paneCount += countPanes(pane)
+          }
         }
       }
 

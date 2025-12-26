@@ -61,6 +61,12 @@ export function handleNormalModeAction(
     case 'pane.new':
       options.onNewPane ? options.onNewPane() : layout.newPane();
       return true;
+    case 'pane.split.vertical':
+      layout.splitPane('vertical');
+      return true;
+    case 'pane.split.horizontal':
+      layout.splitPane('horizontal');
+      return true;
     case 'pane.close':
       options.onRequestClosePane ? options.onRequestClosePane() : layout.closePane();
       return true;
@@ -156,6 +162,14 @@ export function handlePrefixModeAction(
   switch (action) {
     case 'pane.new':
       options.onNewPane ? options.onNewPane() : layout.newPane();
+      exitPrefix();
+      return true;
+    case 'pane.split.vertical':
+      layout.splitPane('vertical');
+      exitPrefix();
+      return true;
+    case 'pane.split.horizontal':
+      layout.splitPane('horizontal');
       exitPrefix();
       return true;
     case 'pane.close':

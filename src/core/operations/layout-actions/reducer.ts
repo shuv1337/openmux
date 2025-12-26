@@ -7,6 +7,7 @@ import type { LayoutState, LayoutAction } from './types';
 import { handleFocusPane } from './focus-pane';
 import { handleNavigate } from './navigate';
 import { handleNewPane } from './new-pane';
+import { handleSplitPane } from './split-pane';
 import { handleClosePane, handleClosePaneById } from './close-pane';
 import { handleSetViewport, handleSwitchWorkspace, handleLoadSession, handleClearAll } from './workspace-ops';
 import { handleSetLayoutMode, handleSetPanePty, handleSetPaneTitle, handleSwapMain, handleMovePane, handleToggleZoom } from './pane-ops';
@@ -27,6 +28,9 @@ export function layoutReducer(state: LayoutState, action: LayoutAction): LayoutS
 
     case 'NEW_PANE':
       return handleNewPane(state, action.ptyId, action.title);
+
+    case 'SPLIT_PANE':
+      return handleSplitPane(state, action.direction, action.ptyId, action.title);
 
     case 'CLOSE_PANE':
       return handleClosePane(state);

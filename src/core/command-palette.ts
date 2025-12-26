@@ -15,6 +15,20 @@ const BASE_COMMANDS: CommandPaletteCommand[] = [
     keywords: ['split', 'new'],
   },
   {
+    id: 'pane.split.vertical',
+    title: 'Split pane vertical',
+    description: 'Split the focused pane left/right',
+    action: 'pane.split.vertical',
+    keywords: ['split', 'vertical', 'pane'],
+  },
+  {
+    id: 'pane.split.horizontal',
+    title: 'Split pane horizontal',
+    description: 'Split the focused pane top/bottom',
+    action: 'pane.split.horizontal',
+    keywords: ['split', 'horizontal', 'pane'],
+  },
+  {
     id: 'pane.close',
     title: 'Close pane',
     description: 'Close the focused pane',
