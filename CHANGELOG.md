@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.57](https://github.com/monotykamary/openmux/compare/v0.2.56...v0.2.57) (2025-12-26)
+
+
+### Features
+
+* add split-tree panes with template persistence ([9ccfa0e](https://github.com/monotykamary/openmux/commit/9ccfa0ec1b3757952a63a9bef86b059c80119688))
+
+
+### Bug Fixes
+
+* improve navigation and move in split trees ([8e3ff79](https://github.com/monotykamary/openmux/commit/8e3ff79b4730c3ca024040c2227e0b08a118bd24))
+
 ### [0.2.56](https://github.com/monotykamary/openmux/compare/v0.2.55...v0.2.56) (2025-12-26)
 
 
