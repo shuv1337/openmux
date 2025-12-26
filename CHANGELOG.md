@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.56](https://github.com/monotykamary/openmux/compare/v0.2.55...v0.2.56) (2025-12-26)
+
+
+### Features
+
+* **templates:** add default bindings and docs ([6ae6179](https://github.com/monotykamary/openmux/commit/6ae6179aaebed997f81c9e1d1c46a00d13d98a9e))
+
+
+### Bug Fixes
+
+* **aggregate:** allow preview input across sessions ([486a659](https://github.com/monotykamary/openmux/commit/486a65907a5a6be941b54cb86852f1e44c1d89d8))
+
 ### [0.2.55](https://github.com/monotykamary/openmux/compare/v0.2.54...v0.2.55) (2025-12-26)
 
 
