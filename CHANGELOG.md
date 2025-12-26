@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.47](https://github.com/monotykamary/openmux/compare/v0.2.46...v0.2.47) (2025-12-26)
+
+
+### Features
+
+* **theme:** add search accent color ([e4f2916](https://github.com/monotykamary/openmux/commit/e4f29164d87f15567930e7034876a06f19ff2060))
+
 ### [0.2.46](https://github.com/monotykamary/openmux/compare/v0.2.45...v0.2.46) (2025-12-26)
 
 
