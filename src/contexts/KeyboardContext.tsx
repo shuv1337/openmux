@@ -41,7 +41,6 @@ export function KeyboardProvider(props: KeyboardProviderProps) {
   const config = useConfig();
   const initialState: KeyboardState = {
     mode: 'normal',
-    showHints: false,
   };
 
   const [state, setState] = createStore<KeyboardState>(initialState);
@@ -124,10 +123,6 @@ export function KeyboardProvider(props: KeyboardProviderProps) {
     }));
   };
 
-  const toggleHints = () => {
-    setState('showHints', (prev) => !prev);
-  };
-
   const value: KeyboardContextValue = {
     state,
     enterPrefixMode,
@@ -140,7 +135,6 @@ export function KeyboardProvider(props: KeyboardProviderProps) {
     exitMoveMode,
     enterConfirmMode,
     exitConfirmMode,
-    toggleHints,
   };
 
   return (

@@ -103,7 +103,7 @@ ThemeProvider              // Styling/theming
 **UI components (src/components/)**
 - `PaneContainer.tsx`, `Pane.tsx`, `TerminalView.tsx` - Pane rendering
 - `AggregateView.tsx`, `SessionPicker.tsx`, `SearchOverlay.tsx`
-- `StatusBar.tsx`, `KeyboardHints.tsx`, `CopyNotification.tsx`
+- `StatusBar.tsx`, `CopyNotification.tsx`
 
 **SolidJS contexts (src/contexts/)**
 - `LayoutContext.tsx`, `TerminalContext.tsx`, `KeyboardContext.tsx`

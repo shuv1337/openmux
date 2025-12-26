@@ -16,7 +16,6 @@ export interface KeyboardContextValue {
   exitMoveMode: () => void;
   enterConfirmMode: (confirmationType: ConfirmationType) => void;
   exitConfirmMode: () => void;
-  toggleHints: () => void;
 }
 
 export interface KeyboardHandlerOptions {

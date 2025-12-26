@@ -233,7 +233,6 @@ export type ConfirmationType =
 export interface KeyboardState {
   mode: KeyMode;
   prefixActivatedAt?: number;
-  showHints: boolean;
   /** Type of action being confirmed (when mode is 'confirm') */
   confirmationType?: ConfirmationType;
 }

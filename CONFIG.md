@@ -111,7 +111,6 @@ prefixTimeoutMs = 2_000
   "`" = "console.toggle"
   q = "app.quit"
   d = "app.detach"
-  "?" = "hints.toggle"
   escape = "mode.cancel"
 
   [keybindings.move]

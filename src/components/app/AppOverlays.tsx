@@ -11,7 +11,6 @@ import type { ConfirmationType } from '../../core/types';
 import { DEFAULT_COMMAND_PALETTE_COMMANDS, type CommandPaletteCommand } from '../../core/command-palette';
 import {
   StatusBar,
-  KeyboardHints,
   CopyNotification,
   ConfirmationDialog,
 } from '../index';
@@ -47,8 +46,6 @@ export function AppOverlays(props: AppOverlaysProps) {
   return (
     <>
       <StatusBar width={props.width} showCommandPalette={props.commandPaletteState.show} />
-
-      <KeyboardHints width={props.width} height={props.height} />
 
       <SessionPicker width={props.width} height={props.height} />
 

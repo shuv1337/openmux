@@ -135,7 +135,6 @@ bun dev        # Run with watch mode
 - `]` - Paste from clipboard
 - `d` - Detach (leave session running)
 - `r` - Enter resize mode
-- `?` - Toggle keyboard hints
 - `Esc` - Exit prefix mode
 
 ### Resize Mode

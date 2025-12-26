@@ -108,9 +108,6 @@ export function handleNormalModeAction(
     case 'mode.move':
       keyboard.enterMoveMode();
       return true;
-    case 'hints.toggle':
-      keyboard.toggleHints();
-      return true;
     case 'app.quit':
       options.onRequestQuit ? options.onRequestQuit() : options.onQuit?.();
       return true;
@@ -227,9 +224,6 @@ export function handlePrefixModeAction(
     case 'console.toggle':
       options.onToggleConsole?.();
       exitPrefix();
-      return true;
-    case 'hints.toggle':
-      keyboard.toggleHints();
       return true;
     case 'app.quit':
       options.onRequestQuit ? options.onRequestQuit() : options.onQuit?.();

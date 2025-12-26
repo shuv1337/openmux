@@ -134,13 +134,6 @@ const BASE_COMMANDS: CommandPaletteCommand[] = [
     keywords: ['paste', 'clipboard'],
   },
   {
-    id: 'hints.toggle',
-    title: 'Toggle keyboard hints',
-    description: 'Show or hide keyboard hints',
-    action: 'hints.toggle',
-    keywords: ['hints', 'help', 'keys'],
-  },
-  {
     id: 'console.toggle',
     title: 'Toggle debug console',
     description: 'Show or hide the debug console',

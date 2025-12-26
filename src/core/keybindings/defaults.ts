@@ -50,7 +50,6 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
     '`': 'console.toggle',
     'q': 'app.quit',
     'd': 'app.detach',
-    '?': 'hints.toggle',
     'escape': 'mode.cancel',
     ...Object.fromEntries(
       Array.from({ length: 9 }, (_, i) => [`${i + 1}`, `workspace.switch.${i + 1}`])
