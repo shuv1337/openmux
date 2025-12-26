@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.46](https://github.com/monotykamary/openmux/compare/v0.2.45...v0.2.46) (2025-12-26)
+
+
+### Features
+
+* support kitty key release events ([32070f2](https://github.com/monotykamary/openmux/commit/32070f2c963abac49f141e7b7037f07c2d7966d8))
+
+
+### Refactoring
+
+* centralize overlay keyboard handling ([4a62e7e](https://github.com/monotykamary/openmux/commit/4a62e7e98ea3e15998053cf947394f44a3e757bf))
+* share keyboard event type ([3374724](https://github.com/monotykamary/openmux/commit/3374724937502cc74e90320eb020ddd1b9e27ab3))
+
 ### [0.2.45](https://github.com/monotykamary/openmux/compare/v0.2.44...v0.2.45) (2025-12-26)
 
 
