@@ -8,6 +8,7 @@ import type { InternalPtySession } from "./types"
 interface DataHandlerOptions {
   session: InternalPtySession
   syncParser: SyncModeParser
+  commandParser?: { processData: (data: string) => void }
   syncTimeoutMs?: number
 }
 
@@ -21,7 +22,7 @@ interface DataHandlerState {
  * Returns the data handler function and cleanup function
  */
 export function createDataHandler(options: DataHandlerOptions) {
-  const { session, syncParser, syncTimeoutMs = 100 } = options
+  const { session, syncParser, commandParser, syncTimeoutMs = 100 } = options
   const maxSegmentsPerTick = 8
   const maxCharsPerTick = 32_768
   const maxBudgetMs = 4
@@ -99,6 +100,9 @@ export function createDataHandler(options: DataHandlerOptions) {
 
     // Then handle graphics passthrough (Kitty graphics, Sixel)
     const textData = session.graphicsPassthrough.process(afterQueries)
+    if (commandParser) {
+      commandParser.processData(textData)
+    }
 
     // Process through sync mode parser to respect frame boundaries
     // This buffers content between CSI ? 2026 h and CSI ? 2026 l

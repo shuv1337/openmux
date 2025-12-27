@@ -151,6 +151,11 @@ export async function getTitle(ptyId: string): Promise<string> {
   return (response.header.result as { title: string }).title ?? '';
 }
 
+export async function getLastCommand(ptyId: string): Promise<string | undefined> {
+  const response = await sendRequest('getLastCommand', { ptyId });
+  return (response.header.result as { command?: string }).command;
+}
+
 export async function registerPaneMapping(sessionId: string, paneId: string, ptyId: string): Promise<void> {
   await sendRequest('registerPane', { sessionId, paneId, ptyId });
 }

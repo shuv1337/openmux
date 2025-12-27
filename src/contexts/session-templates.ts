@@ -35,11 +35,78 @@ function normalizeCommand(command: string | undefined, shellPath: string, shellN
   return trimmed;
 }
 
+const SHELL_BUILTINS = new Set([
+  '.',
+  'alias',
+  'bg',
+  'break',
+  'cd',
+  'clear',
+  'continue',
+  'disown',
+  'eval',
+  'exec',
+  'exit',
+  'export',
+  'fg',
+  'hash',
+  'history',
+  'jobs',
+  'logout',
+  'pwd',
+  'read',
+  'reset',
+  'return',
+  'set',
+  'shift',
+  'source',
+  'test',
+  'trap',
+  'type',
+  'ulimit',
+  'umask',
+  'unalias',
+  'unset',
+  '[',
+  ']',
+]);
+
+function getCommandToken(command: string): string {
+  const trimmed = command.trim();
+  if (!trimmed) return '';
+  return trimmed.split(/\s+/)[0] ?? '';
+}
+
+function isTrivialShellCommand(command: string): boolean {
+  const token = getCommandToken(command);
+  if (!token) return true;
+  const base = token.split('/').pop() ?? token;
+  return SHELL_BUILTINS.has(base);
+}
+
+function commandMatchesProcess(command: string, processName: string): boolean {
+  const token = getCommandToken(command);
+  if (!token) return false;
+  if (token === processName) return true;
+  const base = token.split('/').pop() ?? token;
+  return base === processName;
+}
+
+function pickTemplateCommand(lastCommand: string | undefined, processName: string | undefined): string | undefined {
+  if (lastCommand && !isTrivialShellCommand(lastCommand)) {
+    if (!processName || commandMatchesProcess(lastCommand, processName)) {
+      return lastCommand;
+    }
+  }
+  return processName;
+}
+
 export async function buildTemplateFromWorkspaces(params: {
   name: string;
   workspaces: Workspaces;
   getCwd: (ptyId: string) => Promise<string>;
   getForegroundProcess: (ptyId: string) => Promise<string | undefined>;
+  getLastCommand: (ptyId: string) => Promise<string | undefined>;
   defaultLayoutMode: LayoutMode;
   fallbackCwd: string;
   now?: number;
@@ -74,15 +141,25 @@ export async function buildTemplateFromWorkspaces(params: {
       } catch {
         cwd = params.fallbackCwd;
       }
+      let lastCommand: string | undefined;
+      let processName: string | undefined;
       try {
-        command = await params.getForegroundProcess(pane.ptyId);
+        lastCommand = await params.getLastCommand(pane.ptyId);
       } catch {
-        command = undefined;
+        lastCommand = undefined;
       }
+      try {
+        processName = await params.getForegroundProcess(pane.ptyId);
+      } catch {
+        processName = undefined;
+      }
+      const normalizedLast = normalizeCommand(lastCommand, shellPath, shellName);
+      const normalizedProcess = normalizeCommand(processName, shellPath, shellName);
+      command = pickTemplateCommand(normalizedLast, normalizedProcess);
     }
     return {
       cwd,
-      command: normalizeCommand(command, shellPath, shellName),
+      command,
     };
   };
 

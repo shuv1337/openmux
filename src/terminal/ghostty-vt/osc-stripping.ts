@@ -27,6 +27,7 @@ export function stripProblematicOscSequences(text: string): string {
     7,
     10, 11, 12,
     22, 23,
+    777,
   ]);
 
   let result = '';

@@ -76,6 +76,8 @@ interface TerminalContextValue {
   getSessionCwd: (ptyId: string) => Promise<string>;
   /** Get the foreground process name for a specific PTY session */
   getSessionForegroundProcess: (ptyId: string) => Promise<string | undefined>;
+  /** Get the last shell command captured for a specific PTY session */
+  getSessionLastCommand: (ptyId: string) => Promise<string | undefined>;
   /** Get the cursor key mode (DECCKM) from the focused pane */
   getFocusedCursorKeyMode: () => 'normal' | 'application';
   /** Check if mouse tracking is enabled for a PTY */
@@ -388,6 +390,7 @@ export function TerminalProvider(props: TerminalProviderProps) {
     getFocusedCwd: cacheAccessors.getFocusedCwd,
     getSessionCwd: cacheAccessors.getSessionCwd,
     getSessionForegroundProcess: cacheAccessors.getSessionForegroundProcess,
+    getSessionLastCommand: cacheAccessors.getSessionLastCommand,
     getFocusedCursorKeyMode: cacheAccessors.getFocusedCursorKeyMode,
     isMouseTrackingEnabled: cacheAccessors.isMouseTrackingEnabled,
     isAlternateScreen: cacheAccessors.isAlternateScreen,

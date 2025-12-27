@@ -229,6 +229,12 @@ export function createRequestHandler(params: {
           return;
         }
 
+        case 'getLastCommand': {
+          const command = await params.withPty((pty) => pty.getLastCommand(PtyId.make(requestParams.ptyId as string)));
+          params.sendResponse(socket, requestId, { command });
+          return;
+        }
+
         case 'registerPane': {
           const sessionId = requestParams.sessionId as string;
           const paneId = requestParams.paneId as string;

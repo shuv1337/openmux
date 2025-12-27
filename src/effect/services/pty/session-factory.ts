@@ -8,6 +8,7 @@ import { GraphicsPassthrough } from "../../../terminal/graphics-passthrough"
 import { TerminalQueryPassthrough } from "../../../terminal/terminal-query-passthrough"
 import { createSyncModeParser } from "../../../terminal/sync-mode-parser"
 import { getCapabilityEnvironment } from "../../../terminal/capabilities"
+import { createCommandParser } from "../../../terminal/command-parser"
 import { PtySpawnError } from "../../errors"
 import type { PtyId, Cols, Rows} from "../../types";
 import { makePtyId } from "../../types"
@@ -16,6 +17,7 @@ import type { TerminalColors } from "../../../terminal/terminal-colors"
 import { notifySubscribers } from "./notification"
 import { createDataHandler } from "./data-handler"
 import { setupQueryPassthrough } from "./query-setup"
+import { prepareShellIntegration } from "./shell-integration"
 
 
 export interface SessionFactoryDeps {
@@ -46,6 +48,7 @@ export function createSession(
     const rows = options.rows
     const cwd = options.cwd ?? process.cwd()
     const shell = deps.defaultShell
+    const shellName = shell.split('/').pop() ?? ''
 
     // Create native emulator (libghostty-vt)
     const emulator = yield* Effect.try({
@@ -65,20 +68,23 @@ export function createSession(
     const capabilityEnv = getCapabilityEnvironment()
 
     // Spawn PTY asynchronously (fork happens off main thread)
+    const baseEnv = {
+      ...process.env,
+      ...capabilityEnv,
+      ...options.env,
+      TERM: "xterm-256color",
+      COLORTERM: "truecolor",
+    } as Record<string, string>
+
+    const shellLaunch = prepareShellIntegration(shell, baseEnv)
     const pty = yield* Effect.tryPromise({
       try: () =>
-        spawnAsync(shell, [], {
+        spawnAsync(shell, shellLaunch.args, {
           name: "xterm-256color",
           cols,
           rows,
           cwd,
-          env: {
-            ...process.env,
-            ...capabilityEnv,
-            ...options.env,
-            TERM: "xterm-256color",
-            COLORTERM: "truecolor",
-          } as Record<string, string>,
+          env: shellLaunch.env,
         }),
       catch: (error) =>
         PtySpawnError.make({ shell, cwd, cause: error }),
@@ -100,6 +106,7 @@ export function createSession(
       unifiedSubscribers: new Set(),
       exitCallbacks: new Set(),
       titleSubscribers: new Set(),
+      lastCommand: null,
       pendingNotify: false,
       scrollState: { viewportOffset: 0, lastScrollbackLength: 0 },
     }
@@ -130,10 +137,18 @@ export function createSession(
     // Create sync mode parser for DEC Mode 2026 (synchronized output)
     const syncParser = createSyncModeParser()
 
+    const commandParser = createCommandParser({
+      shellName,
+      onCommand: (command: string) => {
+        session.lastCommand = command
+      },
+    })
+
     // Set up data handler
     const { handleData } = createDataHandler({
       session,
       syncParser,
+      commandParser,
     })
 
     // Wire up PTY data handler

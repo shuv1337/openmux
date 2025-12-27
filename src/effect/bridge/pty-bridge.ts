@@ -92,6 +92,22 @@ export async function getPtyForegroundProcess(ptyId: string): Promise<string | u
 }
 
 /**
+ * Get the last shell command captured for a PTY session.
+ */
+export async function getPtyLastCommand(ptyId: string): Promise<string | undefined> {
+  try {
+    return await runEffect(
+      Effect.gen(function* () {
+        const pty = yield* Pty
+        return yield* pty.getLastCommand(PtyId.make(ptyId))
+      })
+    )
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Destroy a PTY session.
  * This is fire-and-forget - deferred to next macrotask to avoid blocking animations.
  * Using setTimeout(0) instead of queueMicrotask because microtasks run before

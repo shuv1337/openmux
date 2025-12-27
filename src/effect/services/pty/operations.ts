@@ -183,6 +183,11 @@ export function createOperations(deps: OperationsDeps) {
     return session.emulator.getTitle()
   })
 
+  const getLastCommand = Effect.fn("Pty.getLastCommand")(function* (id: PtyId) {
+    const session = yield* getSessionOrFail(id)
+    return session.lastCommand ?? undefined
+  })
+
   return {
     write,
     resize,
@@ -198,5 +203,6 @@ export function createOperations(deps: OperationsDeps) {
     destroyAll,
     listAll,
     getTitle,
+    getLastCommand,
   }
 }

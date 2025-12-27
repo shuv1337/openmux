@@ -16,6 +16,7 @@ export {
   resizePty,
   getPtyCwd,
   getPtyForegroundProcess,
+  getPtyLastCommand,
   destroyPty,
   destroyAllPtys,
   getTerminalState,

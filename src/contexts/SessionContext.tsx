@@ -120,6 +120,8 @@ interface SessionProviderProps extends ParentProps {
   getCwd: (ptyId: string) => Promise<string>;
   /** Function to get foreground process for a PTY ID */
   getForegroundProcess: (ptyId: string) => Promise<string | undefined>;
+  /** Function to get last shell command captured for a PTY ID */
+  getLastCommand: (ptyId: string) => Promise<string | undefined>;
   /** Function to get current workspaces */
   getWorkspaces: () => Workspaces;
   /** Function to get active workspace ID */
@@ -211,6 +213,7 @@ export function SessionProvider(props: SessionProviderProps) {
       workspaces: props.getWorkspaces(),
       getCwd: props.getCwd,
       getForegroundProcess: props.getForegroundProcess,
+      getLastCommand: props.getLastCommand,
       defaultLayoutMode: config.config().layout.defaultLayoutMode,
       fallbackCwd: process.env.OPENMUX_ORIGINAL_CWD ?? process.cwd(),
       shellPath: process.env.SHELL,

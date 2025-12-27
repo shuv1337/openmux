@@ -133,6 +133,9 @@ export class Pty extends Context.Tag("@openmux/Pty")<
     /** Get current terminal title for a PTY */
     readonly getTitle: (id: PtyId) => Effect.Effect<string, PtyNotFoundError>
 
+    /** Get last shell command captured for a PTY */
+    readonly getLastCommand: (id: PtyId) => Effect.Effect<string | undefined, PtyNotFoundError>
+
     /** Subscribe to terminal title changes for a PTY */
     readonly subscribeToTitleChange: (
       id: PtyId,
@@ -246,6 +249,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         getGitBranch: subscriptions.getGitBranch,
         subscribeToLifecycle: subscriptions.subscribeToLifecycle,
         getTitle: operations.getTitle,
+        getLastCommand: operations.getLastCommand,
         subscribeToTitleChange: subscriptions.subscribeToTitleChange,
         subscribeToAllTitleChanges: subscriptions.subscribeToAllTitleChanges,
       })
@@ -342,6 +346,8 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           ),
         getTitle: (id) =>
           Effect.promise(() => ShimClient.getTitle(String(id))),
+        getLastCommand: (id) =>
+          Effect.promise(() => ShimClient.getLastCommand(String(id))),
         subscribeToTitleChange: (id, callback) =>
           Effect.sync(() => ShimClient.subscribeToTitle(String(id), callback)),
         subscribeToAllTitleChanges: (callback) =>
@@ -399,6 +405,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
     getGitBranch: () => Effect.succeed(undefined),
     subscribeToLifecycle: () => Effect.succeed(() => {}),
     getTitle: () => Effect.succeed(""),
+    getLastCommand: () => Effect.succeed(undefined),
     subscribeToTitleChange: () => Effect.succeed(() => {}),
     subscribeToAllTitleChanges: () => Effect.succeed(() => {}),
   })

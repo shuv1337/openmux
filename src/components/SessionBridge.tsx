@@ -30,6 +30,7 @@ export function SessionBridge(props: SessionBridgeProps) {
     cleanupSessionPtys,
     getSessionCwd,
     getSessionForegroundProcess,
+    getSessionLastCommand,
     destroyAllPTYs,
   } = useTerminal();
 
@@ -42,6 +43,10 @@ export function SessionBridge(props: SessionBridgeProps) {
 
   const getForegroundProcess = async (ptyId: string) => {
     return getSessionForegroundProcess(ptyId);
+  };
+
+  const getLastCommand = async (ptyId: string) => {
+    return getSessionLastCommand(ptyId);
   };
 
   const getWorkspaces = () => {
@@ -157,6 +162,7 @@ export function SessionBridge(props: SessionBridgeProps) {
     <SessionProvider
       getCwd={getCwd}
       getForegroundProcess={getForegroundProcess}
+      getLastCommand={getLastCommand}
       getWorkspaces={getWorkspaces}
       getActiveWorkspaceId={getActiveWorkspaceId}
       onSessionLoad={onSessionLoad}

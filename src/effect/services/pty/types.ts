@@ -30,6 +30,8 @@ export interface InternalPtySession {
   exitCallbacks: Set<(exitCode: number) => void>
   /** Title change subscribers for this specific PTY */
   titleSubscribers: Set<(title: string) => void>
+  /** Last command captured from shell hooks (OSC 777) */
+  lastCommand: string | null
   pendingNotify: boolean
   scrollState: {
     viewportOffset: number
