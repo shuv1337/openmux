@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.63](https://github.com/monotykamary/openmux/compare/v0.2.62...v0.2.63) (2025-12-27)
+
+
+### Bug Fixes
+
+* **templates:** preserve typed command flags ([24fc64c](https://github.com/monotykamary/openmux/commit/24fc64cfdba0fe0520cac2c993292c02d31bcef2))
+
 ### [0.2.62](https://github.com/monotykamary/openmux/compare/v0.2.61...v0.2.62) (2025-12-27)
 
 
