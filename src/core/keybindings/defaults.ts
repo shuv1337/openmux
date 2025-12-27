@@ -35,7 +35,7 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
     'm': 'mode.move',
     'n': 'pane.new',
     'enter': 'pane.new',
-    '|': 'pane.split.vertical',
+    '\\': 'pane.split.vertical',
     '-': 'pane.split.horizontal',
     'x': 'pane.close',
     'v': 'layout.mode.vertical',
