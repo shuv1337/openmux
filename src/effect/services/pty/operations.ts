@@ -30,6 +30,10 @@ export function createOperations(deps: OperationsDeps) {
       notifyScrollSubscribers(session)
     }
 
+    if (!session.emulator.isAlternateScreen()) {
+      session.commandTracker.feed(data)
+    }
+
     session.pty.write(data)
   })
 

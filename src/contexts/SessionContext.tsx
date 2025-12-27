@@ -118,7 +118,7 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 interface SessionProviderProps extends ParentProps {
   /** Function to get CWD for a PTY ID */
   getCwd: (ptyId: string) => Promise<string>;
-  /** Function to get foreground process for a PTY ID */
+  /** Function to get foreground process command line for a PTY ID */
   getForegroundProcess: (ptyId: string) => Promise<string | undefined>;
   /** Function to get current workspaces */
   getWorkspaces: () => Workspaces;

@@ -47,7 +47,7 @@ export function createCacheAccessors(deps: CacheAccessorDeps) {
   };
 
   /**
-   * Get foreground process name for a specific PTY session
+   * Get foreground process command line for a specific PTY session
    */
   const getSessionForegroundProcess = async (ptyId: string): Promise<string | undefined> => {
     return getPtyForegroundProcess(ptyId);

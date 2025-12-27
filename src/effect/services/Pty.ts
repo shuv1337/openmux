@@ -119,7 +119,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
     /** List all active PTY IDs */
     readonly listAll: () => Effect.Effect<PtyId[]>
 
-    /** Get foreground process name for a PTY */
+    /** Get foreground process command line for a PTY */
     readonly getForegroundProcess: (id: PtyId) => Effect.Effect<string | undefined, PtyNotFoundError>
 
     /** Get git branch for a PTY's current directory */

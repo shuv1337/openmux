@@ -76,7 +76,7 @@ export async function getPtyCwd(ptyId: string): Promise<string> {
 }
 
 /**
- * Get the foreground process name for a PTY session.
+ * Get the foreground process command line for a PTY session.
  */
 export async function getPtyForegroundProcess(ptyId: string): Promise<string | undefined> {
   try {
