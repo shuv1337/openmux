@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.58](https://github.com/monotykamary/openmux/compare/v0.2.57...v0.2.58) (2025-12-27)
+
+
+### Bug Fixes
+
+* change default split keybinding ([a31696b](https://github.com/monotykamary/openmux/commit/a31696b4d5c755c9a202f091ce83da3260028ca5))
+
 ### [0.2.57](https://github.com/monotykamary/openmux/compare/v0.2.56...v0.2.57) (2025-12-26)
 
 
