@@ -74,7 +74,7 @@ interface TerminalContextValue {
   getFocusedCwd: () => Promise<string | null>;
   /** Get the CWD for a specific PTY session */
   getSessionCwd: (ptyId: string) => Promise<string>;
-  /** Get the foreground process command line for a specific PTY session */
+  /** Get the foreground process name for a specific PTY session */
   getSessionForegroundProcess: (ptyId: string) => Promise<string | undefined>;
   /** Get the cursor key mode (DECCKM) from the focused pane */
   getFocusedCursorKeyMode: () => 'normal' | 'application';

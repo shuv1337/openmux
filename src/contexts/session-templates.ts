@@ -17,7 +17,7 @@ import {
   TemplateWorkspaceLayout,
   type TemplateLayoutNode,
 } from '../effect/models';
-import { buildLayoutFromTemplate } from '../effect/bridge/template-layout';
+import { buildLayoutFromTemplate } from '../effect/bridge';
 
 export function isLayoutEmpty(workspaces: Workspaces): boolean {
   return Object.values(workspaces).every((workspace) =>

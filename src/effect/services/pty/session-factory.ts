@@ -16,7 +16,6 @@ import type { TerminalColors } from "../../../terminal/terminal-colors"
 import { notifySubscribers } from "./notification"
 import { createDataHandler } from "./data-handler"
 import { setupQueryPassthrough } from "./query-setup"
-import { CommandTracker } from "./command-tracker"
 
 
 export interface SessionFactoryDeps {
@@ -91,7 +90,6 @@ export function createSession(
       emulator,
       graphicsPassthrough,
       queryPassthrough,
-      commandTracker: new CommandTracker(),
       cols,
       rows,
       cwd,

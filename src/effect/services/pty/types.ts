@@ -8,7 +8,6 @@ import type { ITerminalEmulator } from "../../../terminal/emulator-interface"
 import type { GraphicsPassthrough } from "../../../terminal/graphics-passthrough"
 import type { TerminalQueryPassthrough } from "../../../terminal/terminal-query-passthrough"
 import type { PtyId } from "../../types"
-import type { CommandTracker } from "./command-tracker"
 
 /**
  * Internal PTY session representation
@@ -19,7 +18,6 @@ export interface InternalPtySession {
   emulator: ITerminalEmulator
   graphicsPassthrough: GraphicsPassthrough
   queryPassthrough: TerminalQueryPassthrough
-  commandTracker: CommandTracker
   cols: number
   rows: number
   cwd: string

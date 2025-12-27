@@ -93,8 +93,8 @@ export function createSubscriptions(deps: SubscriptionsDeps) {
 
   const getForegroundProcessFn = Effect.fn("Pty.getForegroundProcess")(function* (id: PtyId) {
     const session = yield* getSessionOrFail(id)
-    const tracked = session.commandTracker.getLastCommand()
-    return tracked ?? undefined
+    // Use native zig-pty method directly (no subprocess spawning)
+    return session.pty.getForegroundProcessName() ?? undefined
   })
 
   const getGitBranchFn = Effect.fn("Pty.getGitBranch")(function* (id: PtyId) {

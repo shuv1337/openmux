@@ -5,7 +5,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { createDataHandler } from "../../../../src/effect/services/pty/data-handler"
 import { createSyncModeParser } from "../../../../src/terminal/sync-mode-parser"
 import type { InternalPtySession } from "../../../../src/effect/services/pty/types"
-import { CommandTracker } from "../../../../src/effect/services/pty/command-tracker"
 import type { GraphicsPassthrough } from "../../../../src/terminal/graphics-passthrough"
 import type { TerminalQueryPassthrough } from "../../../../src/terminal/terminal-query-passthrough"
 
@@ -29,7 +28,6 @@ function createSession() {
     emulator: emulator as InternalPtySession["emulator"],
     graphicsPassthrough: passthrough,
     queryPassthrough,
-    commandTracker: new CommandTracker(),
     cols: 80,
     rows: 24,
     cwd: "",
