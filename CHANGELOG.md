@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.62](https://github.com/monotykamary/openmux/compare/v0.2.61...v0.2.62) (2025-12-27)
+
+
+### Features
+
+* add jk navigation for template overlay ([72b2bf3](https://github.com/monotykamary/openmux/commit/72b2bf37a9eaf775293bfd9d14fde773d7707f93))
+
 ### [0.2.61](https://github.com/monotykamary/openmux/compare/v0.2.60...v0.2.61) (2025-12-27)
 
 
