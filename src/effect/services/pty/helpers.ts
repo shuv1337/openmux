@@ -5,11 +5,26 @@
 
 import { Effect } from "effect"
 import { watch } from "fs"
-import { getRepoInfo, getDiffStatsAsync, type GitDiffStats as NativeGitDiffStats } from "../../../../zig-git/ts/index"
+import {
+  getRepoStatusAsync,
+  getDiffStatsAsync,
+  type GitDiffStats as NativeGitDiffStats,
+  type GitRepoState,
+} from "../../../../zig-git/ts/index"
 
 export interface GitInfo {
   branch: string | undefined
   dirty: boolean
+  staged: number
+  unstaged: number
+  untracked: number
+  conflicted: number
+  ahead: number | undefined
+  behind: number | undefined
+  stashCount: number | undefined
+  state: GitRepoState | undefined
+  detached: boolean
+  repoKey: string
 }
 
 /**
@@ -26,18 +41,31 @@ interface RepoEntry {
   workDir: string | null
   branch: string | undefined
   dirty: boolean
+  staged: number
+  unstaged: number
+  untracked: number
+  conflicted: number
+  ahead: number | undefined
+  behind: number | undefined
+  stashCount: number | undefined
+  state: GitRepoState | undefined
+  detached: boolean
   stale: boolean
   lastFetched: number
   lastAccess: number
+  lastStaleAt?: number
   diffStats?: GitDiffStats
   diffInFlight?: Promise<GitDiffStats | undefined>
-  watcher?: ReturnType<typeof watch>
+  infoInFlight?: Promise<RepoEntry | null>
+  gitWatcher?: ReturnType<typeof watch>
+  workWatcher?: ReturnType<typeof watch>
 }
 
 const repoCache = new Map<string, RepoEntry>()
 const cwdToRepoKey = new Map<string, string>()
+const pendingByCwd = new Map<string, Promise<RepoEntry | null>>()
 
-const INFO_TTL_MS = 2000
+const STATUS_TTL_MS = 2000
 const CACHE_TTL_MS = 10 * 60 * 1000
 let cleanupTimer: ReturnType<typeof setInterval> | null = null
 
@@ -55,7 +83,8 @@ function scheduleCleanup() {
     const now = Date.now()
     for (const [key, entry] of repoCache.entries()) {
       if (now - entry.lastAccess > CACHE_TTL_MS) {
-        entry.watcher?.close()
+        entry.gitWatcher?.close()
+        entry.workWatcher?.close()
         repoCache.delete(key)
       }
     }
@@ -64,23 +93,43 @@ function scheduleCleanup() {
 }
 
 function markStale(entry: RepoEntry) {
+  const now = Date.now()
+  if (entry.lastStaleAt && now - entry.lastStaleAt < 50) {
+    return
+  }
+  entry.lastStaleAt = now
   entry.stale = true
-  entry.diffStats = undefined
 }
 
-function ensureWatcher(entry: RepoEntry) {
-  if (entry.watcher) return
+function ensureGitWatcher(entry: RepoEntry) {
+  if (entry.gitWatcher) return
   try {
     const recursive = process.platform === "darwin" || process.platform === "win32"
-    entry.watcher = watch(entry.gitDir, { recursive }, () => {
+    entry.gitWatcher = watch(entry.gitDir, { recursive }, () => {
       markStale(entry)
     })
-    entry.watcher.on("error", () => {
-      entry.watcher?.close()
-      entry.watcher = undefined
+    entry.gitWatcher.on("error", () => {
+      entry.gitWatcher?.close()
+      entry.gitWatcher = undefined
     })
   } catch {
-    entry.watcher = undefined
+    entry.gitWatcher = undefined
+  }
+}
+
+function ensureWorkdirWatcher(entry: RepoEntry) {
+  if (!entry.workDir || entry.workWatcher) return
+  try {
+    const recursive = process.platform === "darwin" || process.platform === "win32"
+    entry.workWatcher = watch(entry.workDir, { recursive }, () => {
+      markStale(entry)
+    })
+    entry.workWatcher.on("error", () => {
+      entry.workWatcher?.close()
+      entry.workWatcher = undefined
+    })
+  } catch {
+    entry.workWatcher = undefined
   }
 }
 
@@ -88,58 +137,126 @@ async function refreshRepoInfo(
   cwd: string,
   existingKey?: string
 ): Promise<RepoEntry | null> {
-  const info = getRepoInfo(cwd)
-  if (!info || !info.gitDir) {
-    if (existingKey) repoCache.delete(existingKey)
-    cwdToRepoKey.delete(cwd)
-    return null
+  const existingEntry = existingKey ? repoCache.get(existingKey) : undefined
+  if (existingEntry?.infoInFlight) {
+    return existingEntry.infoInFlight
+  }
+  if (!existingEntry) {
+    const pending = pendingByCwd.get(cwd)
+    if (pending) return pending
   }
 
-  const gitDir = normalizeRepoPath(info.gitDir)
-  if (!gitDir) return null
-
-  const workDir = normalizeRepoPath(info.workDir)
-  const key = workDir ?? gitDir
-
-  if (existingKey && existingKey !== key) {
-    const oldEntry = repoCache.get(existingKey)
-    oldEntry?.watcher?.close()
-    repoCache.delete(existingKey)
-  }
-
-  const now = Date.now()
-  let entry = repoCache.get(key)
-  if (!entry) {
-    entry = {
-      key,
-      gitDir,
-      workDir,
-      branch: info.branch ?? undefined,
-      dirty: info.dirty,
-      stale: false,
-      lastFetched: now,
-      lastAccess: now,
+  const refreshPromise = (async () => {
+    const info = await getRepoStatusAsync(cwd)
+    if (!info || !info.gitDir) {
+      if (existingEntry) {
+        existingEntry.lastAccess = Date.now()
+        return existingEntry
+      }
+      if (existingKey) {
+        const oldEntry = repoCache.get(existingKey)
+        oldEntry?.gitWatcher?.close()
+        oldEntry?.workWatcher?.close()
+        repoCache.delete(existingKey)
+      }
+      cwdToRepoKey.delete(cwd)
+      return null
     }
-    repoCache.set(key, entry)
+
+    const gitDir = normalizeRepoPath(info.gitDir)
+    if (!gitDir) return null
+
+    const workDir = normalizeRepoPath(info.workDir)
+    const key = workDir ?? gitDir
+
+    if (existingKey && existingKey !== key) {
+      const oldEntry = repoCache.get(existingKey)
+      oldEntry?.gitWatcher?.close()
+      oldEntry?.workWatcher?.close()
+      repoCache.delete(existingKey)
+    }
+
+    const now = Date.now()
+    let entry = repoCache.get(key)
+    const nextState = info.state === "unknown" ? undefined : info.state
+    const nextAhead = info.ahead ?? undefined
+    const nextBehind = info.behind ?? undefined
+    const nextStash = info.stashCount ?? undefined
+
+    if (!entry) {
+      entry = {
+        key,
+        gitDir,
+        workDir,
+        branch: info.branch ?? undefined,
+        dirty: info.dirty,
+        staged: info.staged,
+        unstaged: info.unstaged,
+        untracked: info.untracked,
+        conflicted: info.conflicted,
+        ahead: nextAhead,
+        behind: nextBehind,
+        stashCount: nextStash,
+        state: nextState,
+        detached: info.detached,
+        stale: false,
+        lastFetched: now,
+        lastAccess: now,
+      }
+      repoCache.set(key, entry)
+    } else {
+      const diffReset =
+        entry.branch !== (info.branch ?? undefined) ||
+        entry.dirty !== info.dirty ||
+        entry.staged !== info.staged ||
+        entry.unstaged !== info.unstaged ||
+        entry.untracked !== info.untracked ||
+        entry.conflicted !== info.conflicted
+
+      entry.gitDir = gitDir
+      entry.workDir = workDir
+      entry.branch = info.branch ?? undefined
+      entry.dirty = info.dirty
+      entry.staged = info.staged
+      entry.unstaged = info.unstaged
+      entry.untracked = info.untracked
+      entry.conflicted = info.conflicted
+      entry.ahead = nextAhead
+      entry.behind = nextBehind
+      entry.stashCount = nextStash
+      entry.state = nextState
+      entry.detached = info.detached
+      entry.stale = false
+      entry.lastFetched = now
+      entry.lastAccess = now
+      if (diffReset) {
+        entry.diffStats = undefined
+      }
+    }
+
+    cwdToRepoKey.set(cwd, key)
+    ensureGitWatcher(entry)
+    ensureWorkdirWatcher(entry)
+    scheduleCleanup()
+    return entry
+  })()
+
+  if (existingEntry) {
+    existingEntry.infoInFlight = refreshPromise
   } else {
-    const prevBranch = entry.branch
-    const prevDirty = entry.dirty
-    entry.gitDir = gitDir
-    entry.workDir = workDir
-    entry.branch = info.branch ?? undefined
-    entry.dirty = info.dirty
-    entry.stale = false
-    entry.lastFetched = now
-    entry.lastAccess = now
-    if (prevBranch !== entry.branch || prevDirty !== entry.dirty) {
-      entry.diffStats = undefined
-    }
+    pendingByCwd.set(cwd, refreshPromise)
   }
 
-  cwdToRepoKey.set(cwd, key)
-  ensureWatcher(entry)
-  scheduleCleanup()
-  return entry
+  try {
+    return await refreshPromise
+  } finally {
+    if (existingEntry?.infoInFlight === refreshPromise) {
+      existingEntry.infoInFlight = undefined
+    }
+    if (!existingEntry) {
+      pendingByCwd.delete(cwd)
+    }
+  }
 }
 
 async function getRepoEntry(
@@ -147,7 +264,7 @@ async function getRepoEntry(
   options: { force?: boolean; maxAgeMs?: number } = {}
 ): Promise<RepoEntry | null> {
   const now = Date.now()
-  const maxAgeMs = options.maxAgeMs ?? INFO_TTL_MS
+  const maxAgeMs = options.maxAgeMs ?? STATUS_TTL_MS
   const cachedKey = cwdToRepoKey.get(cwd)
   const cached = cachedKey ? repoCache.get(cachedKey) : undefined
 
@@ -176,6 +293,16 @@ export const getGitInfo = (
     return {
       branch: entry.branch,
       dirty: entry.dirty,
+      staged: entry.staged,
+      unstaged: entry.unstaged,
+      untracked: entry.untracked,
+      conflicted: entry.conflicted,
+      ahead: entry.ahead,
+      behind: entry.behind,
+      stashCount: entry.stashCount,
+      state: entry.state,
+      detached: entry.detached,
+      repoKey: entry.key,
     }
   }).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
 

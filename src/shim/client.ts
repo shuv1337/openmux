@@ -1,5 +1,6 @@
 import type { TerminalCell, TerminalScrollState, TerminalState } from '../core/types';
 import type { SearchResult } from '../terminal/emulator-interface';
+import type { GitInfo } from '../effect/services/pty/helpers';
 import { unpackRow, unpackTerminalState, CELL_SIZE } from '../terminal/cell-serialization';
 import { RemoteEmulator } from './client/emulator';
 import { sendRequest } from './client/connection';
@@ -141,11 +142,39 @@ export async function getGitBranch(ptyId: string): Promise<string | undefined> {
   return (response.header.result as { branch?: string }).branch;
 }
 
-export async function getGitInfo(ptyId: string): Promise<{ branch: string | undefined; dirty: boolean } | undefined> {
+export async function getGitInfo(ptyId: string): Promise<GitInfo | undefined> {
   const response = await sendRequest('getGitInfo', { ptyId });
-  const info = (response.header.result as { info?: { branch?: string; dirty?: boolean } | null }).info ?? undefined;
-  if (!info) return undefined;
-  return { branch: info.branch ?? undefined, dirty: Boolean(info.dirty) };
+  const info = (response.header.result as {
+    info?: {
+      branch?: string;
+      dirty?: boolean;
+      staged?: number;
+      unstaged?: number;
+      untracked?: number;
+      conflicted?: number;
+      ahead?: number | null;
+      behind?: number | null;
+      stashCount?: number | null;
+      state?: GitInfo["state"];
+      detached?: boolean;
+      repoKey?: string;
+    } | null;
+  }).info ?? undefined;
+  if (!info?.repoKey) return undefined;
+  return {
+    branch: info.branch ?? undefined,
+    dirty: Boolean(info.dirty),
+    staged: Number(info.staged ?? 0),
+    unstaged: Number(info.unstaged ?? 0),
+    untracked: Number(info.untracked ?? 0),
+    conflicted: Number(info.conflicted ?? 0),
+    ahead: info.ahead ?? undefined,
+    behind: info.behind ?? undefined,
+    stashCount: info.stashCount ?? undefined,
+    state: info.state ?? undefined,
+    detached: Boolean(info.detached),
+    repoKey: info.repoKey,
+  };
 }
 
 export async function getGitDiffStats(ptyId: string): Promise<{ added: number; removed: number } | undefined> {

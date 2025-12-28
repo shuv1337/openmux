@@ -12,6 +12,7 @@ import {
 } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import { listAllPtysWithMetadata, getPtyMetadata, subscribeToPtyLifecycle, subscribeToAllTitleChanges } from '../effect/bridge';
+import type { GitInfo } from '../effect/services/pty/helpers';
 
 // =============================================================================
 // State Types
@@ -30,6 +31,16 @@ export interface PtyInfo {
   gitBranch: string | undefined;
   gitDiffStats: GitDiffStats | undefined;
   gitDirty: boolean;
+  gitStaged: number;
+  gitUnstaged: number;
+  gitUntracked: number;
+  gitConflicted: number;
+  gitAhead: number | undefined;
+  gitBehind: number | undefined;
+  gitStashCount: number | undefined;
+  gitState: GitInfo["state"] | undefined;
+  gitDetached: boolean;
+  gitRepoKey: string | undefined;
   foregroundProcess: string | undefined;
   shell: string | undefined;
   /** Workspace ID where this PTY is located (if found in current session) */
@@ -219,7 +230,12 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
           const repoChanged =
             prev.cwd !== pty.cwd ||
             prev.gitBranch !== pty.gitBranch ||
-            prev.gitDirty !== pty.gitDirty;
+            prev.gitDirty !== pty.gitDirty ||
+            prev.gitStaged !== pty.gitStaged ||
+            prev.gitUnstaged !== pty.gitUnstaged ||
+            prev.gitUntracked !== pty.gitUntracked ||
+            prev.gitConflicted !== pty.gitConflicted ||
+            prev.gitRepoKey !== pty.gitRepoKey;
           const gitDiffStats =
             pty.gitDiffStats ?? (repoChanged ? undefined : prev.gitDiffStats);
           return { ...pty, gitDiffStats };
@@ -271,6 +287,87 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
   // when multiple panes are created/destroyed rapidly
   const debouncedRefreshPtys = debounce(() => refreshPtys(), 100);
 
+  const syncGitFields = (
+    target: PtyInfo,
+    update: PtyInfo,
+    options: { preserveDiffStats?: boolean } = {}
+  ) => {
+    let diffReset = false;
+    let repoKeyChanged = false;
+
+    if (target.gitRepoKey !== update.gitRepoKey) {
+      target.gitRepoKey = update.gitRepoKey;
+      diffReset = true;
+      repoKeyChanged = true;
+    }
+    if (target.cwd !== update.cwd) {
+      target.cwd = update.cwd;
+      diffReset = true;
+    }
+    if (target.gitBranch !== update.gitBranch) {
+      target.gitBranch = update.gitBranch;
+      diffReset = true;
+    }
+    if (target.gitDirty !== update.gitDirty) {
+      target.gitDirty = update.gitDirty;
+      diffReset = true;
+    }
+    if (target.gitStaged !== update.gitStaged) {
+      target.gitStaged = update.gitStaged;
+      diffReset = true;
+    }
+    if (target.gitUnstaged !== update.gitUnstaged) {
+      target.gitUnstaged = update.gitUnstaged;
+      diffReset = true;
+    }
+    if (target.gitUntracked !== update.gitUntracked) {
+      target.gitUntracked = update.gitUntracked;
+      diffReset = true;
+    }
+    if (target.gitConflicted !== update.gitConflicted) {
+      target.gitConflicted = update.gitConflicted;
+      diffReset = true;
+    }
+    if (target.gitAhead !== update.gitAhead) {
+      target.gitAhead = update.gitAhead;
+    }
+    if (target.gitBehind !== update.gitBehind) {
+      target.gitBehind = update.gitBehind;
+    }
+    if (target.gitStashCount !== update.gitStashCount) {
+      target.gitStashCount = update.gitStashCount;
+    }
+    if (target.gitState !== update.gitState) {
+      target.gitState = update.gitState;
+    }
+    if (target.gitDetached !== update.gitDetached) {
+      target.gitDetached = update.gitDetached;
+    }
+
+    if ((!options.preserveDiffStats || repoKeyChanged) && diffReset) {
+      target.gitDiffStats = undefined;
+    }
+
+    return { diffReset, repoKeyChanged };
+  };
+
+  const applyRepoUpdate = (
+    list: PtyInfo[],
+    update: PtyInfo,
+    options: { preserveDiffStats?: boolean; applyDiffStats?: boolean } = {}
+  ) => {
+    const repoKey = update.gitRepoKey;
+    if (!repoKey) return;
+
+    for (const pty of list) {
+      if (pty.gitRepoKey !== repoKey) continue;
+      syncGitFields(pty, update, { preserveDiffStats: options.preserveDiffStats });
+      if (options.applyDiffStats && update.gitDiffStats !== undefined) {
+        pty.gitDiffStats = update.gitDiffStats;
+      }
+    }
+  };
+
   let subsetRefreshInProgress = false;
   const refreshPtysSubset = async (ptyIds: string[]) => {
     if (subsetRefreshInProgress || ptyIds.length === 0) return;
@@ -285,23 +382,17 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
       if (updates.length === 0) return;
 
       setState(produce((s) => {
+        const updatedRepos = new Set<string>();
         for (const update of updates) {
           const index = s.allPtysIndex.get(update.ptyId);
           if (index === undefined || !s.allPtys[index]) continue;
           if (s.allPtys[index].foregroundProcess !== update.foregroundProcess) {
             s.allPtys[index].foregroundProcess = update.foregroundProcess;
           }
-          if (s.allPtys[index].gitBranch !== update.gitBranch) {
-            s.allPtys[index].gitBranch = update.gitBranch;
-            s.allPtys[index].gitDiffStats = undefined;
-          }
-          if (s.allPtys[index].gitDirty !== update.gitDirty) {
-            s.allPtys[index].gitDirty = update.gitDirty;
-            s.allPtys[index].gitDiffStats = undefined;
-          }
-          if (s.allPtys[index].cwd !== update.cwd) {
-            s.allPtys[index].cwd = update.cwd;
-            s.allPtys[index].gitDiffStats = undefined;
+          syncGitFields(s.allPtys[index], update);
+          if (update.gitRepoKey && !updatedRepos.has(update.gitRepoKey)) {
+            updatedRepos.add(update.gitRepoKey);
+            applyRepoUpdate(s.allPtys, update, { preserveDiffStats: true });
           }
         }
 
@@ -324,16 +415,17 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
       setState(produce((s) => {
         const index = s.allPtysIndex.get(update.ptyId);
         if (index !== undefined && s.allPtys[index]) {
+          syncGitFields(s.allPtys[index], update, { preserveDiffStats: true });
           s.allPtys[index].gitDiffStats = update.gitDiffStats;
-          s.allPtys[index].gitBranch = update.gitBranch;
-          s.allPtys[index].gitDirty = update.gitDirty;
         }
         const matchedIndex = s.matchedPtysIndex.get(update.ptyId);
         if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
+          syncGitFields(s.matchedPtys[matchedIndex], update, { preserveDiffStats: true });
           s.matchedPtys[matchedIndex].gitDiffStats = update.gitDiffStats;
-          s.matchedPtys[matchedIndex].gitBranch = update.gitBranch;
-          s.matchedPtys[matchedIndex].gitDirty = update.gitDirty;
         }
+
+        applyRepoUpdate(s.allPtys, update, { preserveDiffStats: true, applyDiffStats: true });
+        applyRepoUpdate(s.matchedPtys, update, { preserveDiffStats: true, applyDiffStats: true });
       }));
     } finally {
       selectedDiffRefreshInProgress = false;

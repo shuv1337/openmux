@@ -34,6 +34,8 @@ export function PtyCard(props: PtyCardProps) {
   const process = () => props.pty.foregroundProcess ?? 'shell';
   const gitBranch = () => props.pty.gitBranch;
   const gitDirty = () => props.pty.gitDirty;
+  const gitDetached = () => props.pty.gitDetached;
+  const gitState = () => props.pty.gitState;
   const gitDiffStats = () => formatDiffStats(props.pty.gitDiffStats);
 
   // Padding constants
@@ -68,9 +70,14 @@ export function PtyCard(props: PtyCardProps) {
 
   // Build second line content
   const branchText = () => {
+    const tokens: string[] = [];
     const branch = gitBranch() ?? '';
-    if (!gitDirty()) return branch;
-    return branch ? `${branch} *` : '*';
+    if (branch) tokens.push(branch);
+    if (gitDirty()) tokens.push('*');
+    if (gitDetached()) tokens.push('@');
+    const state = gitState();
+    if (state && state !== 'none' && state !== 'unknown') tokens.push('~');
+    return tokens.join(' ');
   };
   const diffStats = () => gitDiffStats();
 

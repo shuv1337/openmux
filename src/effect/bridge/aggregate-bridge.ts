@@ -15,6 +15,16 @@ interface PtyMetadata {
   gitBranch: string | undefined
   gitDiffStats: GitDiffStats | undefined
   gitDirty: boolean
+  gitStaged: number
+  gitUnstaged: number
+  gitUntracked: number
+  gitConflicted: number
+  gitAhead: number | undefined
+  gitBehind: number | undefined
+  gitStashCount: number | undefined
+  gitState: GitInfo["state"] | undefined
+  gitDetached: boolean
+  gitRepoKey: string | undefined
   foregroundProcess: string | undefined
   shell: string | undefined
   workspaceId: number | undefined
@@ -69,6 +79,16 @@ const fetchPtyMetadata = (ptyId: PtyId, options: FetchPtyMetadataOptions = {}) =
       gitBranch: gitInfoValue?.branch,
       gitDiffStats,
       gitDirty: gitInfoValue?.dirty ?? false,
+      gitStaged: gitInfoValue?.staged ?? 0,
+      gitUnstaged: gitInfoValue?.unstaged ?? 0,
+      gitUntracked: gitInfoValue?.untracked ?? 0,
+      gitConflicted: gitInfoValue?.conflicted ?? 0,
+      gitAhead: gitInfoValue?.ahead,
+      gitBehind: gitInfoValue?.behind,
+      gitStashCount: gitInfoValue?.stashCount,
+      gitState: gitInfoValue?.state,
+      gitDetached: gitInfoValue?.detached ?? false,
+      gitRepoKey: gitInfoValue?.repoKey,
       foregroundProcess,
       shell: session.shell,
       workspaceId: undefined, // Will be enriched by AggregateView
