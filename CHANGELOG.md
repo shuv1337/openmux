@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.65](https://github.com/monotykamary/openmux/compare/v0.2.64...v0.2.65) (2025-12-28)
+
+
+### Bug Fixes
+
+* **terminal:** prevent subscription leaks ([cd66572](https://github.com/monotykamary/openmux/commit/cd665721a62a4e4c0677d43aed7f10fe7357437e))
+* **zig-pty:** harden async spawn request lifecycle ([5783112](https://github.com/monotykamary/openmux/commit/5783112bacfe04b5d5b2fce49da2e7e31dc565c1))
+
 ### [0.2.64](https://github.com/monotykamary/openmux/compare/v0.2.63...v0.2.64) (2025-12-27)
 
 
