@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.71](https://github.com/monotykamary/openmux/compare/v0.2.70...v0.2.71) (2025-12-28)
+
+
+### Features
+
+* **keybindings:** add alt+ hot access for pane split commands ([2153465](https://github.com/monotykamary/openmux/commit/215346585b7a01a33e0e4189a55530c73d710d70))
+
+
+### Refactoring
+
+* move subscriptions and polling to Effect streams ([49c5910](https://github.com/monotykamary/openmux/commit/49c5910d211b03b01685a036668675085d8596da))
+
 ### [0.2.70](https://github.com/monotykamary/openmux/compare/v0.2.69...v0.2.70) (2025-12-28)
 
 
