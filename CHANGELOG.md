@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.66](https://github.com/monotykamary/openmux/compare/v0.2.65...v0.2.66) (2025-12-28)
+
+
+### Features
+
+* **git:** add libgit2-backed polling ([672ab77](https://github.com/monotykamary/openmux/commit/672ab77c0401cbaf969eea6dac3f20a4bd5dc505))
+
 ### [0.2.65](https://github.com/monotykamary/openmux/compare/v0.2.64...v0.2.65) (2025-12-28)
 
 
