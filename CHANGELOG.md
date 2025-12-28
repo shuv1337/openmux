@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.68](https://github.com/monotykamary/openmux/compare/v0.2.67...v0.2.68) (2025-12-28)
+
+
+### Documentation
+
+* **zig-git:** add comprehensive README ([5853b62](https://github.com/monotykamary/openmux/commit/5853b62bb0484cc5167ef2c73afa95cc823e78d7))
+
 ### [0.2.67](https://github.com/monotykamary/openmux/compare/v0.2.66...v0.2.67) (2025-12-28)
 
 
