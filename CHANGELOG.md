@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.67](https://github.com/monotykamary/openmux/compare/v0.2.66...v0.2.67) (2025-12-28)
+
+
+### Features
+
+* **git:** add repo status summaries ([95bc8f5](https://github.com/monotykamary/openmux/commit/95bc8f5f03b989616df5a6b3907ee233104d037d))
+
+
+### Bug Fixes
+
+* **aggregate:** keep diff stats until refresh ([811089d](https://github.com/monotykamary/openmux/commit/811089d2a344a910bbac9942f395c4ae1b624841))
+
+
+### Tests
+
+* **zig-pty:** drain cancelled spawns ([2befb43](https://github.com/monotykamary/openmux/commit/2befb43c66fb8307a331b9a3b3850945281feac6))
+
+
+### Refactoring
+
+* **contexts:** modularize AggregateViewContext and SessionContext ([7976365](https://github.com/monotykamary/openmux/commit/7976365ea0a2a187af40bccd1c8310e034f6d69c))
+* **native:** move zig modules under native ([2545b83](https://github.com/monotykamary/openmux/commit/2545b835ca132ce5c6d73adb33d02dd4a1b44f67))
+
 ### [0.2.66](https://github.com/monotykamary/openmux/compare/v0.2.65...v0.2.66) (2025-12-28)
 
 
