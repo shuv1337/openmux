@@ -26,6 +26,49 @@ export function createPaneResizeHandlers(deps: PaneResizeDeps) {
 
   type PaneGeometry = { cols: number; rows: number; x: number; y: number };
   const lastGeometry = new Map<string, PaneGeometry>();
+  const RESIZE_BATCH_SIZE = 2;
+  const defer = (fn: () => void) => {
+    if (typeof setImmediate !== 'undefined') {
+      setImmediate(fn);
+    } else {
+      setTimeout(fn, 0);
+    }
+  };
+  let resizeScheduled = false;
+  let resizeRunning = false;
+  let resizeRerunRequested = false;
+
+  const applyPaneResize = (pane: PaneData, seenPtys: Set<string>) => {
+    if (!pane.ptyId || !pane.rectangle) return;
+
+    const cols = Math.max(1, pane.rectangle.width - 2);
+    const rows = Math.max(1, pane.rectangle.height - 2);
+    const x = pane.rectangle.x + 1;
+    const y = pane.rectangle.y + 1;
+    const geometry: PaneGeometry = { cols, rows, x, y };
+    const previous = lastGeometry.get(pane.ptyId);
+    const sizeChanged = !previous || previous.cols !== cols || previous.rows !== rows;
+    const positionChanged = !previous || previous.x !== x || previous.y !== y;
+
+    if (sizeChanged) {
+      resizePTY(pane.ptyId, cols, rows);
+    }
+    if (positionChanged) {
+      setPanePosition(pane.ptyId, x, y);
+    }
+    if (sizeChanged || positionChanged) {
+      lastGeometry.set(pane.ptyId, geometry);
+    }
+    seenPtys.add(pane.ptyId);
+  };
+
+  const cleanupMissingPtys = (seenPtys: Set<string>) => {
+    for (const ptyId of Array.from(lastGeometry.keys())) {
+      if (!seenPtys.has(ptyId)) {
+        lastGeometry.delete(ptyId);
+      }
+    }
+  };
 
   /**
    * Resize all PTYs and update their positions based on current pane dimensions
@@ -33,34 +76,55 @@ export function createPaneResizeHandlers(deps: PaneResizeDeps) {
   const resizeAllPanes = () => {
     const seenPtys = new Set<string>();
     for (const pane of getPanes()) {
-      if (!pane.ptyId || !pane.rectangle) continue;
-
-      const cols = Math.max(1, pane.rectangle.width - 2);
-      const rows = Math.max(1, pane.rectangle.height - 2);
-      const x = pane.rectangle.x + 1;
-      const y = pane.rectangle.y + 1;
-      const geometry: PaneGeometry = { cols, rows, x, y };
-      const previous = lastGeometry.get(pane.ptyId);
-      const sizeChanged = !previous || previous.cols !== cols || previous.rows !== rows;
-      const positionChanged = !previous || previous.x !== x || previous.y !== y;
-
-      if (sizeChanged) {
-        resizePTY(pane.ptyId, cols, rows);
-      }
-      if (positionChanged) {
-        setPanePosition(pane.ptyId, x, y);
-      }
-      if (sizeChanged || positionChanged) {
-        lastGeometry.set(pane.ptyId, geometry);
-      }
-      seenPtys.add(pane.ptyId);
+      applyPaneResize(pane, seenPtys);
     }
 
-    for (const ptyId of Array.from(lastGeometry.keys())) {
-      if (!seenPtys.has(ptyId)) {
-        lastGeometry.delete(ptyId);
-      }
+    cleanupMissingPtys(seenPtys);
+  };
+
+  /**
+   * Schedule a batched resize to avoid blocking animations.
+   */
+  const scheduleResizeAllPanes = () => {
+    if (resizeRunning) {
+      resizeRerunRequested = true;
+      return;
     }
+    if (resizeScheduled) {
+      return;
+    }
+    resizeScheduled = true;
+    defer(() => {
+      resizeScheduled = false;
+      resizeRunning = true;
+      resizeRerunRequested = false;
+
+      const panesSnapshot = getPanes();
+      const seenPtys = new Set<string>();
+      let index = 0;
+
+      const runBatch = () => {
+        const end = Math.min(index + RESIZE_BATCH_SIZE, panesSnapshot.length);
+        for (; index < end; index++) {
+          applyPaneResize(panesSnapshot[index], seenPtys);
+        }
+
+        if (index < panesSnapshot.length) {
+          defer(runBatch);
+          return;
+        }
+
+        cleanupMissingPtys(seenPtys);
+        resizeRunning = false;
+
+        if (resizeRerunRequested) {
+          resizeRerunRequested = false;
+          scheduleResizeAllPanes();
+        }
+      };
+
+      runBatch();
+    });
   };
 
   /**
@@ -83,6 +147,7 @@ export function createPaneResizeHandlers(deps: PaneResizeDeps) {
 
   return {
     resizeAllPanes,
+    scheduleResizeAllPanes,
     restorePaneSizes,
   };
 }

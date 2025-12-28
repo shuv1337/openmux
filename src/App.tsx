@@ -339,9 +339,8 @@ function AppContent() {
     const _width = width();
     const _height = height();
     if (_width <= 0 || _height <= 0) return;
-    // Defer to macrotask (setTimeout) to allow animations to complete first
-    // queueMicrotask runs before render, setTimeout runs after
-    setTimeout(() => paneResizeHandlers.resizeAllPanes(), 0);
+    // Schedule batched resize to avoid blocking animations
+    paneResizeHandlers.scheduleResizeAllPanes();
   });
 
   // Restore PTY sizes when aggregate view closes
