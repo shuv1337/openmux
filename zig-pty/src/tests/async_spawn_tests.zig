@@ -191,6 +191,47 @@ test "cancel race: rapid spawn cancel cycles" {
     std.Thread.sleep(500 * std.time.ns_per_ms);
 }
 
+test "cancelled requests free slots for reuse" {
+    var initial_ids: [constants.MAX_SPAWN_REQUESTS]c_int = undefined;
+
+    for (&initial_ids) |*rid| {
+        rid.* = exports.bun_pty_spawn_async("true", "", "", 80, 24);
+        try std.testing.expect(rid.* >= 0);
+    }
+
+    for (initial_ids) |rid| {
+        exports.bun_pty_spawn_cancel(rid);
+    }
+
+    var attempts: usize = 0;
+    while (attempts < 200) : (attempts += 1) {
+        var new_ids: [constants.MAX_SPAWN_REQUESTS]c_int = undefined;
+        var allocated: usize = 0;
+
+        for (&new_ids) |*rid| {
+            const request_id = exports.bun_pty_spawn_async("true", "", "", 80, 24);
+            if (request_id < 0) break;
+            rid.* = request_id;
+            allocated += 1;
+        }
+
+        if (allocated == constants.MAX_SPAWN_REQUESTS) {
+            for (new_ids) |rid| {
+                exports.bun_pty_spawn_cancel(rid);
+            }
+            return;
+        }
+
+        for (new_ids[0..allocated]) |rid| {
+            exports.bun_pty_spawn_cancel(rid);
+        }
+
+        std.Thread.sleep(10 * std.time.ns_per_ms);
+    }
+
+    try std.testing.expect(false);
+}
+
 test "cancel race: concurrent spawns with interleaved cancels" {
     var request_ids: [8]c_int = undefined;
 

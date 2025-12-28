@@ -26,10 +26,25 @@ pub const SpawnRequest = struct {
     // Output
     state: std.atomic.Value(SpawnState),
     result_handle: std.atomic.Value(c_int),
+
+    pub fn init() SpawnRequest {
+        return .{
+            .cmd = undefined,
+            .cmd_len = 0,
+            .cwd = undefined,
+            .cwd_len = 0,
+            .env = undefined,
+            .env_len = 0,
+            .cols = 0,
+            .rows = 0,
+            .state = std.atomic.Value(SpawnState).init(.failed),
+            .result_handle = std.atomic.Value(c_int).init(0),
+        };
+    }
 };
 
 // Spawn request slots
-var spawn_requests: [constants.MAX_SPAWN_REQUESTS]SpawnRequest = undefined;
+var spawn_requests: [constants.MAX_SPAWN_REQUESTS]SpawnRequest = [_]SpawnRequest{SpawnRequest.init()} ** constants.MAX_SPAWN_REQUESTS;
 var spawn_request_used: [constants.MAX_SPAWN_REQUESTS]std.atomic.Value(bool) = [_]std.atomic.Value(bool){std.atomic.Value(bool).init(false)} ** constants.MAX_SPAWN_REQUESTS;
 
 // Spawn thread state
@@ -95,7 +110,14 @@ fn spawnThreadLoop() void {
         // Process all pending requests
         for (&spawn_requests, 0..) |*req, i| {
             if (!spawn_request_used[i].load(.acquire)) continue;
-            if (req.state.load(.acquire) != .pending) continue;
+
+            const state = req.state.load(.acquire);
+            if (state == .cancelled) {
+                freeSpawnRequest(@intCast(i));
+                _ = spawn_queue_count.fetchSub(1, .release);
+                continue;
+            }
+            if (state != .pending) continue;
 
             // Do the actual spawn (this is the slow part we moved off main thread)
             const cmd_ptr: [*:0]const u8 = @ptrCast(req.cmd[0..req.cmd_len]);
@@ -140,6 +162,8 @@ pub fn allocSpawnRequest() ?u32 {
 pub fn freeSpawnRequest(id: u32) void {
     if (id >= constants.MAX_SPAWN_REQUESTS) return;
     spawn_request_used[id].store(false, .release);
+    spawn_requests[id].state.store(.failed, .release);
+    spawn_requests[id].result_handle.store(0, .release);
 }
 
 pub fn getSpawnRequest(id: u32) ?*SpawnRequest {
