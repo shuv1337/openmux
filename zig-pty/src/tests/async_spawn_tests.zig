@@ -5,6 +5,32 @@ const std = @import("std");
 const exports = @import("../ffi/exports.zig");
 const constants = @import("../util/constants.zig");
 
+fn waitForSpawnDrain() !void {
+    var attempts: usize = 0;
+    while (attempts < 200) : (attempts += 1) {
+        const request_id = exports.bun_pty_spawn_async("true", "", "", 80, 24);
+        if (request_id < 0) {
+            std.Thread.sleep(10 * std.time.ns_per_ms);
+            continue;
+        }
+
+        var handle: c_int = constants.SPAWN_PENDING;
+        var iterations: usize = 0;
+        while (handle == constants.SPAWN_PENDING and iterations < 100) : (iterations += 1) {
+            handle = exports.bun_pty_spawn_poll(request_id);
+            if (handle == constants.SPAWN_PENDING) {
+                std.Thread.sleep(10 * std.time.ns_per_ms);
+            }
+        }
+
+        try std.testing.expect(handle > 0);
+        exports.bun_pty_close(handle);
+        return;
+    }
+
+    try std.testing.expect(false);
+}
+
 // ============================================================================
 // Async Spawn Flow Tests
 // ============================================================================
@@ -219,6 +245,7 @@ test "cancelled requests free slots for reuse" {
             for (new_ids) |rid| {
                 exports.bun_pty_spawn_cancel(rid);
             }
+            try waitForSpawnDrain();
             return;
         }
 
