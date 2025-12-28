@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.69](https://github.com/monotykamary/openmux/compare/v0.2.68...v0.2.69) (2025-12-28)
+
+
+### Bug Fixes
+
+* **layout:** refresh pane geometry on layout changes ([fd64b07](https://github.com/monotykamary/openmux/commit/fd64b07ca8389f270288b8ba7187be926d207d0b))
+
 ### [0.2.68](https://github.com/monotykamary/openmux/compare/v0.2.67...v0.2.68) (2025-12-28)
 
 
