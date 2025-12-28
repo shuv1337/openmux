@@ -14,15 +14,13 @@ import {
   type Accessor,
 } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
-import type { SessionId, SessionMetadata, WorkspaceId } from '../core/types';
+import type { SessionMetadata, WorkspaceId } from '../core/types';
 import type { Workspaces } from '../core/operations/layout-actions';
 import { useConfig } from './ConfigContext';
 import {
   createSessionLegacy as createSessionOnDisk,
   listSessionsLegacy as listSessions,
   getActiveSessionIdLegacy as getActiveSessionId,
-  renameSessionLegacy as renameSessionOnDisk,
-  deleteSessionLegacy as deleteSessionOnDisk,
   saveCurrentSession,
   loadSessionData,
   switchToSession,
@@ -47,6 +45,7 @@ import {
 } from './session-templates';
 import { createSessionPickerActions } from './session-picker-actions';
 import { createSessionRefreshers } from './session-refresh';
+import { createSessionOperations } from './session-operations';
 
 // Re-export types for external consumers
 export type { SessionState, SessionSummary };
@@ -62,11 +61,11 @@ interface SessionContextValue {
   /** Create a new session */
   createSession: (name?: string) => Promise<SessionMetadata>;
   /** Switch to a session */
-  switchSession: (id: SessionId) => Promise<void>;
+  switchSession: (id: string) => Promise<void>;
   /** Rename a session */
-  renameSession: (id: SessionId, name: string) => Promise<void>;
+  renameSession: (id: string, name: string) => Promise<void>;
   /** Delete a session */
-  deleteSession: (id: SessionId) => Promise<void>;
+  deleteSession: (id: string) => Promise<void>;
   /** Save the current session */
   saveSession: () => Promise<void>;
   /** Refresh sessions list */
@@ -78,7 +77,7 @@ interface SessionContextValue {
   /** Set search query */
   setSearchQuery: (query: string) => void;
   /** Start rename mode */
-  startRename: (id: SessionId, currentName: string) => void;
+  startRename: (id: string, currentName: string) => void;
   /** Cancel rename */
   cancelRename: () => void;
   /** Update rename value */
@@ -158,6 +157,7 @@ export function SessionProvider(props: SessionProviderProps) {
     }));
   };
 
+  // Picker actions
   const {
     togglePicker,
     closePicker,
@@ -169,6 +169,7 @@ export function SessionProvider(props: SessionProviderProps) {
     navigateDown,
   } = createSessionPickerActions(dispatch);
 
+  // Refresh helpers
   const { refreshSessions, refreshTemplates } = createSessionRefreshers({
     listSessions,
     getSessionSummary,
@@ -177,6 +178,20 @@ export function SessionProvider(props: SessionProviderProps) {
     setTemplates,
   });
 
+  // Session CRUD operations
+  const sessionOps = createSessionOperations({
+    getState: () => state,
+    dispatch,
+    getCwd: props.getCwd,
+    getWorkspaces: props.getWorkspaces,
+    getActiveWorkspaceId: props.getActiveWorkspaceId,
+    onSessionLoad: props.onSessionLoad,
+    onBeforeSwitch: props.onBeforeSwitch,
+    onDeleteSession: props.onDeleteSession,
+    refreshSessions,
+  });
+
+  // Template overlay actions
   const openTemplateOverlay = () => {
     setShowTemplateOverlay(true);
     refreshTemplates();
@@ -331,118 +346,6 @@ export function SessionProvider(props: SessionProviderProps) {
     }
   });
 
-  const createSession = async (name?: string) => {
-    // Save current session first
-    if (state.activeSession && state.activeSessionId) {
-      const workspaces = props.getWorkspaces();
-      const activeWorkspaceId = props.getActiveWorkspaceId();
-      await saveCurrentSession(
-        state.activeSession,
-        workspaces,
-        activeWorkspaceId,
-        props.getCwd
-      );
-
-      // Suspend PTYs for current session before switching
-      await props.onBeforeSwitch(state.activeSessionId);
-    }
-
-    const metadata = await createSessionOnDisk(name);
-    await refreshSessions();
-    dispatch({ type: 'SET_ACTIVE_SESSION', id: metadata.id, session: metadata });
-
-    // Load empty workspaces for new session
-    await props.onSessionLoad({}, 1, new Map(), new Map(), metadata.id);
-
-    return metadata;
-  };
-
-  const switchSession = async (id: SessionId) => {
-    if (id === state.activeSessionId) return;
-
-    // Mark switching in progress to prevent "No panes" flash
-    dispatch({ type: 'SET_SWITCHING', switching: true });
-
-    // Save current session
-    if (state.activeSession && state.activeSessionId) {
-      const workspaces = props.getWorkspaces();
-      const activeWorkspaceId = props.getActiveWorkspaceId();
-      await saveCurrentSession(
-        state.activeSession,
-        workspaces,
-        activeWorkspaceId,
-        props.getCwd
-      );
-
-      // Suspend PTYs for current session (save mapping, don't destroy)
-      await props.onBeforeSwitch(state.activeSessionId);
-    }
-
-    // Load new session
-    await switchToSession(id);
-    const data = await loadSessionData(id);
-
-    if (data) {
-      dispatch({ type: 'SET_ACTIVE_SESSION', id, session: data.metadata });
-      // IMPORTANT: Await onSessionLoad to ensure CWD map is set before switching completes
-      await props.onSessionLoad(data.workspaces, data.activeWorkspaceId, data.cwdMap, new Map(), id);
-    }
-
-    // Mark switching complete
-    dispatch({ type: 'SET_SWITCHING', switching: false });
-
-    dispatch({ type: 'CLOSE_SESSION_PICKER' });
-
-    await refreshSessions();
-  };
-
-  const renameSession = async (id: SessionId, name: string) => {
-    await renameSessionOnDisk(id, name);
-    await refreshSessions();
-
-    if (state.activeSessionId === id && state.activeSession) {
-      dispatch({
-        type: 'SET_ACTIVE_SESSION',
-        id,
-        session: { ...state.activeSession, name, autoNamed: false },
-      });
-    }
-
-    dispatch({ type: 'CANCEL_RENAME' });
-  };
-
-  const deleteSession = async (id: SessionId) => {
-    // Clean up PTYs for the deleted session
-    props.onDeleteSession(id);
-
-    await deleteSessionOnDisk(id);
-    await refreshSessions();
-
-    // If deleting active session, switch to another
-    if (state.activeSessionId === id) {
-      const sessions = await listSessions();
-      if (sessions.length > 0) {
-        await switchSession(sessions[0]!.id);
-      }
-    }
-  };
-
-  const saveSession = async () => {
-    if (!state.activeSession) return;
-
-    const workspaces = props.getWorkspaces();
-    const activeWorkspaceId = props.getActiveWorkspaceId();
-
-    await saveCurrentSession(
-      state.activeSession,
-      workspaces,
-      activeWorkspaceId,
-      props.getCwd
-    );
-
-    await refreshSessions();
-  };
-
   // Computed values
   const filteredSessions = createMemo(() =>
     state.sessions.filter(s =>
@@ -453,11 +356,7 @@ export function SessionProvider(props: SessionProviderProps) {
   const value: SessionContextValue = {
     get state() { return state; },
     get filteredSessions() { return filteredSessions(); },
-    createSession,
-    switchSession,
-    renameSession,
-    deleteSession,
-    saveSession,
+    ...sessionOps,
     refreshSessions,
     togglePicker,
     closePicker,
@@ -478,12 +377,14 @@ export function SessionProvider(props: SessionProviderProps) {
     deleteTemplate: deleteTemplateById,
     isLayoutEmpty,
   };
+
   return (
     <SessionContext.Provider value={value}>
       {props.children}
     </SessionContext.Provider>
   );
 }
+
 // =============================================================================
 // Hooks
 // =============================================================================
