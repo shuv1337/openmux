@@ -72,6 +72,55 @@ function updateLayoutNodeRectangles(
   };
 }
 
+/**
+ * Update layout node for zoom: give only the focused pane the full rect,
+ * all other panes get undefined (hidden).
+ * This ensures zoom works correctly with split panes.
+ */
+function updateLayoutNodeForZoom(
+  node: LayoutNode,
+  focusedPaneId: string,
+  rect: Rectangle,
+  gap: number
+): LayoutNode {
+  if (!isSplitNode(node)) {
+    // Leaf node: give rect only to focused pane
+    return updatePaneRectangle(node, node.id === focusedPaneId ? rect : undefined);
+  }
+
+  // Split node: check which branch contains the focused pane
+  const focusedInFirst = containsPane(node.first, focusedPaneId);
+  const focusedInSecond = containsPane(node.second, focusedPaneId);
+
+  let updatedFirst: LayoutNode;
+  let updatedSecond: LayoutNode;
+
+  if (focusedInFirst) {
+    // Focused pane is in first branch: give it the full rect, hide second
+    updatedFirst = updateLayoutNodeForZoom(node.first, focusedPaneId, rect, gap);
+    updatedSecond = updateLayoutNodeRectangles(node.second, undefined, gap);
+  } else if (focusedInSecond) {
+    // Focused pane is in second branch: hide first, give rect to second
+    updatedFirst = updateLayoutNodeRectangles(node.first, undefined, gap);
+    updatedSecond = updateLayoutNodeForZoom(node.second, focusedPaneId, rect, gap);
+  } else {
+    // Focused pane not in this subtree: hide entire subtree
+    updatedFirst = updateLayoutNodeRectangles(node.first, undefined, gap);
+    updatedSecond = updateLayoutNodeRectangles(node.second, undefined, gap);
+  }
+
+  if (updatedFirst === node.first && updatedSecond === node.second && !node.rectangle) {
+    return node;
+  }
+
+  return {
+    ...node,
+    rectangle: undefined, // Split container is hidden when zoomed
+    first: updatedFirst,
+    second: updatedSecond,
+  };
+}
+
 function splitRectangle(
   rect: Rectangle,
   direction: SplitDirection,
@@ -129,12 +178,15 @@ export function calculateMasterStackLayout(
   }
 
   // Zoomed mode - focused pane takes full viewport
+  // Use updateLayoutNodeForZoom to ensure only the focused pane gets the rect,
+  // even when it's inside a split (layout tree)
   if (zoomed && focusedPaneId) {
     const focusedIsMain = containsPane(mainPane, focusedPaneId);
     const focusedStackIndex = stackPanes.findIndex(p => containsPane(p, focusedPaneId));
 
     if (focusedIsMain) {
-      const updatedMain = updateLayoutNodeRectangles(mainPane, paddedViewport, gap);
+      // Give full viewport to only the focused pane within mainPane tree
+      const updatedMain = updateLayoutNodeForZoom(mainPane, focusedPaneId, paddedViewport, gap);
       const updatedStack = stackPanes.map(p => updateLayoutNodeRectangles(p, undefined, gap));
       if (updatedMain === mainPane && updatedStack.every((p, i) => p === stackPanes[i])) {
         return workspace;
@@ -144,8 +196,11 @@ export function calculateMasterStackLayout(
 
     if (focusedStackIndex >= 0) {
       const updatedMain = updateLayoutNodeRectangles(mainPane, undefined, gap);
+      // Give full viewport to only the focused pane within the stack entry tree
       const updatedStack = stackPanes.map((p, i) =>
-        updateLayoutNodeRectangles(p, i === focusedStackIndex ? paddedViewport : undefined, gap)
+        i === focusedStackIndex
+          ? updateLayoutNodeForZoom(p, focusedPaneId, paddedViewport, gap)
+          : updateLayoutNodeRectangles(p, undefined, gap)
       );
       if (updatedMain === mainPane && updatedStack.every((p, i) => p === stackPanes[i])) {
         return workspace;
