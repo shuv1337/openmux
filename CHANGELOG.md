@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.76](https://github.com/monotykamary/openmux/compare/v0.2.75...v0.2.76) (2025-12-30)
+
+
+### Bug Fixes
+
+* **layout:** make move pane layout-tree aware for split panes ([239b37b](https://github.com/monotykamary/openmux/commit/239b37bbf2b1a884ec8c27ce15d3231d7642ad06))
+* **layout:** make zoom layout-tree aware for split panes ([86e7ed3](https://github.com/monotykamary/openmux/commit/86e7ed378c85161b41769c7e99539d26e139b15b))
+
+
+### Refactoring
+
+* **layout:** deduplicate geometry helpers ([6680b99](https://github.com/monotykamary/openmux/commit/6680b99efafc5ca4eca3b4677c15a484b30b25e1))
+* **terminal:** remove unused graphics passthrough code ([fa6bdad](https://github.com/monotykamary/openmux/commit/fa6bdad90173f6ba5008bdc7b410ed382b11d752))
+
 ### [0.2.75](https://github.com/monotykamary/openmux/compare/v0.2.74...v0.2.75) (2025-12-29)
 
 
