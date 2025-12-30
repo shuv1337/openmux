@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.78](https://github.com/monotykamary/openmux/compare/v0.2.77...v0.2.78) (2025-12-30)
+
+
+### Bug Fixes
+
+* **session:** skip pruning on cold restore ([c9ea791](https://github.com/monotykamary/openmux/commit/c9ea791e9a368c5acf31e58f80e88f849efcbf9f))
+
+
+### Performance
+
+* **startup:** defer session summaries and prewarm shim ([4373190](https://github.com/monotykamary/openmux/commit/43731904f01103052727aa2ff810ffac2fb5e047))
+
 ### [0.2.77](https://github.com/monotykamary/openmux/compare/v0.2.76...v0.2.77) (2025-12-30)
 
 
