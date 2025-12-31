@@ -13,7 +13,6 @@ vi.mock('../../src/terminal/capabilities', () => ({
     da2Response: null,
     xtversionResponse: null,
     kittyGraphics: true,
-    sixel: false,
     trueColor: true,
     colors: null,
   }),

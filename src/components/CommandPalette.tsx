@@ -17,6 +17,7 @@ import type { CommandPaletteCommand } from '../core/command-palette';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
 import type { KeyboardEvent } from '../effect/bridge';
 import { RGBA } from '@opentui/core';
+import { filterCommands } from './command-palette-utils';
 
 export interface CommandPaletteState {
   show: boolean;
@@ -50,24 +51,6 @@ function getCommandKeybinding(bindings: ResolvedKeybindings, action: string): st
   }
 
   return '';
-}
-
-function filterCommands(commands: CommandPaletteCommand[], query: string): CommandPaletteCommand[] {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) return [];
-
-  const terms = trimmed.split(/\s+/).filter(Boolean);
-  if (terms.length === 0) return [];
-
-  return commands.filter((command) => {
-    const haystack = [
-      command.title,
-      command.description ?? '',
-      command.action,
-      ...(command.keywords ?? []),
-    ].join(' ').toLowerCase();
-    return terms.every((term) => haystack.includes(term));
-  });
 }
 
 export function CommandPalette(props: CommandPaletteProps) {

@@ -8,11 +8,6 @@ import type {
   TerminalScrollState,
   DirtyTerminalUpdate,
 } from "../../core/types";
-import {
-  KittyGraphicsCompression,
-  KittyGraphicsFormat,
-  KittyGraphicsPlacementTag,
-} from "../emulator-interface";
 import type {
   ITerminalEmulator,
   SearchResult,
@@ -25,7 +20,7 @@ import { createTitleParser } from "../title-parser";
 import { stripProblematicOscSequences } from "./osc-stripping";
 import { GhosttyVtTerminal } from "./terminal";
 import { DirtyState } from "./types";
-import { convertLine, createEmptyRow } from "../ghostty-emulator/cell-converter";
+import { createEmptyRow } from "../ghostty-emulator/cell-converter";
 import {
   ScrollbackCache,
   shouldClearCacheOnUpdate,
@@ -36,6 +31,11 @@ import {
 } from "../emulator-utils";
 import { getModes } from "./utils";
 import { searchTerminal } from "./terminal-search";
+import { buildDirtyState } from "./dirty-state";
+import { mapKittyImageInfo, mapKittyPlacements } from "./kitty";
+import { fetchScrollbackLine } from "./scrollback";
+import { drainTerminalResponses } from "./responses";
+import { getCursorSnapshot } from "./cursor";
 
 const SCROLLBACK_LIMIT = 2000;
 
@@ -240,25 +240,11 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
   }
 
   getCursor(): { x: number; y: number; visible: boolean } {
-    if (this._disposed) {
-      if (this.cachedState?.cursor) {
-        return {
-          x: this.cachedState.cursor.x,
-          y: this.cachedState.cursor.y,
-          visible: this.cachedState.cursor.visible,
-        };
-      }
-      return { x: 0, y: 0, visible: false };
-    }
-    if (this.cachedState?.cursor) {
-      return {
-        x: this.cachedState.cursor.x,
-        y: this.cachedState.cursor.y,
-        visible: this.cachedState.cursor.visible,
-      };
-    }
-    this.terminal.update();
-    return this.terminal.getCursor();
+    return getCursorSnapshot({
+      disposed: this._disposed,
+      cachedState: this.cachedState,
+      terminal: this.terminal,
+    });
   }
 
   getCursorKeyMode(): "normal" | "application" {
@@ -287,20 +273,7 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
 
   getKittyImageInfo(imageId: number): KittyGraphicsImageInfo | null {
     if (this._disposed) return null;
-    const info = this.terminal.getKittyImageInfo(imageId);
-    if (!info) return null;
-
-    return {
-      id: info.id,
-      number: info.number,
-      width: info.width,
-      height: info.height,
-      dataLength: info.data_len,
-      format: info.format as KittyGraphicsFormat,
-      compression: info.compression as KittyGraphicsCompression,
-      implicitId: info.implicit_id !== 0,
-      transmitTime: info.transmit_time,
-    };
+    return mapKittyImageInfo(this.terminal, imageId);
   }
 
   getKittyImageData(imageId: number): Uint8Array | null {
@@ -310,34 +283,12 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
 
   getKittyPlacements(): KittyGraphicsPlacement[] {
     if (this._disposed) return [];
-    const placements = this.terminal.getKittyPlacements();
-    return placements.map((placement) => ({
-      imageId: placement.image_id,
-      placementId: placement.placement_id,
-      placementTag: placement.placement_tag as KittyGraphicsPlacementTag,
-      screenX: placement.screen_x,
-      screenY: placement.screen_y,
-      xOffset: placement.x_offset,
-      yOffset: placement.y_offset,
-      sourceX: placement.source_x,
-      sourceY: placement.source_y,
-      sourceWidth: placement.source_width,
-      sourceHeight: placement.source_height,
-      columns: placement.columns,
-      rows: placement.rows,
-      z: placement.z,
-    }));
+    return mapKittyPlacements(this.terminal);
   }
 
   drainResponses(): string[] {
     if (this._disposed) return [];
-    const responses: string[] = [];
-    while (true) {
-      const response = this.terminal.readResponse();
-      if (!response) break;
-      responses.push(response);
-    }
-    return responses;
+    return drainTerminalResponses(this.terminal);
   }
 
   isMouseTrackingEnabled(): boolean {
@@ -429,19 +380,17 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
 
   private fetchScrollbackLine(offset: number): TerminalCell[] | null {
     if (this._disposed) return null;
-    const cached = this.scrollbackCache.get(offset);
-    if (cached) return cached;
-
-    if (this.scrollbackSnapshotDirty) {
-      this.terminal.update();
-      this.scrollbackSnapshotDirty = false;
-    }
-    const line = this.terminal.getScrollbackLine(offset);
-    if (!line) return null;
-
-    const converted = convertLine(line, this._cols, this.colors);
-    this.scrollbackCache.set(offset, converted);
-    return converted;
+    return fetchScrollbackLine({
+      terminal: this.terminal,
+      offset,
+      cols: this._cols,
+      colors: this.colors,
+      cache: this.scrollbackCache,
+      snapshotDirty: this.scrollbackSnapshotDirty,
+      setSnapshotDirty: (value) => {
+        this.scrollbackSnapshotDirty = value;
+      },
+    });
   }
 
   private prepareUpdate(forceFull: boolean): void {
@@ -467,70 +416,19 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
       ? this.terminal.getViewport()
       : null;
 
-    let dirtyRows = new Map<number, TerminalCell[]>();
-    let fullState: TerminalState | undefined;
-
-    if (shouldBuildFull) {
-      const cells: TerminalCell[][] = [];
-      if (viewport) {
-        for (let y = 0; y < this._rows; y++) {
-          const start = y * this._cols;
-          const line = viewport.slice(start, start + this._cols);
-          cells.push(convertLine(line, this._cols, this.colors));
-        }
-      }
-
-      fullState = {
-        cols: this._cols,
-        rows: this._rows,
-        cells,
-        cursor: {
-          x: cursor.x,
-          y: cursor.y,
-          visible: cursor.visible,
-          style: "block",
-        },
-        alternateScreen: newModes.alternateScreen,
-        mouseTracking: newModes.mouseTracking,
-        cursorKeyMode: newModes.cursorKeyMode,
-        kittyKeyboardFlags,
-      };
-      this.cachedState = fullState;
-    } else if (viewport) {
-      for (let y = 0; y < this._rows; y++) {
-        if (!this.terminal.isRowDirty(y)) continue;
-        const start = y * this._cols;
-        const line = viewport.slice(start, start + this._cols);
-        dirtyRows.set(y, convertLine(line, this._cols, this.colors));
-      }
-
-      if (this.cachedState) {
-        for (const [rowIdx, cells] of dirtyRows) {
-          this.cachedState.cells[rowIdx] = cells;
-        }
-        this.cachedState.cursor = {
-          x: cursor.x,
-          y: cursor.y,
-          visible: cursor.visible,
-          style: "block",
-        };
-        this.cachedState.alternateScreen = newModes.alternateScreen;
-        this.cachedState.mouseTracking = newModes.mouseTracking;
-        this.cachedState.cursorKeyMode = newModes.cursorKeyMode;
-        this.cachedState.kittyKeyboardFlags = kittyKeyboardFlags;
-      }
-    } else if (this.cachedState) {
-      this.cachedState.cursor = {
-        x: cursor.x,
-        y: cursor.y,
-        visible: cursor.visible,
-        style: "block",
-      };
-      this.cachedState.alternateScreen = newModes.alternateScreen;
-      this.cachedState.mouseTracking = newModes.mouseTracking;
-      this.cachedState.cursorKeyMode = newModes.cursorKeyMode;
-      this.cachedState.kittyKeyboardFlags = kittyKeyboardFlags;
-    }
+    const { cachedState, dirtyRows, fullState } = buildDirtyState({
+      terminal: this.terminal,
+      viewport,
+      cols: this._cols,
+      rows: this._rows,
+      colors: this.colors,
+      cachedState: this.cachedState,
+      shouldBuildFull,
+      cursor,
+      modes: newModes,
+      kittyKeyboardFlags,
+    });
+    this.cachedState = cachedState;
 
     const update: DirtyTerminalUpdate = {
       dirtyRows,

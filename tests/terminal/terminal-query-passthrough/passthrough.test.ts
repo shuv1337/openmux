@@ -74,6 +74,17 @@ describe('TerminalQueryPassthrough', () => {
     expect(second).toBe('');
   });
 
+  it('passes through large kitty graphics payloads across chunks', () => {
+    const passthrough = new TerminalQueryPassthrough();
+    const payload = 'A'.repeat(70000);
+    const command = `${ESC}_Ga=t,f=24;${payload}${ST}`;
+
+    const first = passthrough.process(command.slice(0, 40000));
+    const second = passthrough.process(command.slice(40000));
+
+    expect(first + second).toBe(command);
+  });
+
   it('captures query responses without writing to the PTY', () => {
     const passthrough = new TerminalQueryPassthrough();
     const responses: string[] = [];

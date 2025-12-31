@@ -157,9 +157,6 @@ function describeSequence(seq: string): string {
     if (seq.includes('$q')) {
       return `DECRQSS (Request Status String): ${visible}`;
     }
-    if (seq.match(/^\x1bP[0-9;]*q/)) {
-      return `SIXEL Graphics: ${visible.slice(0, 50)}...`;
-    }
     return `DCS: ${visible}`;
   }
 

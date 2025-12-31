@@ -64,14 +64,13 @@ export function generateStatusOkResponse(): string {
 
 /**
  * Generate a Primary Device Attributes (DA1) response
- * Format: ESC[?62;1;4;22c - Reports VT220 with capabilities:
+ * Format: ESC[?62;1;22c - Reports VT220 with capabilities:
  * - 62: VT220
  * - 1: 132 columns
- * - 4: Sixel graphics
  * - 22: ANSI color
  */
 export function generateDa1Response(): string {
-  return `${ESC}[?62;1;4;22c`;
+  return `${ESC}[?62;1;22c`;
 }
 
 /**

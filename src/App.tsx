@@ -2,8 +2,8 @@
  * Main App component for openmux
  */
 
-import { createSignal, createEffect, onCleanup, onMount, on } from 'solid-js';
-import { useKeyboard, useTerminalDimensions, useRenderer } from '@opentui/solid';
+import { createSignal, createEffect, onCleanup, on } from 'solid-js';
+import { useTerminalDimensions, useRenderer } from '@opentui/solid';
 import {
   ConfigProvider,
   useConfig,
@@ -26,31 +26,34 @@ import type { ConfirmationType } from './core/types';
 import { SessionBridge } from './components/SessionBridge';
 import { getFocusedPtyId } from './core/workspace-utils';
 import { DEFAULT_COMMAND_PALETTE_COMMANDS, type CommandPaletteCommand } from './core/command-palette';
-import {
-  routeKeyboardEventSync,
-  onShimDetached,
-  shutdownShim,
-} from './effect/bridge';
+import { onShimDetached, shutdownShim } from './effect/bridge';
 import { disposeRuntime } from './effect/runtime';
 import {
   createConfirmationHandlers,
   createPaneResizeHandlers,
   createPasteHandler,
-  handleSearchKeyboard,
-  processNormalModeKey,
 } from './components/app';
 import { setFocusedPty, setClipboardPasteHandler } from './terminal/focused-pty-registry';
 import { readFromClipboard } from './effect/bridge';
 import { handleNormalModeAction } from './contexts/keyboard/handlers';
 import { createCommandPaletteState } from './components/app/command-palette-state';
 import { deferNextTick } from './core/scheduling';
-import { normalizeKeyEvent, type OpenTuiKeyEvent } from './components/app/keyboard-utils';
+import { setupKeyboardRouting } from './components/app/keyboard-routing';
 import { usePtyCreation } from './components/app/pty-creation';
 import { AppOverlays } from './components/app/AppOverlays';
 import { createTemplatePendingActions } from './components/app/template-pending-actions';
-import { KittyGraphicsRenderer, setKittyGraphicsRenderer } from './terminal/kitty-graphics';
-import { buildTemplateSummary } from './components/template-overlay/summary';
-import { calculateLayoutDimensions } from './components/aggregate';
+import { createKittyGraphicsBridge } from './components/app/kitty-graphics-bridge';
+import { createCellMetricsGetter, createPixelResizeTracker } from './components/app/pixel-metrics';
+import { createExitHandlers } from './components/app/exit-handlers';
+import { setupClipboardAndShimBridge } from './components/app/clipboard-bridge';
+import {
+  getCommandPaletteRect,
+  getConfirmationRect,
+  getCopyNotificationRect,
+  getSearchOverlayRect,
+  getSessionPickerRect,
+  getTemplateOverlayRect,
+} from './components/app/overlay-rects';
 import type { Rectangle } from './core/types';
 
 function AppContent() {
@@ -74,77 +77,38 @@ function AppContent() {
   const keyboardState = useKeyboardState();
   const { enterConfirmMode, exitConfirmMode, exitSearchMode: keyboardExitSearchMode } = keyboardState;
   const renderer = useRenderer();
-  let detaching = false;
-  const kittyRenderer = new KittyGraphicsRenderer();
-  setKittyGraphicsRenderer(kittyRenderer);
 
   const { commandPaletteState, setCommandPaletteState, toggleCommandPalette } = createCommandPaletteState();
 
-  const getCellMetrics = () => {
-    const rendererAny = renderer as any;
-    const resolution = rendererAny?.resolution ?? null;
-    const terminalWidth = width() || rendererAny?.terminalWidth || rendererAny?.width || 0;
-    const terminalHeight = height() || rendererAny?.terminalHeight || rendererAny?.height || 0;
-    if (!resolution || terminalWidth <= 0 || terminalHeight <= 0) return null;
-    return {
-      cellWidth: Math.max(1, Math.floor(resolution.width / terminalWidth)),
-      cellHeight: Math.max(1, Math.floor(resolution.height / terminalHeight)),
-    };
-  };
+  const getCellMetrics = createCellMetricsGetter(renderer as any, width, height);
 
-  let pixelResizeInterval: ReturnType<typeof setInterval> | null = null;
-  const stopPixelResizePoll = () => {
-    if (pixelResizeInterval) {
-      clearInterval(pixelResizeInterval);
-      pixelResizeInterval = null;
-    }
-  };
+  const paneResizeHandlers = createPaneResizeHandlers({
+    getPanes: () => layout.panes,
+    resizePTY,
+    getCellMetrics,
+  });
 
-  const ensurePixelResize = () => {
-    const metrics = getCellMetrics();
-    const hasPanes = layout.panes.length > 0;
-    if (terminal.isInitialized && metrics && hasPanes) {
-      paneResizeHandlers.scheduleResizeAllPanes();
-      stopPixelResizePoll();
-      return;
-    }
+  const { ensurePixelResize, stopPixelResizePoll } = createPixelResizeTracker({
+    getCellMetrics,
+    isTerminalInitialized: () => terminal.isInitialized,
+    getPaneCount: () => layout.panes.length,
+    scheduleResizeAllPanes: paneResizeHandlers.scheduleResizeAllPanes,
+  });
 
-    if (!pixelResizeInterval) {
-      let attempts = 0;
-      const maxAttempts = 40; // ~2s at 50ms
-      pixelResizeInterval = setInterval(() => {
-        attempts += 1;
-        const ready = terminal.isInitialized && getCellMetrics() && layout.panes.length > 0;
-        if (ready || attempts >= maxAttempts) {
-          if (ready) {
-            paneResizeHandlers.scheduleResizeAllPanes();
-          }
-          stopPixelResizePoll();
-        }
-      }, 50);
-    }
-  };
+  const kittyRenderer = createKittyGraphicsBridge({
+    renderer,
+    ensurePixelResize,
+    stopPixelResizePoll,
+  });
 
-  // Quit handler - save session, shutdown shim, and cleanup terminal before exiting
-  const handleQuit = async () => {
-    if (detaching) return;
-    detaching = true;
-    await saveSession();
-    await shutdownShim();
-    await disposeRuntime();
-    renderer.destroy();
-    process.exit(0);
-  };
-
-  // Detach handler - save session and exit without shutting down the shim
-  const handleDetach = async () => {
-    if (detaching) return;
-    detaching = true;
-    await saveSession();
-    await disposeRuntime();
-    renderer.destroy();
-    process.exit(0);
-  };
+  const exitHandlers = createExitHandlers({
+    saveSession,
+    shutdownShim,
+    disposeRuntime,
+    renderer,
+  });
+  const handleQuit = exitHandlers.handleQuit;
+  const handleDetach = exitHandlers.handleDetach;
 
 
   // Confirmation dialog state
@@ -156,130 +120,6 @@ function AppContent() {
   // Track pending kill PTY ID for aggregate view kill confirmation
   const [pendingKillPtyId, setPendingKillPtyId] = createSignal<string | null>(null);
 
-  const filterCommands = (commands: CommandPaletteCommand[], query: string): CommandPaletteCommand[] => {
-    const trimmed = query.trim().toLowerCase();
-    if (!trimmed) return [];
-
-    const terms = trimmed.split(/\s+/).filter(Boolean);
-    if (terms.length === 0) return [];
-
-    return commands.filter((command) => {
-      const haystack = [
-        command.title,
-        command.description ?? '',
-        command.action,
-        ...(command.keywords ?? []),
-      ].join(' ').toLowerCase();
-      return terms.every((term) => haystack.includes(term));
-    });
-  };
-
-  const getSessionPickerRect = (w: number, h: number): Rectangle | null => {
-    if (!sessionState.showSessionPicker) return null;
-    const overlayWidth = Math.max(0, Math.min(60, w - 4));
-    const sessionRowCount = Math.max(1, session.filteredSessions.length);
-    const overlayHeight = Math.max(0, Math.min(sessionRowCount + 6, h - 4));
-    const overlayX = Math.floor((w - overlayWidth) / 2);
-    const overlayY = Math.floor((h - overlayHeight) / 2);
-    return { x: overlayX, y: overlayY, width: overlayWidth, height: overlayHeight };
-  };
-
-  const getTemplateOverlayRect = (w: number, h: number): Rectangle | null => {
-    if (!session.showTemplateOverlay) return null;
-    const overlayWidth = Math.max(0, Math.min(72, w - 4));
-
-    const templateCount = session.templates.length;
-    const maxListRows = Math.max(1, h - 10);
-    const listRows = Math.max(1, Math.min(templateCount, maxListRows));
-    const applyHeight = Math.max(0, Math.min(listRows + 6, h - 4));
-
-    const summary = buildTemplateSummary(layout.state.workspaces);
-    const summaryLines = summary.workspaceCount === 0 ? 1 : summary.workspaceCount + summary.paneCount;
-    const maxSaveSummaryLines = Math.max(0, h - 13);
-    const visibleSaveSummary = Math.min(summaryLines, maxSaveSummaryLines);
-    const saveSummaryRows = visibleSaveSummary + (summaryLines > maxSaveSummaryLines ? 1 : 0);
-    const saveContentRows = 2 + 1 + saveSummaryRows + 2;
-    const saveHeight = Math.max(0, Math.min(saveContentRows + 2, h - 4));
-
-    const overlayHeight = Math.max(applyHeight, saveHeight);
-    const overlayX = Math.floor((w - overlayWidth) / 2);
-    const overlayY = Math.floor((h - overlayHeight) / 2);
-    return { x: overlayX, y: overlayY, width: overlayWidth, height: overlayHeight };
-  };
-
-  const getCommandPaletteRect = (w: number, h: number): Rectangle | null => {
-    if (!commandPaletteState.show) return null;
-    const overlayWidth = Math.max(0, Math.min(70, w - 4));
-    const hasQuery = commandPaletteState.query.trim().length > 0;
-    const filteredCommands = filterCommands(DEFAULT_COMMAND_PALETTE_COMMANDS, commandPaletteState.query);
-    const resultCount = filteredCommands.length;
-    const showResults = resultCount > 0;
-
-    const listHeight = () => {
-      if (!showResults) return 0;
-      const maxRows = Math.max(1, h - 7);
-      return Math.min(Math.max(1, resultCount), maxRows);
-    };
-
-    let overlayHeight = 3;
-    if (!hasQuery || !showResults) {
-      overlayHeight = 3;
-    } else {
-      overlayHeight = Math.max(0, Math.min(listHeight() + 3, h - 4));
-    }
-
-    const overlayX = Math.floor((w - overlayWidth) / 2);
-    const desiredCommandY = Math.floor(h * 0.15);
-    const desired = Math.max(0, desiredCommandY - 1);
-    const maxY = Math.max(0, h - overlayHeight);
-    const overlayY = Math.min(desired, maxY);
-    return { x: overlayX, y: overlayY, width: overlayWidth, height: overlayHeight };
-  };
-
-  const getSearchOverlayRect = (w: number, h: number): Rectangle | null => {
-    if (!search.searchState) return null;
-    const overlayWidth = Math.max(0, Math.min(w - 4, 60));
-    const overlayHeight = 3;
-    const overlayX = Math.floor((w - overlayWidth) / 2);
-    const overlayY = h - overlayHeight - 1;
-    return { x: overlayX, y: overlayY, width: overlayWidth, height: overlayHeight };
-  };
-
-  const getConfirmationRect = (w: number, h: number): Rectangle | null => {
-    if (!confirmationState().visible) return null;
-    const overlayWidth = Math.max(0, Math.min(56, w - 4));
-    const overlayHeight = 6;
-    const overlayX = Math.floor((w - overlayWidth) / 2);
-    const overlayY = Math.floor((h - overlayHeight) / 2);
-    return { x: overlayX, y: overlayY, width: overlayWidth, height: overlayHeight };
-  };
-
-  const getCopyNotificationRect = (w: number, h: number): Rectangle | null => {
-    const notification = selection.copyNotification;
-    if (!notification.visible) return null;
-    if (!notification.ptyId) return null;
-
-    let paneRect: Rectangle | null = null;
-    if (aggregateState.showAggregateView && aggregateState.selectedPtyId === notification.ptyId) {
-      const aggLayout = calculateLayoutDimensions({ width: w, height: h });
-      paneRect = {
-        x: aggLayout.listPaneWidth,
-        y: 0,
-        width: aggLayout.previewPaneWidth,
-        height: aggLayout.contentHeight,
-      };
-    } else {
-      paneRect = layout.panes.find((pane) => pane.ptyId === notification.ptyId)?.rectangle ?? null;
-    }
-
-    if (!paneRect) return null;
-    const toastWidth = 25;
-    const toastHeight = 3;
-    const left = Math.max(0, paneRect.x + paneRect.width - toastWidth - 2);
-    const top = paneRect.y + 1;
-    return { x: left, y: top, width: toastWidth, height: toastHeight };
-  };
-
   createEffect(() => {
     const w = width();
     const h = height();
@@ -290,12 +130,12 @@ function AppContent() {
       }
     };
 
-    pushRect(getSessionPickerRect(w, h));
-    pushRect(getTemplateOverlayRect(w, h));
-    pushRect(getCommandPaletteRect(w, h));
-    pushRect(getSearchOverlayRect(w, h));
-    pushRect(getConfirmationRect(w, h));
-    pushRect(getCopyNotificationRect(w, h));
+    pushRect(getSessionPickerRect(w, h, sessionState.showSessionPicker, session.filteredSessions.length));
+    pushRect(getTemplateOverlayRect(w, h, session.showTemplateOverlay, session.templates.length, layout.state.workspaces));
+    pushRect(getCommandPaletteRect(w, h, commandPaletteState, DEFAULT_COMMAND_PALETTE_COMMANDS));
+    pushRect(getSearchOverlayRect(w, h, Boolean(search.searchState)));
+    pushRect(getConfirmationRect(w, h, confirmationState().visible));
+    pushRect(getCopyNotificationRect(w, h, selection.copyNotification, aggregateState, layout.panes));
 
     kittyRenderer.setClipRects(rects);
     kittyRenderer.setVisibleLayers(aggregateState.showAggregateView ? ['overlay'] : ['base']);
@@ -336,84 +176,15 @@ function AppContent() {
     writeToPTY,
   });
 
-  // Create pane resize handlers
-  const paneResizeHandlers = createPaneResizeHandlers({
-    getPanes: () => layout.panes,
-    resizePTY,
-    getCellMetrics,
-  });
-
   // Connect focused PTY registry for clipboard passthrough
   // This bridges the stdin-level paste trigger with the SolidJS context
   // Key insight: We read from clipboard (always complete) instead of unreliable stdin data
-  onMount(() => {
-    // Bracketed paste mode sequences
-    const PASTE_START = '\x1b[200~';
-    const PASTE_END = '\x1b[201~';
-
-    // Register clipboard paste handler
-    // This is called when paste start marker is detected in stdin
-    // We read from clipboard (always complete, no chunking issues) instead of stdin data
-    setClipboardPasteHandler(async (ptyId) => {
-      try {
-        // Read directly from system clipboard - always complete, no chunking issues
-        const clipboardText = await readFromClipboard();
-        if (!clipboardText) return;
-
-        // Send complete paste atomically with brackets
-        // Apps with bracketed paste mode expect the entire paste between markers
-        const fullPaste = PASTE_START + clipboardText + PASTE_END;
-        await writeToPTY(ptyId, fullPaste);
-      } catch (err) {
-        console.error('Clipboard paste error:', err);
-      }
-    });
-
-    const unsubscribeDetached = onShimDetached(() => {
-      if (detaching) return;
-      detaching = true;
-      renderer.destroy();
-      process.exit(0);
-    });
-
-    onCleanup(() => {
-      unsubscribeDetached();
-    });
-  });
-
-  onMount(() => {
-    const rendererAny = renderer as any;
-    const originalRenderNative = rendererAny.renderNative?.bind(rendererAny);
-    const pixelResolutionRegex = /\x1b\[4;\d+;\d+t/;
-
-    const handlePixelResolution = (sequence: string) => {
-      if (!pixelResolutionRegex.test(sequence)) return false;
-      // Pixel metrics just arrived; push a resize so PTYs report correct px dimensions.
-      deferNextTick(() => {
-        ensurePixelResize();
-      });
-      return false;
-    };
-
-    if (originalRenderNative) {
-      rendererAny.renderNative = () => {
-        originalRenderNative();
-        kittyRenderer.flush(rendererAny);
-      };
-    }
-
-    rendererAny.prependInputHandler?.(handlePixelResolution);
-    ensurePixelResize();
-
-    onCleanup(() => {
-      if (originalRenderNative) {
-        rendererAny.renderNative = originalRenderNative;
-      }
-      rendererAny.removeInputHandler?.(handlePixelResolution);
-      stopPixelResizePoll();
-      kittyRenderer.dispose();
-      setKittyGraphicsRenderer(null);
-    });
+  setupClipboardAndShimBridge({
+    setClipboardPasteHandler,
+    readFromClipboard,
+    writeToPTY,
+    onShimDetached,
+    handleShimDetached: exitHandlers.handleShimDetached,
   });
 
   // Keep the focused PTY registry in sync with the current workspace focus
@@ -542,7 +313,6 @@ function AppContent() {
     onToggleAggregateView: handleToggleAggregateView,
     onToggleCommandPalette: toggleCommandPalette,
   });
-  const { handleKeyDown } = keyboardHandler;
 
   // Update viewport when terminal resizes
   createEffect(() => {
@@ -605,69 +375,20 @@ function AppContent() {
     )
   );
 
-  // Handle keyboard input
-  useKeyboard(
-    (event: OpenTuiKeyEvent) => {
-      const normalizedEvent = normalizeKeyEvent(event);
-      // Route to overlays via KeyboardRouter (handles confirmation, session picker, aggregate view)
-      // Use event.sequence for printable chars (handles shift for uppercase/symbols)
-      // Fall back to event.name for special keys
-      const charCode = normalizedEvent.sequence?.charCodeAt(0) ?? 0;
-      const isPrintableChar = normalizedEvent.sequence?.length === 1 && charCode >= 32 && charCode < 127;
-      const keyToPass = isPrintableChar ? normalizedEvent.sequence! : normalizedEvent.key;
-
-      const routeResult = routeKeyboardEventSync({
-        key: keyToPass,
-        ctrl: normalizedEvent.ctrl,
-        alt: normalizedEvent.alt,
-        shift: normalizedEvent.shift,
-        sequence: normalizedEvent.sequence,
-        baseCode: normalizedEvent.baseCode,
-        eventType: normalizedEvent.eventType,
-        repeated: normalizedEvent.repeated,
-      });
-
-      // If an overlay handled the key, don't process further
-      if (routeResult.handled) {
-        return;
-      }
-
-      // If in search mode, handle search-specific keys
-      if (keyboardHandler.mode === 'search') {
-        handleSearchKeyboard(normalizedEvent, {
-          exitSearchMode,
-          keyboardExitSearchMode,
-          setSearchQuery,
-          nextMatch,
-          prevMatch,
-          getSearchState: () => search.searchState,
-          keybindings: config.keybindings().search,
-        });
-        return;
-      }
-
-      // First, check if this is a multiplexer command
-      const handled = handleKeyDown({
-        key: normalizedEvent.key,
-        ctrl: normalizedEvent.ctrl,
-        shift: normalizedEvent.shift,
-        alt: normalizedEvent.alt,
-        meta: normalizedEvent.meta,
-        eventType: normalizedEvent.eventType,
-        repeated: normalizedEvent.repeated,
-      });
-
-      // If not handled by multiplexer and in normal mode, forward to PTY
-      if (!handled && keyboardHandler.mode === 'normal' && !sessionState.showSessionPicker && !session.showTemplateOverlay) {
-        processNormalModeKey(normalizedEvent, {
-          clearAllSelections,
-          getFocusedEmulator,
-          writeToFocused,
-        });
-      }
-    },
-    { release: true }
-  );
+  setupKeyboardRouting({
+    config,
+    keyboardHandler,
+    keyboardExitSearchMode,
+    exitSearchMode,
+    setSearchQuery,
+    nextMatch,
+    prevMatch,
+    getSearchState: () => search.searchState,
+    clearAllSelections,
+    getFocusedEmulator,
+    writeToFocused,
+    isOverlayActive: () => sessionState.showSessionPicker || session.showTemplateOverlay,
+  });
 
   return (
     <box

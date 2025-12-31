@@ -5,17 +5,12 @@
  * and responds to capability queries from child processes.
  *
  * This enables apps running inside openmux panes to detect
- * that the host terminal supports Kitty graphics, Sixel, etc.
+ * that the host terminal supports Kitty graphics, etc.
  */
 
 import { queryHostColors, type TerminalColors } from './terminal-colors';
 
 const ESC = '\x1b';
-
-// Query sequences that child apps may send
-const DA1_QUERY = `${ESC}[c`; // Primary Device Attributes
-const DA2_QUERY = `${ESC}[>c`; // Secondary Device Attributes
-const XTVERSION_QUERY = `${ESC}[>0q`; // Terminal version query
 
 export interface TerminalCapabilities {
   /** Host terminal name (e.g., "ghostty", "kitty", "iterm2") */
@@ -28,8 +23,6 @@ export interface TerminalCapabilities {
   xtversionResponse: string | null;
   /** Whether Kitty graphics is supported */
   kittyGraphics: boolean;
-  /** Whether Sixel is supported */
-  sixel: boolean;
   /** Whether true color is supported */
   trueColor: boolean;
   /** Queried terminal colors (foreground, background, palette) */
@@ -53,7 +46,6 @@ export async function detectHostCapabilities(): Promise<TerminalCapabilities> {
     da2Response: null,
     xtversionResponse: null,
     kittyGraphics: false,
-    sixel: false,
     trueColor: false,
     colors: null,
   };
@@ -74,12 +66,10 @@ export async function detectHostCapabilities(): Promise<TerminalCapabilities> {
     capabilities.trueColor = true;
   } else if (termProgram.toLowerCase() === 'iterm.app') {
     capabilities.terminalName = 'iterm2';
-    capabilities.sixel = true; // iTerm2 supports Sixel
     capabilities.trueColor = true;
   } else if (termProgram.toLowerCase().includes('wezterm')) {
     capabilities.terminalName = 'wezterm';
     capabilities.kittyGraphics = true;
-    capabilities.sixel = true;
     capabilities.trueColor = true;
   } else if (term.includes('256color') || term.includes('truecolor')) {
     capabilities.trueColor = true;
@@ -117,97 +107,6 @@ export async function detectHostCapabilities(): Promise<TerminalCapabilities> {
  */
 export function getHostCapabilities(): TerminalCapabilities | null {
   return cachedCapabilities;
-}
-
-/**
- * Check if a sequence is a capability query
- */
-export function isCapabilityQuery(data: string): boolean {
-  return (
-    data.includes(DA1_QUERY) ||
-    data.includes(DA2_QUERY) ||
-    data.includes(XTVERSION_QUERY)
-  );
-}
-
-/**
- * Generate response for a capability query based on host capabilities
- * This allows child apps to "see through" openmux to the host terminal
- */
-export function generateCapabilityResponse(query: string): string | null {
-  const caps = cachedCapabilities;
-  if (!caps) return null;
-
-  // For now, we forward the host terminal's identity
-  // In a full implementation, we'd store and replay the actual DA1/DA2 responses
-
-  if (query.includes(DA1_QUERY)) {
-    // Generate a DA1 response indicating our capabilities
-    // Format: ESC [ ? <params> c
-    // Common params: 1 (132 columns), 4 (Sixel), 6 (selective erase)
-    // For Kitty: adds 4 (Sixel graphics)
-    let params = '1;2'; // Base VT100/VT220 compatibility
-    if (caps.sixel) {
-      params += ';4'; // Sixel graphics
-    }
-    return `${ESC}[?${params}c`;
-  }
-
-  if (query.includes(DA2_QUERY)) {
-    // Generate a DA2 response
-    // Format: ESC [ > <terminal_type> ; <version> ; <options> c
-    if (caps.terminalName === 'ghostty') {
-      return `${ESC}[>1;1;0c`; // VT100-style response
-    } else if (caps.terminalName === 'kitty') {
-      return `${ESC}[>1;1;0c`;
-    }
-    return `${ESC}[>0;0;0c`; // Generic response
-  }
-
-  if (query.includes(XTVERSION_QUERY)) {
-    // XTVERSION response - identify as the host terminal
-    if (caps.terminalName) {
-      return `${ESC}P>|${caps.terminalName}${ESC}\\`;
-    }
-    return null;
-  }
-
-  return null;
-}
-
-/**
- * Process input from child PTY, looking for capability queries
- * Returns the data with queries handled (responses written to PTY)
- */
-export function processCapabilityQueries(
-  data: string,
-  writeResponse: (response: string) => void
-): string {
-  // Check for capability queries
-  if (data.includes(DA1_QUERY)) {
-    const response = generateCapabilityResponse(DA1_QUERY);
-    if (response) {
-      writeResponse(response);
-    }
-  }
-
-  if (data.includes(DA2_QUERY)) {
-    const response = generateCapabilityResponse(DA2_QUERY);
-    if (response) {
-      writeResponse(response);
-    }
-  }
-
-  if (data.includes(XTVERSION_QUERY)) {
-    const response = generateCapabilityResponse(XTVERSION_QUERY);
-    if (response) {
-      writeResponse(response);
-    }
-  }
-
-  // Return original data - we don't strip queries as they may be needed
-  // by the PTY for other purposes
-  return data;
 }
 
 /**
