@@ -25,7 +25,7 @@ import { PaneContainer } from './components';
 import type { ConfirmationType } from './core/types';
 import { SessionBridge } from './components/SessionBridge';
 import { getFocusedPtyId } from './core/workspace-utils';
-import type { CommandPaletteCommand } from './core/command-palette';
+import { DEFAULT_COMMAND_PALETTE_COMMANDS, type CommandPaletteCommand } from './core/command-palette';
 import {
   routeKeyboardEventSync,
   onShimDetached,
@@ -49,6 +49,9 @@ import { usePtyCreation } from './components/app/pty-creation';
 import { AppOverlays } from './components/app/AppOverlays';
 import { createTemplatePendingActions } from './components/app/template-pending-actions';
 import { KittyGraphicsRenderer, setKittyGraphicsRenderer } from './terminal/kitty-graphics';
+import { buildTemplateSummary } from './components/template-overlay/summary';
+import { calculateLayoutDimensions } from './components/aggregate';
+import type { Rectangle } from './core/types';
 
 function AppContent() {
   const config = useConfig();
@@ -152,6 +155,151 @@ function AppContent() {
 
   // Track pending kill PTY ID for aggregate view kill confirmation
   const [pendingKillPtyId, setPendingKillPtyId] = createSignal<string | null>(null);
+
+  const filterCommands = (commands: CommandPaletteCommand[], query: string): CommandPaletteCommand[] => {
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return [];
+
+    const terms = trimmed.split(/\s+/).filter(Boolean);
+    if (terms.length === 0) return [];
+
+    return commands.filter((command) => {
+      const haystack = [
+        command.title,
+        command.description ?? '',
+        command.action,
+        ...(command.keywords ?? []),
+      ].join(' ').toLowerCase();
+      return terms.every((term) => haystack.includes(term));
+    });
+  };
+
+  const getSessionPickerRect = (w: number, h: number): Rectangle | null => {
+    if (!sessionState.showSessionPicker) return null;
+    const overlayWidth = Math.max(0, Math.min(60, w - 4));
+    const sessionRowCount = Math.max(1, session.filteredSessions.length);
+    const overlayHeight = Math.max(0, Math.min(sessionRowCount + 6, h - 4));
+    const overlayX = Math.floor((w - overlayWidth) / 2);
+    const overlayY = Math.floor((h - overlayHeight) / 2);
+    return { x: overlayX, y: overlayY, width: overlayWidth, height: overlayHeight };
+  };
+
+  const getTemplateOverlayRect = (w: number, h: number): Rectangle | null => {
+    if (!session.showTemplateOverlay) return null;
+    const overlayWidth = Math.max(0, Math.min(72, w - 4));
+
+    const templateCount = session.templates.length;
+    const maxListRows = Math.max(1, h - 10);
+    const listRows = Math.max(1, Math.min(templateCount, maxListRows));
+    const applyHeight = Math.max(0, Math.min(listRows + 6, h - 4));
+
+    const summary = buildTemplateSummary(layout.state.workspaces);
+    const summaryLines = summary.workspaceCount === 0 ? 1 : summary.workspaceCount + summary.paneCount;
+    const maxSaveSummaryLines = Math.max(0, h - 13);
+    const visibleSaveSummary = Math.min(summaryLines, maxSaveSummaryLines);
+    const saveSummaryRows = visibleSaveSummary + (summaryLines > maxSaveSummaryLines ? 1 : 0);
+    const saveContentRows = 2 + 1 + saveSummaryRows + 2;
+    const saveHeight = Math.max(0, Math.min(saveContentRows + 2, h - 4));
+
+    const overlayHeight = Math.max(applyHeight, saveHeight);
+    const overlayX = Math.floor((w - overlayWidth) / 2);
+    const overlayY = Math.floor((h - overlayHeight) / 2);
+    return { x: overlayX, y: overlayY, width: overlayWidth, height: overlayHeight };
+  };
+
+  const getCommandPaletteRect = (w: number, h: number): Rectangle | null => {
+    if (!commandPaletteState.show) return null;
+    const overlayWidth = Math.max(0, Math.min(70, w - 4));
+    const hasQuery = commandPaletteState.query.trim().length > 0;
+    const filteredCommands = filterCommands(DEFAULT_COMMAND_PALETTE_COMMANDS, commandPaletteState.query);
+    const resultCount = filteredCommands.length;
+    const showResults = resultCount > 0;
+
+    const listHeight = () => {
+      if (!showResults) return 0;
+      const maxRows = Math.max(1, h - 7);
+      return Math.min(Math.max(1, resultCount), maxRows);
+    };
+
+    let overlayHeight = 3;
+    if (!hasQuery || !showResults) {
+      overlayHeight = 3;
+    } else {
+      overlayHeight = Math.max(0, Math.min(listHeight() + 3, h - 4));
+    }
+
+    const overlayX = Math.floor((w - overlayWidth) / 2);
+    const desiredCommandY = Math.floor(h * 0.15);
+    const desired = Math.max(0, desiredCommandY - 1);
+    const maxY = Math.max(0, h - overlayHeight);
+    const overlayY = Math.min(desired, maxY);
+    return { x: overlayX, y: overlayY, width: overlayWidth, height: overlayHeight };
+  };
+
+  const getSearchOverlayRect = (w: number, h: number): Rectangle | null => {
+    if (!search.searchState) return null;
+    const overlayWidth = Math.max(0, Math.min(w - 4, 60));
+    const overlayHeight = 3;
+    const overlayX = Math.floor((w - overlayWidth) / 2);
+    const overlayY = h - overlayHeight - 1;
+    return { x: overlayX, y: overlayY, width: overlayWidth, height: overlayHeight };
+  };
+
+  const getConfirmationRect = (w: number, h: number): Rectangle | null => {
+    if (!confirmationState().visible) return null;
+    const overlayWidth = Math.max(0, Math.min(56, w - 4));
+    const overlayHeight = 6;
+    const overlayX = Math.floor((w - overlayWidth) / 2);
+    const overlayY = Math.floor((h - overlayHeight) / 2);
+    return { x: overlayX, y: overlayY, width: overlayWidth, height: overlayHeight };
+  };
+
+  const getCopyNotificationRect = (w: number, h: number): Rectangle | null => {
+    const notification = selection.copyNotification;
+    if (!notification.visible) return null;
+    if (!notification.ptyId) return null;
+
+    let paneRect: Rectangle | null = null;
+    if (aggregateState.showAggregateView && aggregateState.selectedPtyId === notification.ptyId) {
+      const aggLayout = calculateLayoutDimensions({ width: w, height: h });
+      paneRect = {
+        x: aggLayout.listPaneWidth,
+        y: 0,
+        width: aggLayout.previewPaneWidth,
+        height: aggLayout.contentHeight,
+      };
+    } else {
+      paneRect = layout.panes.find((pane) => pane.ptyId === notification.ptyId)?.rectangle ?? null;
+    }
+
+    if (!paneRect) return null;
+    const toastWidth = 25;
+    const toastHeight = 3;
+    const left = Math.max(0, paneRect.x + paneRect.width - toastWidth - 2);
+    const top = paneRect.y + 1;
+    return { x: left, y: top, width: toastWidth, height: toastHeight };
+  };
+
+  createEffect(() => {
+    const w = width();
+    const h = height();
+    const rects: Rectangle[] = [];
+    const pushRect = (rect: Rectangle | null) => {
+      if (rect && rect.width > 0 && rect.height > 0) {
+        rects.push(rect);
+      }
+    };
+
+    pushRect(getSessionPickerRect(w, h));
+    pushRect(getTemplateOverlayRect(w, h));
+    pushRect(getCommandPaletteRect(w, h));
+    pushRect(getSearchOverlayRect(w, h));
+    pushRect(getConfirmationRect(w, h));
+    pushRect(getCopyNotificationRect(w, h));
+
+    kittyRenderer.setClipRects(rects);
+    kittyRenderer.setVisibleLayers(aggregateState.showAggregateView ? ['overlay'] : ['base']);
+  });
 
   const templatePending = createTemplatePendingActions();
 

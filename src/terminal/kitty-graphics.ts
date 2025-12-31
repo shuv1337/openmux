@@ -28,6 +28,15 @@ type RendererLike = {
   realStdoutWrite?: (chunk: any, encoding?: any, callback?: any) => boolean;
 };
 
+type KittyPaneLayer = 'base' | 'overlay';
+
+type ClipRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 type PaneState = {
   ptyId: string | null;
   emulator: ITerminalEmulator | null;
@@ -40,6 +49,8 @@ type PaneState = {
   viewportOffset: number;
   scrollbackLength: number;
   isAlternateScreen: boolean;
+  layer: KittyPaneLayer;
+  hidden: boolean;
   needsClear: boolean;
   removed: boolean;
 };
@@ -90,11 +101,21 @@ export class KittyGraphicsRenderer {
   private nextHostImageId = 1;
   private nextHostPlacementId = 1;
   private enabled = getHostCapabilities()?.kittyGraphics ?? false;
+  private clipRects: ClipRect[] = [];
+  private clipRectsKey = '';
+  private visibleLayers = new Set<KittyPaneLayer>(['base', 'overlay']);
 
-  updatePane(paneKey: string, state: Omit<PaneState, 'needsClear' | 'removed'>): void {
+  updatePane(
+    paneKey: string,
+    state: Omit<PaneState, 'needsClear' | 'removed' | 'hidden' | 'layer'> & { layer?: KittyPaneLayer }
+  ): void {
+    const layer = state.layer ?? 'base';
     const existing = this.panes.get(paneKey);
     if (existing) {
       if (existing.ptyId !== state.ptyId) {
+        existing.needsClear = true;
+      }
+      if (existing.layer !== layer) {
         existing.needsClear = true;
       }
       existing.ptyId = state.ptyId;
@@ -108,11 +129,12 @@ export class KittyGraphicsRenderer {
       existing.viewportOffset = state.viewportOffset;
       existing.scrollbackLength = state.scrollbackLength;
       existing.isAlternateScreen = state.isAlternateScreen;
+      existing.layer = layer;
       existing.removed = false;
       return;
     }
 
-    this.panes.set(paneKey, { ...state, needsClear: false, removed: false });
+    this.panes.set(paneKey, { ...state, layer, hidden: false, needsClear: false, removed: false });
   }
 
   removePane(paneKey: string): void {
@@ -122,10 +144,50 @@ export class KittyGraphicsRenderer {
     }
   }
 
+  setClipRects(rects: ClipRect[]): void {
+    const nextRects = rects
+      .map((rect) => ({
+        x: Math.max(0, Math.floor(rect.x)),
+        y: Math.max(0, Math.floor(rect.y)),
+        width: Math.max(0, Math.floor(rect.width)),
+        height: Math.max(0, Math.floor(rect.height)),
+      }))
+      .filter((rect) => rect.width > 0 && rect.height > 0)
+      .sort((a, b) => (a.y - b.y) || (a.x - b.x));
+    const nextKey = nextRects.map((rect) => `${rect.x},${rect.y},${rect.width},${rect.height}`).join('|');
+    if (nextKey === this.clipRectsKey) return;
+    this.clipRects = nextRects;
+    this.clipRectsKey = nextKey;
+    for (const pane of this.panes.values()) {
+      pane.needsClear = true;
+    }
+  }
+
+  setVisibleLayers(layers: Iterable<KittyPaneLayer>): void {
+    const next = new Set<KittyPaneLayer>(layers);
+    if (next.size === this.visibleLayers.size) {
+      let same = true;
+      for (const layer of next) {
+        if (!this.visibleLayers.has(layer)) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return;
+    }
+    this.visibleLayers = next;
+    for (const pane of this.panes.values()) {
+      pane.needsClear = true;
+    }
+  }
+
   dispose(): void {
     this.panes.clear();
     this.ptyStates.clear();
     this.placementsByPane.clear();
+    this.clipRects = [];
+    this.clipRectsKey = '';
+    this.visibleLayers = new Set<KittyPaneLayer>(['base', 'overlay']);
   }
 
   flush(renderer: RendererLike): void {
@@ -145,11 +207,20 @@ export class KittyGraphicsRenderer {
         continue;
       }
       activePtys.add(pane.ptyId);
+      const shouldBeVisible = this.visibleLayers.has(pane.layer);
+      if (shouldBeVisible && pane.hidden) {
+        pane.hidden = false;
+        pane.needsClear = true;
+      } else if (!shouldBeVisible && !pane.hidden) {
+        pane.hidden = true;
+        pane.needsClear = true;
+      }
     }
 
     const updatedPtys = new Set<string>();
     for (const pane of this.panes.values()) {
       if (pane.removed || !pane.ptyId || !pane.emulator) continue;
+      if (pane.hidden) continue;
       if (updatedPtys.has(pane.ptyId)) continue;
       updatedPtys.add(pane.ptyId);
 
@@ -161,6 +232,14 @@ export class KittyGraphicsRenderer {
         this.clearPanePlacements(paneKey, output);
         if (pane.removed) {
           this.panes.delete(paneKey);
+        }
+        continue;
+      }
+
+      if (pane.hidden) {
+        if (pane.needsClear) {
+          this.clearPanePlacements(paneKey, output);
+          pane.needsClear = false;
         }
         continue;
       }
@@ -328,16 +407,21 @@ export class KittyGraphicsRenderer {
       const image = state.images.get(placement.imageId);
       if (!image) continue;
 
-      const render = this.computePlacementRender(pane, placement, image.info, metrics);
-      if (!render) continue;
+      const baseRender = this.computePlacementRender(pane, placement, image.info, metrics);
+      if (!baseRender) continue;
 
-      const existing = prevPlacements.get(render.key);
-      const hostPlacementId = existing?.hostPlacementId ?? this.nextHostPlacementId++;
-      const renderState: PlacementRender = { ...render, hostImageId: image.hostId, hostPlacementId };
+      const renders = this.applyClipRects(baseRender, metrics);
+      if (renders.length === 0) continue;
 
-      nextPlacements.set(render.key, renderState);
-      if (!existing || !this.isSameRender(existing, renderState)) {
-        output.push(this.buildDisplay(renderState));
+      for (const render of renders) {
+        const existing = prevPlacements.get(render.key);
+        const hostPlacementId = existing?.hostPlacementId ?? this.nextHostPlacementId++;
+        const renderState: PlacementRender = { ...render, hostImageId: image.hostId, hostPlacementId };
+
+        nextPlacements.set(render.key, renderState);
+        if (!existing || !this.isSameRender(existing, renderState)) {
+          output.push(this.buildDisplay(renderState));
+        }
       }
     }
 
@@ -459,6 +543,168 @@ export class KittyGraphicsRenderer {
       sourceHeight,
       z: placement.z,
     };
+  }
+
+  private applyClipRects(
+    render: PlacementRender,
+    metrics: { cellWidth: number; cellHeight: number }
+  ): PlacementRender[] {
+    if (this.clipRects.length === 0) return [render];
+
+    const baseRect: ClipRect = {
+      x: render.globalCol,
+      y: render.globalRow,
+      width: render.columns,
+      height: render.rows,
+    };
+
+    let allowed: ClipRect[] = [baseRect];
+    for (const clip of this.clipRects) {
+      const next: ClipRect[] = [];
+      for (const rect of allowed) {
+        next.push(...this.subtractRect(rect, clip));
+      }
+      allowed = next;
+      if (allowed.length === 0) return [];
+    }
+
+    if (allowed.length === 1 && this.rectEquals(allowed[0], baseRect)) {
+      return [render];
+    }
+
+    allowed.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+
+    const pieces: PlacementRender[] = [];
+    allowed.forEach((rect, index) => {
+      const slice = this.slicePlacement(render, rect, metrics);
+      if (!slice) return;
+      slice.key = `${render.key}:${index}`;
+      pieces.push(slice);
+    });
+
+    return pieces;
+  }
+
+  private slicePlacement(
+    render: PlacementRender,
+    rect: ClipRect,
+    metrics: { cellWidth: number; cellHeight: number }
+  ): PlacementRender | null {
+    const { cellWidth, cellHeight } = metrics;
+    const gridLeft = render.globalCol;
+    const gridTop = render.globalRow;
+    const gridRight = gridLeft + render.columns;
+    const gridBottom = gridTop + render.rows;
+    const rectRight = rect.x + rect.width;
+    const rectBottom = rect.y + rect.height;
+
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    if (rect.x < gridLeft || rect.y < gridTop || rectRight > gridRight || rectBottom > gridBottom) return null;
+
+    const trimLeftCells = rect.x - gridLeft;
+    const trimTopCells = rect.y - gridTop;
+    const trimRightCells = gridRight - rectRight;
+    const trimBottomCells = gridBottom - rectBottom;
+
+    const trimLeftPx = trimLeftCells * cellWidth;
+    const trimTopPx = trimTopCells * cellHeight;
+    const trimRightPx = trimRightCells * cellWidth;
+    const trimBottomPx = trimBottomCells * cellHeight;
+
+    const gridWidthPx = render.columns * cellWidth;
+    const gridHeightPx = render.rows * cellHeight;
+    const imageWidthPx = gridWidthPx - render.xOffset;
+    const imageHeightPx = gridHeightPx - render.yOffset;
+    if (imageWidthPx <= 0 || imageHeightPx <= 0) return null;
+
+    const scaleX = render.sourceWidth / imageWidthPx;
+    const scaleY = render.sourceHeight / imageHeightPx;
+
+    const trimLeftSrc = Math.round(Math.max(0, trimLeftPx - render.xOffset) * scaleX);
+    const trimTopSrc = Math.round(Math.max(0, trimTopPx - render.yOffset) * scaleY);
+    const trimRightSrc = Math.round(trimRightPx * scaleX);
+    const trimBottomSrc = Math.round(trimBottomPx * scaleY);
+
+    const sourceWidth = render.sourceWidth - trimLeftSrc - trimRightSrc;
+    const sourceHeight = render.sourceHeight - trimTopSrc - trimBottomSrc;
+    if (sourceWidth <= 0 || sourceHeight <= 0) return null;
+
+    return {
+      ...render,
+      globalCol: rect.x,
+      globalRow: rect.y,
+      columns: rect.width,
+      rows: rect.height,
+      xOffset: Math.max(0, render.xOffset - trimLeftPx),
+      yOffset: Math.max(0, render.yOffset - trimTopPx),
+      sourceX: render.sourceX + trimLeftSrc,
+      sourceY: render.sourceY + trimTopSrc,
+      sourceWidth,
+      sourceHeight,
+    };
+  }
+
+  private subtractRect(rect: ClipRect, clip: ClipRect): ClipRect[] {
+    const intersection = this.intersectRect(rect, clip);
+    if (!intersection) return [rect];
+
+    const rects: ClipRect[] = [];
+    const rectRight = rect.x + rect.width;
+    const rectBottom = rect.y + rect.height;
+    const interRight = intersection.x + intersection.width;
+    const interBottom = intersection.y + intersection.height;
+
+    if (rect.y < intersection.y) {
+      rects.push({
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: intersection.y - rect.y,
+      });
+    }
+
+    if (interBottom < rectBottom) {
+      rects.push({
+        x: rect.x,
+        y: interBottom,
+        width: rect.width,
+        height: rectBottom - interBottom,
+      });
+    }
+
+    if (rect.x < intersection.x) {
+      rects.push({
+        x: rect.x,
+        y: intersection.y,
+        width: intersection.x - rect.x,
+        height: intersection.height,
+      });
+    }
+
+    if (interRight < rectRight) {
+      rects.push({
+        x: interRight,
+        y: intersection.y,
+        width: rectRight - interRight,
+        height: intersection.height,
+      });
+    }
+
+    return rects;
+  }
+
+  private intersectRect(a: ClipRect, b: ClipRect): ClipRect | null {
+    const left = Math.max(a.x, b.x);
+    const top = Math.max(a.y, b.y);
+    const right = Math.min(a.x + a.width, b.x + b.width);
+    const bottom = Math.min(a.y + a.height, b.y + b.height);
+
+    if (right <= left || bottom <= top) return null;
+    return { x: left, y: top, width: right - left, height: bottom - top };
+  }
+
+  private rectEquals(a: ClipRect, b: ClipRect): boolean {
+    return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
   }
 
   private computeDestSize(

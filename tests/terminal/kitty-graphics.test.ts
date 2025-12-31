@@ -97,6 +97,217 @@ describe('KittyGraphicsRenderer', () => {
     expect(dirty).toBe(false);
   });
 
+  it('clips placements when overlay rects are set', () => {
+    const renderer = new KittyGraphicsRenderer();
+    const output: string[] = [];
+    const renderTarget = {
+      resolution: { width: 10, height: 10 },
+      terminalWidth: 10,
+      terminalHeight: 10,
+      writeOut: (chunk: string) => output.push(chunk),
+    };
+
+    let dirty = true;
+    const imageInfo = {
+      id: 3,
+      number: 0,
+      width: 1,
+      height: 1,
+      dataLength: 3,
+      format: KittyGraphicsFormat.RGB,
+      compression: KittyGraphicsCompression.NONE,
+      implicitId: false,
+      transmitTime: 3n,
+    };
+    const placement = {
+      imageId: 3,
+      placementId: 1,
+      placementTag: KittyGraphicsPlacementTag.INTERNAL,
+      screenX: 0,
+      screenY: 0,
+      xOffset: 0,
+      yOffset: 0,
+      sourceX: 0,
+      sourceY: 0,
+      sourceWidth: 0,
+      sourceHeight: 0,
+      columns: 1,
+      rows: 1,
+      z: 0,
+    };
+    const emulator = {
+      getKittyImagesDirty: () => dirty,
+      clearKittyImagesDirty: () => {
+        dirty = false;
+      },
+      getKittyImageIds: () => [3],
+      getKittyImageInfo: () => imageInfo,
+      getKittyImageData: () => new Uint8Array([0, 0, 255]),
+      getKittyPlacements: () => [placement],
+    } as ITerminalEmulator;
+
+    renderer.updatePane('pane-3', {
+      ptyId: 'pty-3',
+      emulator,
+      offsetX: 0,
+      offsetY: 0,
+      width: 10,
+      height: 10,
+      cols: 10,
+      rows: 10,
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAlternateScreen: false,
+    });
+
+    renderer.flush(renderTarget);
+    expect(output.join('')).toContain('\x1b_Ga=p');
+
+    output.length = 0;
+    renderer.setClipRects([{ x: 0, y: 0, width: 10, height: 10 }]);
+    renderer.flush(renderTarget);
+
+    const cleared = output.join('');
+    expect(cleared).toContain('a=d');
+    expect(cleared).toContain('d=i');
+    expect(cleared).not.toContain('\x1b_Ga=p');
+
+    output.length = 0;
+    renderer.setClipRects([]);
+    renderer.flush(renderTarget);
+    expect(output.join('')).toContain('\x1b_Ga=p');
+  });
+
+  it('respects visible kitty layers', () => {
+    const renderer = new KittyGraphicsRenderer();
+    const output: string[] = [];
+    const renderTarget = {
+      resolution: { width: 10, height: 10 },
+      terminalWidth: 10,
+      terminalHeight: 10,
+      writeOut: (chunk: string) => output.push(chunk),
+    };
+
+    let dirtyBase = true;
+    const baseImage = {
+      id: 4,
+      number: 0,
+      width: 1,
+      height: 1,
+      dataLength: 3,
+      format: KittyGraphicsFormat.RGB,
+      compression: KittyGraphicsCompression.NONE,
+      implicitId: false,
+      transmitTime: 4n,
+    };
+    const basePlacement = {
+      imageId: 4,
+      placementId: 1,
+      placementTag: KittyGraphicsPlacementTag.INTERNAL,
+      screenX: 0,
+      screenY: 0,
+      xOffset: 0,
+      yOffset: 0,
+      sourceX: 0,
+      sourceY: 0,
+      sourceWidth: 0,
+      sourceHeight: 0,
+      columns: 1,
+      rows: 1,
+      z: 0,
+    };
+    const baseEmulator = {
+      getKittyImagesDirty: () => dirtyBase,
+      clearKittyImagesDirty: () => {
+        dirtyBase = false;
+      },
+      getKittyImageIds: () => [4],
+      getKittyImageInfo: () => baseImage,
+      getKittyImageData: () => new Uint8Array([255, 255, 0]),
+      getKittyPlacements: () => [basePlacement],
+    } as ITerminalEmulator;
+
+    let dirtyOverlay = true;
+    const overlayImage = {
+      id: 5,
+      number: 0,
+      width: 1,
+      height: 1,
+      dataLength: 3,
+      format: KittyGraphicsFormat.RGB,
+      compression: KittyGraphicsCompression.NONE,
+      implicitId: false,
+      transmitTime: 5n,
+    };
+    const overlayPlacement = {
+      imageId: 5,
+      placementId: 1,
+      placementTag: KittyGraphicsPlacementTag.INTERNAL,
+      screenX: 0,
+      screenY: 0,
+      xOffset: 0,
+      yOffset: 0,
+      sourceX: 0,
+      sourceY: 0,
+      sourceWidth: 0,
+      sourceHeight: 0,
+      columns: 1,
+      rows: 1,
+      z: 0,
+    };
+    const overlayEmulator = {
+      getKittyImagesDirty: () => dirtyOverlay,
+      clearKittyImagesDirty: () => {
+        dirtyOverlay = false;
+      },
+      getKittyImageIds: () => [5],
+      getKittyImageInfo: () => overlayImage,
+      getKittyImageData: () => new Uint8Array([255, 0, 255]),
+      getKittyPlacements: () => [overlayPlacement],
+    } as ITerminalEmulator;
+
+    renderer.updatePane('pane-base', {
+      ptyId: 'pty-base',
+      emulator: baseEmulator,
+      offsetX: 0,
+      offsetY: 0,
+      width: 10,
+      height: 10,
+      cols: 10,
+      rows: 10,
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAlternateScreen: false,
+      layer: 'base',
+    });
+
+    renderer.updatePane('pane-overlay', {
+      ptyId: 'pty-overlay',
+      emulator: overlayEmulator,
+      offsetX: 0,
+      offsetY: 0,
+      width: 10,
+      height: 10,
+      cols: 10,
+      rows: 10,
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAlternateScreen: false,
+      layer: 'overlay',
+    });
+
+    renderer.setVisibleLayers(['base']);
+    renderer.flush(renderTarget);
+    expect(output.join('')).toContain('\x1b_Ga=p');
+
+    output.length = 0;
+    renderer.setVisibleLayers(['overlay']);
+    renderer.flush(renderTarget);
+    const joined = output.join('');
+    expect(joined).toContain('a=d');
+    expect(joined).toContain('\x1b_Ga=p');
+  });
+
   it('clears placements when panes are removed', () => {
     const renderer = new KittyGraphicsRenderer();
     const output: string[] = [];

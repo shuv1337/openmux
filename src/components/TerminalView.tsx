@@ -80,6 +80,8 @@ interface TerminalViewProps {
   offsetX?: number;
   /** Y offset in the parent buffer (for direct buffer rendering) */
   offsetY?: number;
+  /** Kitty graphics layer for overlay rendering */
+  kittyLayer?: 'base' | 'overlay';
 }
 
 /**
@@ -439,6 +441,7 @@ export function TerminalView(props: TerminalViewProps) {
       viewportOffset: renderViewportOffset,
       scrollbackLength: renderScrollbackLength,
       isAlternateScreen: state.alternateScreen,
+      layer: props.kittyLayer ?? 'base',
     });
   };
 

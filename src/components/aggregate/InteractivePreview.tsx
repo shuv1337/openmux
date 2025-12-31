@@ -86,6 +86,7 @@ export function InteractivePreview(props: InteractivePreviewProps) {
         isFocused={props.isInteractive}
         offsetX={props.offsetX}
         offsetY={props.offsetY}
+        kittyLayer="overlay"
       />
     </Show>
   );
