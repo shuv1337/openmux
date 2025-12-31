@@ -11,6 +11,7 @@ interface QuerySetupOptions {
   emulator: ITerminalEmulator
   pty: IPty
   getSessionDimensions: () => { cols: number; rows: number }
+  getPixelDimensions?: () => { pixelWidth: number; pixelHeight: number; cellWidth: number; cellHeight: number }
   terminalVersion?: string
 }
 
@@ -67,14 +68,14 @@ export function setupQueryPassthrough(options: QuerySetupOptions): void {
   // Set size getter for XTWINOPS queries
   queryPassthrough.setSizeGetter(() => {
     const { cols, rows } = getSessionDimensions()
-    // Estimate cell size (typical terminal font is ~8x16 pixels)
-    const cellWidth = 8
-    const cellHeight = 16
+    const pixels = getPixelDimensions?.()
+    const cellWidth = pixels?.cellWidth || 8
+    const cellHeight = pixels?.cellHeight || 16
     return {
       cols,
       rows,
-      pixelWidth: cols * cellWidth,
-      pixelHeight: rows * cellHeight,
+      pixelWidth: pixels?.pixelWidth || cols * cellWidth,
+      pixelHeight: pixels?.pixelHeight || rows * cellHeight,
       cellWidth,
       cellHeight,
     }

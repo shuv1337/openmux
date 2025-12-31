@@ -73,6 +73,8 @@ export function createRequestHandler(params: {
             cols: Cols.make(requestParams.cols as number),
             rows: Rows.make(requestParams.rows as number),
             cwd: requestParams.cwd as string | undefined,
+            pixelWidth: requestParams.pixelWidth as number | undefined,
+            pixelHeight: requestParams.pixelHeight as number | undefined,
           }));
           params.sendResponse(socket, requestId, { ptyId: String(ptyId) });
           return;
@@ -87,7 +89,9 @@ export function createRequestHandler(params: {
           await params.withPty((pty) => pty.resize(
             PtyId.make(requestParams.ptyId as string),
             Cols.make(requestParams.cols as number),
-            Rows.make(requestParams.rows as number)
+            Rows.make(requestParams.rows as number),
+            requestParams.pixelWidth as number | undefined,
+            requestParams.pixelHeight as number | undefined
           ));
           params.sendResponse(socket, requestId);
           return;

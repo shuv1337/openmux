@@ -11,7 +11,8 @@ export interface PaneResizeDeps {
   getPanes: () => PaneData[];
 
   // PTY operations
-  resizePTY: (ptyId: string, cols: number, rows: number) => void;
+  resizePTY: (ptyId: string, cols: number, rows: number, pixelWidth?: number, pixelHeight?: number) => void;
+  getCellMetrics?: () => { cellWidth: number; cellHeight: number } | null;
 }
 
 /**
@@ -21,9 +22,10 @@ export function createPaneResizeHandlers(deps: PaneResizeDeps) {
   const {
     getPanes,
     resizePTY,
+    getCellMetrics,
   } = deps;
 
-  type PaneGeometry = { cols: number; rows: number };
+  type PaneGeometry = { cols: number; rows: number; pixelWidth: number | null; pixelHeight: number | null };
   const lastGeometry = new Map<string, PaneGeometry>();
   const RESIZE_BATCH_SIZE = 2;
   let resizeScheduled = false;
@@ -35,12 +37,19 @@ export function createPaneResizeHandlers(deps: PaneResizeDeps) {
 
     const cols = Math.max(1, pane.rectangle.width - 2);
     const rows = Math.max(1, pane.rectangle.height - 2);
-    const geometry: PaneGeometry = { cols, rows };
+    const metrics = getCellMetrics?.() ?? null;
+    const pixelWidth = metrics ? cols * metrics.cellWidth : null;
+    const pixelHeight = metrics ? rows * metrics.cellHeight : null;
+    const geometry: PaneGeometry = { cols, rows, pixelWidth, pixelHeight };
     const previous = lastGeometry.get(pane.ptyId);
-    const sizeChanged = !previous || previous.cols !== cols || previous.rows !== rows;
+    const sizeChanged = !previous ||
+      previous.cols !== cols ||
+      previous.rows !== rows ||
+      previous.pixelWidth !== pixelWidth ||
+      previous.pixelHeight !== pixelHeight;
 
     if (sizeChanged) {
-      resizePTY(pane.ptyId, cols, rows);
+      resizePTY(pane.ptyId, cols, rows, pixelWidth ?? undefined, pixelHeight ?? undefined);
       lastGeometry.set(pane.ptyId, geometry);
     }
     seenPtys.add(pane.ptyId);
@@ -120,8 +129,11 @@ export function createPaneResizeHandlers(deps: PaneResizeDeps) {
       if (pane.ptyId && pane.rectangle) {
         const cols = Math.max(1, pane.rectangle.width - 2);
         const rows = Math.max(1, pane.rectangle.height - 2);
-        resizePTY(pane.ptyId, cols, rows);
-        lastGeometry.set(pane.ptyId, { cols, rows });
+        const metrics = getCellMetrics?.() ?? null;
+        const pixelWidth = metrics ? cols * metrics.cellWidth : null;
+        const pixelHeight = metrics ? rows * metrics.cellHeight : null;
+        resizePTY(pane.ptyId, cols, rows, pixelWidth ?? undefined, pixelHeight ?? undefined);
+        lastGeometry.set(pane.ptyId, { cols, rows, pixelWidth, pixelHeight });
       }
     }
   };

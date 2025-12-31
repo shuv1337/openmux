@@ -28,6 +28,7 @@ export interface IPty {
   readonly onExit: (listener: (event: IExitEvent) => void) => IDisposable;
   write(data: string): void;
   resize(columns: number, rows: number): void;
+  resizeWithPixels(columns: number, rows: number, pixelWidth: number, pixelHeight: number): void;
   kill(signal?: string): void;
   // Process inspection (native APIs - no subprocess spawning)
   getForegroundPid(): number;

@@ -40,3 +40,50 @@ export interface GhosttyTerminalConfig {
   cursorColor?: number;
   palette?: number[];
 }
+
+export const enum GhosttyKittyImageFormat {
+  RGB = 0,
+  RGBA = 1,
+  PNG = 2,
+  GRAY_ALPHA = 3,
+  GRAY = 4,
+}
+
+export const enum GhosttyKittyCompression {
+  NONE = 0,
+  ZLIB_DEFLATE = 1,
+}
+
+export const enum GhosttyKittyPlacementTag {
+  INTERNAL = 0,
+  EXTERNAL = 1,
+}
+
+export interface GhosttyKittyImageInfo {
+  id: number;
+  number: number;
+  width: number;
+  height: number;
+  data_len: number;
+  format: GhosttyKittyImageFormat;
+  compression: GhosttyKittyCompression;
+  implicit_id: number;
+  transmit_time: bigint;
+}
+
+export interface GhosttyKittyPlacement {
+  image_id: number;
+  placement_id: number;
+  placement_tag: GhosttyKittyPlacementTag;
+  screen_x: number;
+  screen_y: number;
+  x_offset: number;
+  y_offset: number;
+  source_x: number;
+  source_y: number;
+  source_width: number;
+  source_height: number;
+  columns: number;
+  rows: number;
+  z: number;
+}

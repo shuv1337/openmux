@@ -5,20 +5,36 @@ const RingBuffer = @import("ring_buffer.zig").RingBuffer;
 const posix = @import("../util/posix.zig");
 const c = posix.c;
 const constants = @import("../util/constants.zig");
+const winsize = @import("../util/winsize.zig");
 
 pub const Pty = struct {
     master_fd: c_int,
     pid: c_int,
+    cols: u16,
+    rows: u16,
+    pixel_width: u16,
+    pixel_height: u16,
     exited: std.atomic.Value(bool),
     exit_code: std.atomic.Value(c_int),
     stopping: std.atomic.Value(bool),
     ring: RingBuffer,
     reader_thread: ?std.Thread,
 
-    pub fn init(master_fd: c_int, pid: c_int) Pty {
+    pub fn init(
+        master_fd: c_int,
+        pid: c_int,
+        cols: u16,
+        rows: u16,
+        pixel_width: u16,
+        pixel_height: u16,
+    ) Pty {
         return .{
             .master_fd = master_fd,
             .pid = pid,
+            .cols = cols,
+            .rows = rows,
+            .pixel_width = pixel_width,
+            .pixel_height = pixel_height,
             .exited = std.atomic.Value(bool).init(false),
             .exit_code = std.atomic.Value(c_int).init(-1),
             .stopping = std.atomic.Value(bool).init(false),
@@ -164,12 +180,31 @@ pub const Pty = struct {
     }
 
     pub fn resize(self: *Pty, cols: u16, rows: u16) c_int {
-        var ws: c.winsize = .{
-            .ws_col = cols,
-            .ws_row = rows,
-            .ws_xpixel = 0,
-            .ws_ypixel = 0,
-        };
+        const ws: c.winsize = winsize.makeWinsize(cols, rows);
+        self.cols = cols;
+        self.rows = rows;
+        self.pixel_width = ws.ws_xpixel;
+        self.pixel_height = ws.ws_ypixel;
+
+        if (c.ioctl(self.master_fd, c.TIOCSWINSZ, &ws) == -1) {
+            return constants.ERROR;
+        }
+
+        return constants.SUCCESS;
+    }
+
+    pub fn resizeWithPixels(
+        self: *Pty,
+        cols: u16,
+        rows: u16,
+        pixel_width: u32,
+        pixel_height: u32,
+    ) c_int {
+        const ws: c.winsize = winsize.makeWinsizeWithPixels(cols, rows, pixel_width, pixel_height);
+        self.cols = cols;
+        self.rows = rows;
+        self.pixel_width = ws.ws_xpixel;
+        self.pixel_height = ws.ws_ypixel;
 
         if (c.ioctl(self.master_fd, c.TIOCSWINSZ, &ws) == -1) {
             return constants.ERROR;

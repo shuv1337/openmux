@@ -7,6 +7,7 @@
 // =============================================================================
 
 export const ESC = '\x1b';
+export const CSI = '\x9b';
 export const BEL = '\x07';
 export const ST = `${ESC}\\`;
 export const DCS = `${ESC}P`;

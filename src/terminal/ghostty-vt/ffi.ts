@@ -72,6 +72,10 @@ export const ghostty = dlopen(libPath, {
     args: [FFIType.pointer, FFIType.i32, FFIType.i32],
     returns: FFIType.void,
   },
+  ghostty_terminal_set_pixel_size: {
+    args: [FFIType.pointer, FFIType.i32, FFIType.i32],
+    returns: FFIType.void,
+  },
   ghostty_terminal_write: {
     args: [FFIType.pointer, FFIType.pointer, FFIType.i32],
     returns: FFIType.void,
@@ -163,6 +167,38 @@ export const ghostty = dlopen(libPath, {
   ghostty_terminal_get_kitty_keyboard_flags: {
     args: [FFIType.pointer],
     returns: FFIType.u8,
+  },
+  ghostty_terminal_get_kitty_images_dirty: {
+    args: [FFIType.pointer],
+    returns: FFIType.bool,
+  },
+  ghostty_terminal_clear_kitty_images_dirty: {
+    args: [FFIType.pointer],
+    returns: FFIType.void,
+  },
+  ghostty_terminal_get_kitty_image_count: {
+    args: [FFIType.pointer],
+    returns: FFIType.i32,
+  },
+  ghostty_terminal_get_kitty_image_ids: {
+    args: [FFIType.pointer, FFIType.pointer, FFIType.i32],
+    returns: FFIType.i32,
+  },
+  ghostty_terminal_get_kitty_image_info: {
+    args: [FFIType.pointer, FFIType.u32, FFIType.pointer],
+    returns: FFIType.bool,
+  },
+  ghostty_terminal_copy_kitty_image_data: {
+    args: [FFIType.pointer, FFIType.u32, FFIType.pointer, FFIType.i32],
+    returns: FFIType.i32,
+  },
+  ghostty_terminal_get_kitty_placement_count: {
+    args: [FFIType.pointer],
+    returns: FFIType.i32,
+  },
+  ghostty_terminal_get_kitty_placements: {
+    args: [FFIType.pointer, FFIType.pointer, FFIType.i32],
+    returns: FFIType.i32,
   },
   ghostty_key_event_new: {
     args: [FFIType.pointer, FFIType.pointer],

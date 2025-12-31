@@ -127,33 +127,49 @@ export class DecrqmQueryParser implements QueryParser {
 
 /**
  * Parser for XTWINOPS window size queries (ESC[14t, ESC[16t, ESC[18t)
+ * Also accepts 8-bit CSI (0x9b) sequences.
  */
 export class XtwinopsQueryParser implements QueryParser {
-  private readonly patterns: { pattern: string; winop: number }[] = [
-    { pattern: XTWINOPS_14T, winop: 14 },
-    { pattern: XTWINOPS_16T, winop: 16 },
-    { pattern: XTWINOPS_18T, winop: 18 },
-  ];
+  private readonly csiPrefix = '\x1b[';
+  private readonly c1Csi = '\x9b';
 
   canParse(data: string, index: number): boolean {
-    return this.patterns.some(({ pattern }) => data.startsWith(pattern, index));
+    return data.startsWith(this.csiPrefix, index) || data[index] === this.c1Csi;
   }
 
   parse(data: string, index: number): ParseResult | null {
-    for (const { pattern, winop } of this.patterns) {
-      if (data.startsWith(pattern, index)) {
-        return {
-          query: {
-            type: 'xtwinops',
-            startIndex: index,
-            endIndex: index + pattern.length,
-            winop,
-          },
-          length: pattern.length,
-        };
-      }
+    const prefixLen = data.startsWith(this.csiPrefix, index) ? this.csiPrefix.length
+      : data[index] === this.c1Csi ? 1
+      : 0;
+    if (prefixLen === 0) return null;
+
+    let pos = index + prefixLen;
+    while (pos < data.length && data[pos] !== 't') {
+      if (!/[\d;]/.test(data[pos])) return null;
+      pos++;
     }
-    return null;
+
+    if (pos >= data.length) return null;
+
+    const params = data.slice(index + prefixLen, pos);
+    if (params.length === 0) return null;
+
+    const firstParam = params.split(';', 1)[0];
+    const winop = Number.parseInt(firstParam, 10);
+    if (winop !== 14 && winop !== 16 && winop !== 18) {
+      return null;
+    }
+
+    const totalLength = pos + 1 - index;
+    return {
+      query: {
+        type: 'xtwinops',
+        startIndex: index,
+        endIndex: index + totalLength,
+        winop,
+      },
+      length: totalLength,
+    };
   }
 }
 
@@ -166,11 +182,15 @@ export class XtwinopsQueryParser implements QueryParser {
 export class XtwinopsDropParser implements QueryParser {
   // CSI followed by digits/semicolons ending in 't'
   private readonly csiPattern = '\x1b[';
+  private readonly c1Csi = '\x9b';
 
   canParse(data: string, index: number): boolean {
-    if (!data.startsWith(this.csiPattern, index)) return false;
+    const prefixLen = data.startsWith(this.csiPattern, index) ? this.csiPattern.length
+      : data[index] === this.c1Csi ? 1
+      : 0;
+    if (prefixLen === 0) return false;
     // Look ahead to see if this looks like a CSI...t sequence
-    let pos = index + this.csiPattern.length;
+    let pos = index + prefixLen;
     while (pos < data.length) {
       const char = data[pos];
       if (char === 't') return true;
@@ -181,9 +201,12 @@ export class XtwinopsDropParser implements QueryParser {
   }
 
   parse(data: string, index: number): ParseResult | null {
-    if (!data.startsWith(this.csiPattern, index)) return null;
+    const prefixLen = data.startsWith(this.csiPattern, index) ? this.csiPattern.length
+      : data[index] === this.c1Csi ? 1
+      : 0;
+    if (prefixLen === 0) return null;
 
-    let pos = index + this.csiPattern.length;
+    let pos = index + prefixLen;
     // Parse digits and semicolons until we hit 't'
     while (pos < data.length) {
       const char = data[pos];

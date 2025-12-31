@@ -5,6 +5,7 @@ import { Effect } from 'effect';
 import { PtyId } from '../effect/types';
 import type { UnifiedTerminalUpdate, TerminalScrollState, TerminalState, DirtyTerminalUpdate } from '../core/types';
 import { packDirtyUpdate } from '../terminal/cell-serialization';
+import type { ITerminalEmulator, KittyGraphicsImageInfo, KittyGraphicsPlacement } from '../terminal/emulator-interface';
 import { setHostColors as setHostColorsDefault, type TerminalColors } from '../terminal/terminal-colors';
 import { encodeFrame, SHIM_SOCKET_PATH, type ShimHeader } from './protocol';
 import type { ShimServerState } from './server-state';
@@ -74,6 +75,109 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     sendFrame(state.activeClient, header, payloads);
   };
 
+  const serializeKittyImage = (info: KittyGraphicsImageInfo) => ({
+    id: info.id,
+    number: info.number,
+    width: info.width,
+    height: info.height,
+    dataLength: info.dataLength,
+    format: info.format,
+    compression: info.compression,
+    implicitId: info.implicitId,
+    transmitTime: info.transmitTime.toString(),
+  });
+
+  const serializeKittyPlacement = (placement: KittyGraphicsPlacement) => ({
+    imageId: placement.imageId,
+    placementId: placement.placementId,
+    placementTag: placement.placementTag,
+    screenX: placement.screenX,
+    screenY: placement.screenY,
+    xOffset: placement.xOffset,
+    yOffset: placement.yOffset,
+    sourceX: placement.sourceX,
+    sourceY: placement.sourceY,
+    sourceWidth: placement.sourceWidth,
+    sourceHeight: placement.sourceHeight,
+    columns: placement.columns,
+    rows: placement.rows,
+    z: placement.z,
+  });
+
+  const isSameKittyImage = (a: KittyGraphicsImageInfo, b: KittyGraphicsImageInfo) => (
+    a.transmitTime === b.transmitTime &&
+    a.dataLength === b.dataLength &&
+    a.width === b.width &&
+    a.height === b.height &&
+    a.format === b.format &&
+    a.compression === b.compression
+  );
+
+  const toArrayBuffer = (data: Uint8Array): ArrayBuffer =>
+    data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+
+  const sendKittyUpdate = (
+    ptyId: string,
+    emulator: ITerminalEmulator,
+    force: boolean = false
+  ): void => {
+    if (!state.activeClient) return;
+    if (!emulator.getKittyImageIds || !emulator.getKittyPlacements) return;
+
+    const dirty = emulator.getKittyImagesDirty?.() ?? false;
+    if (!dirty && !force) return;
+
+    const previous = state.kittyImages.get(ptyId) ?? new Map<number, KittyGraphicsImageInfo>();
+    const nextImages = new Map<number, KittyGraphicsImageInfo>();
+    const images: KittyGraphicsImageInfo[] = [];
+    const imageDataIds: number[] = [];
+    const payloads: ArrayBuffer[] = [];
+
+    const ids = emulator.getKittyImageIds?.() ?? [];
+    for (const id of ids) {
+      const info = emulator.getKittyImageInfo?.(id);
+      if (!info) continue;
+      images.push(info);
+
+      const prev = previous.get(id);
+      const changed = force || !prev || !isSameKittyImage(prev, info);
+      if (changed) {
+        const data = emulator.getKittyImageData?.(id);
+        if (data) {
+          imageDataIds.push(id);
+          payloads.push(toArrayBuffer(data));
+        }
+      }
+
+      nextImages.set(id, info);
+    }
+
+    const removedImageIds: number[] = [];
+    for (const [id] of previous) {
+      if (!nextImages.has(id)) {
+        removedImageIds.push(id);
+      }
+    }
+
+    state.kittyImages.set(ptyId, nextImages);
+
+    const placements = emulator.getKittyPlacements?.() ?? [];
+    const header: ShimHeader = {
+      type: 'ptyKitty',
+      ptyId,
+      kitty: {
+        images: images.map(serializeKittyImage),
+        placements: placements.map(serializeKittyPlacement),
+        removedImageIds,
+        imageDataIds,
+      },
+      payloadLengths: payloads.map((payload) => payload.byteLength),
+    };
+
+    sendEvent(header, payloads);
+    emulator.clearKittyImagesDirty?.();
+  };
+
   function registerMapping(sessionId: string, paneId: string, ptyId: string): void {
     const map = state.sessionPanes.get(sessionId) ?? new Map<string, string>();
     map.set(paneId, ptyId);
@@ -96,6 +200,9 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
 
   async function subscribeToPty(ptyId: string): Promise<void> {
     if (state.ptySubscriptions.has(ptyId)) return;
+
+    const emulator = await withPty((pty) => pty.getEmulator(PtyId.make(ptyId))) as ITerminalEmulator;
+    state.ptyEmulators.set(ptyId, emulator);
 
     const unifiedUnsub = await withPty<() => void>((pty) =>
       pty.subscribeUnified(PtyId.make(ptyId), (update: UnifiedTerminalUpdate) => {
@@ -129,6 +236,10 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
         };
 
         sendEvent(header, payloads);
+        const kittyEmulator = state.ptyEmulators.get(ptyId);
+        if (kittyEmulator) {
+          sendKittyUpdate(ptyId, kittyEmulator);
+        }
       })
     );
 
@@ -148,6 +259,8 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     subs.unifiedUnsub();
     subs.exitUnsub();
     state.ptySubscriptions.delete(ptyId);
+    state.ptyEmulators.delete(ptyId);
+    state.kittyImages.delete(ptyId);
   }
 
   async function subscribeAllPtys(): Promise<string[]> {
@@ -220,6 +333,7 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
           alternateScreen: packed.alternateScreen,
           mouseTracking: packed.mouseTracking,
           cursorKeyMode: packed.cursorKeyMode,
+          kittyKeyboardFlags: packed.kittyKeyboardFlags,
           inBandResize: packed.inBandResize,
         },
         scrollState: {
@@ -228,6 +342,13 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
         },
         payloadLengths: payloads.map((payload) => payload.byteLength),
       }, payloads);
+
+      const emulator = state.ptyEmulators.get(ptyId) ??
+        await withPty((pty) => pty.getEmulator(PtyId.make(ptyId))) as ITerminalEmulator;
+      if (emulator) {
+        state.ptyEmulators.set(ptyId, emulator);
+        sendKittyUpdate(ptyId, emulator, true);
+      }
     } catch {
       // ignore snapshot errors
     }

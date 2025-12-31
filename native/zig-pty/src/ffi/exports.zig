@@ -64,6 +64,16 @@ pub fn bun_pty_resize(handle: c_int, cols: c_int, rows: c_int) c_int {
     return pty_ops.resize(handle, cols, rows);
 }
 
+pub fn bun_pty_resize_with_pixels(
+    handle: c_int,
+    cols: c_int,
+    rows: c_int,
+    pixel_width: c_int,
+    pixel_height: c_int,
+) c_int {
+    return pty_ops.resizeWithPixels(handle, cols, rows, pixel_width, pixel_height);
+}
+
 pub fn bun_pty_kill(handle: c_int) c_int {
     return pty_ops.kill(handle);
 }

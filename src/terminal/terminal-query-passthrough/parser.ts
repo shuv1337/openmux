@@ -6,7 +6,7 @@
  */
 
 import type { TerminalQuery, QueryParseResult } from './types';
-import { ESC, DCS } from './constants';
+import { ESC, CSI, DCS } from './constants';
 import { getDefaultRegistry } from './query-registry';
 
 /**
@@ -19,7 +19,7 @@ import { getDefaultRegistry } from './query-registry';
  */
 export function mightContainQueries(data: string): boolean {
   // Check for CSI sequences (ESC[)
-  if (data.includes(`${ESC}[`)) {
+  if (data.includes(`${ESC}[`) || data.includes(CSI)) {
     // DSR queries: ESC[5n (status), ESC[6n (cursor position)
     // Use 2-char patterns '5n' and '6n' - NOT single 'n' which matches everything
     if (data.includes('5n') || data.includes('6n')) {

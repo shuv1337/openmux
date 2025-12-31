@@ -4,6 +4,7 @@
  */
 
 import { Show, createEffect, on } from 'solid-js';
+import { useRenderer, useTerminalDimensions } from '@opentui/solid';
 import { resizePty } from '../../effect/bridge';
 import { TerminalView } from '../TerminalView';
 
@@ -17,8 +18,28 @@ interface InteractivePreviewProps {
 }
 
 export function InteractivePreview(props: InteractivePreviewProps) {
+  const renderer = useRenderer();
+  const dimensions = useTerminalDimensions();
   // Track last resize to avoid redundant calls
-  let lastResize: { ptyId: string; width: number; height: number } | null = null;
+  let lastResize: {
+    ptyId: string;
+    width: number;
+    height: number;
+    pixelWidth: number | null;
+    pixelHeight: number | null;
+  } | null = null;
+
+  const getCellMetrics = () => {
+    const rendererAny = renderer as any;
+    const resolution = rendererAny?.resolution ?? null;
+    const terminalWidth = dimensions().width || rendererAny?.terminalWidth || rendererAny?.width || 0;
+    const terminalHeight = dimensions().height || rendererAny?.terminalHeight || rendererAny?.height || 0;
+    if (!resolution || terminalWidth <= 0 || terminalHeight <= 0) return null;
+    return {
+      cellWidth: Math.max(1, Math.floor(resolution.width / terminalWidth)),
+      cellHeight: Math.max(1, Math.floor(resolution.height / terminalHeight)),
+    };
+  };
 
   // Resize PTY when previewing to match preview dimensions
   // When aggregate view closes, App.tsx will restore the original pane dimensions
@@ -28,13 +49,22 @@ export function InteractivePreview(props: InteractivePreviewProps) {
       ([ptyId, width, height]) => {
         if (!ptyId) return;
 
+        const metrics = getCellMetrics();
+        const pixelWidth = metrics ? width * metrics.cellWidth : null;
+        const pixelHeight = metrics ? height * metrics.cellHeight : null;
+
         // Only resize if dimensions actually changed
-        if (lastResize && lastResize.ptyId === ptyId && lastResize.width === width && lastResize.height === height) {
+        if (lastResize &&
+          lastResize.ptyId === ptyId &&
+          lastResize.width === width &&
+          lastResize.height === height &&
+          lastResize.pixelWidth === pixelWidth &&
+          lastResize.pixelHeight === pixelHeight) {
           return;
         }
 
-        resizePty(ptyId, width, height);
-        lastResize = { ptyId, width, height };
+        resizePty(ptyId, width, height, pixelWidth ?? undefined, pixelHeight ?? undefined);
+        lastResize = { ptyId, width, height, pixelWidth, pixelHeight };
       },
       { defer: false }
     )

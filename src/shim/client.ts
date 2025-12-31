@@ -5,9 +5,15 @@ import { unpackRow, unpackTerminalState, CELL_SIZE } from '../terminal/cell-seri
 import { RemoteEmulator } from './client/emulator';
 import { sendRequest } from './client/connection';
 import { bufferToArrayBuffer } from './client/utils';
-import { getPtyState, registerEmulatorFactory, setPtyState } from './client/state';
+import { getKittyState, getPtyState, registerEmulatorFactory, setPtyState } from './client/state';
 
-export async function createPty(options: { cols: number; rows: number; cwd?: string }): Promise<string> {
+export async function createPty(options: {
+  cols: number;
+  rows: number;
+  cwd?: string;
+  pixelWidth?: number;
+  pixelHeight?: number;
+}): Promise<string> {
   const response = await sendRequest('createPty', options);
   return (response.header.result as { ptyId: string }).ptyId;
 }
@@ -16,8 +22,14 @@ export async function writePty(ptyId: string, data: string): Promise<void> {
   await sendRequest('write', { ptyId, data });
 }
 
-export async function resizePty(ptyId: string, cols: number, rows: number): Promise<void> {
-  await sendRequest('resize', { ptyId, cols, rows });
+export async function resizePty(
+  ptyId: string,
+  cols: number,
+  rows: number,
+  pixelWidth?: number,
+  pixelHeight?: number
+): Promise<void> {
+  await sendRequest('resize', { ptyId, cols, rows, pixelWidth, pixelHeight });
 }
 
 export async function destroyPty(ptyId: string): Promise<void> {
@@ -226,6 +238,7 @@ export async function getSessionMapping(sessionId: string): Promise<{
 function createRemoteEmulator(ptyId: string): RemoteEmulator {
   return new RemoteEmulator(ptyId, {
     getPtyState,
+    getKittyState,
     fetchScrollbackLines: getScrollbackLines,
     searchPty,
   });

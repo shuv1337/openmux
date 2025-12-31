@@ -34,8 +34,10 @@ import {
   guardScrollbackRender,
 } from './terminal-view';
 import { deferMacrotask } from '../core/scheduling';
+import { getKittyGraphicsRenderer } from '../terminal/kitty-graphics';
 
 const visiblePtyCounts = new Map<string, number>();
+let nextKittyPaneId = 0;
 
 const applyUpdateGate = (ptyId: string, enabled: boolean, emulator?: ITerminalEmulator | null) => {
   void setPtyUpdateEnabledBridge(ptyId, enabled);
@@ -85,6 +87,7 @@ interface TerminalViewProps {
  */
 export function TerminalView(props: TerminalViewProps) {
   const renderer = useRenderer();
+  const kittyPaneKey = `kitty-pane-${nextKittyPaneId++}`;
   const hostBgColor = getHostBackgroundColor();
   // Get selection state - keep full context to access selectionVersion reactively
   const selection = useSelection();
@@ -253,6 +256,7 @@ export function TerminalView(props: TerminalViewProps) {
           terminalState = null;
           emulator = null;
           executePrefetchFn = null;
+          getKittyGraphicsRenderer()?.removePane(kittyPaneKey);
         });
       },
       { defer: false }
@@ -268,6 +272,7 @@ export function TerminalView(props: TerminalViewProps) {
     const offsetY = props.offsetY ?? 0;
     const isFocused = props.isFocused;
     const ptyId = props.ptyId;
+    const kittyRenderer = getKittyGraphicsRenderer();
 
     if (!state) {
       // Clear the buffer area when state is null (PTY destroyed)
@@ -279,6 +284,7 @@ export function TerminalView(props: TerminalViewProps) {
           buffer.setCell(x + offsetX, y + offsetY, ' ', BLACK, fallbackBg, 0);
         }
       }
+      kittyRenderer?.removePane(kittyPaneKey);
       return;
     }
 
@@ -420,6 +426,20 @@ export function TerminalView(props: TerminalViewProps) {
         offsetY,
       }, fallbackFg);
     }
+
+    kittyRenderer?.updatePane(kittyPaneKey, {
+      ptyId,
+      emulator,
+      offsetX,
+      offsetY,
+      width,
+      height,
+      cols,
+      rows,
+      viewportOffset: renderViewportOffset,
+      scrollbackLength: renderScrollbackLength,
+      isAlternateScreen: state.alternateScreen,
+    });
   };
 
   // Request render when selection or search version changes

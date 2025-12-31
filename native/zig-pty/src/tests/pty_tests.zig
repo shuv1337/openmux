@@ -5,6 +5,9 @@ const std = @import("std");
 const spawn_module = @import("../core/spawn.zig");
 const exports = @import("../ffi/exports.zig");
 const constants = @import("../util/constants.zig");
+const handle_registry = @import("../core/handle_registry.zig");
+const posix = @import("../util/posix.zig");
+const c = posix.c;
 
 // ============================================================================
 // Basic PTY Spawn Tests
@@ -48,6 +51,51 @@ test "pty resize" {
     const result = exports.bun_pty_resize(handle, 120, 40);
     try std.testing.expectEqual(constants.SUCCESS, result);
 
+    exports.bun_pty_close(handle);
+}
+
+test "pty resize with pixels updates winsize" {
+    const handle = spawn_module.spawnPty("sleep 1", "", "", 80, 24);
+    try std.testing.expect(handle > 0);
+
+    const result = exports.bun_pty_resize_with_pixels(handle, 100, 50, 1234, 567);
+    try std.testing.expectEqual(constants.SUCCESS, result);
+
+    const handle_u32: u32 = @intCast(handle);
+    const pty = handle_registry.acquireHandle(handle_u32) orelse {
+        try std.testing.expect(false);
+        return;
+    };
+
+    var ws: c.winsize = undefined;
+    const rc = c.ioctl(pty.master_fd, c.TIOCGWINSZ, &ws);
+    try std.testing.expectEqual(@as(c_int, 0), rc);
+    try std.testing.expectEqual(@as(u16, 100), ws.ws_col);
+    try std.testing.expectEqual(@as(u16, 50), ws.ws_row);
+    try std.testing.expectEqual(@as(u16, 1234), ws.ws_xpixel);
+    try std.testing.expectEqual(@as(u16, 567), ws.ws_ypixel);
+
+    handle_registry.releaseHandle(handle_u32);
+    exports.bun_pty_close(handle);
+}
+
+test "pty reports pixel size in winsize" {
+    const handle = spawn_module.spawnPty("sleep 1", "", "", 80, 24);
+    try std.testing.expect(handle > 0);
+
+    const handle_u32: u32 = @intCast(handle);
+    const pty = handle_registry.acquireHandle(handle_u32) orelse {
+        try std.testing.expect(false);
+        return;
+    };
+
+    var ws: c.winsize = undefined;
+    const rc = c.ioctl(pty.master_fd, c.TIOCGWINSZ, &ws);
+    try std.testing.expectEqual(@as(c_int, 0), rc);
+    try std.testing.expect(ws.ws_xpixel > 0);
+    try std.testing.expect(ws.ws_ypixel > 0);
+
+    handle_registry.releaseHandle(handle_u32);
     exports.bun_pty_close(handle);
 }
 

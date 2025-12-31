@@ -18,6 +18,8 @@ export async function createPtySession(options: {
   cols: number
   rows: number
   cwd?: string
+  pixelWidth?: number
+  pixelHeight?: number
 }): Promise<string> {
   return runEffect(
     Effect.gen(function* () {
@@ -26,6 +28,8 @@ export async function createPtySession(options: {
         cols: Cols.make(options.cols),
         rows: Rows.make(options.rows),
         cwd: options.cwd,
+        pixelWidth: options.pixelWidth,
+        pixelHeight: options.pixelHeight,
       })
       return ptyId
     })
@@ -50,12 +54,20 @@ export async function writeToPty(ptyId: string, data: string): Promise<void> {
 export async function resizePty(
   ptyId: string,
   cols: number,
-  rows: number
+  rows: number,
+  pixelWidth?: number,
+  pixelHeight?: number
 ): Promise<void> {
   await runEffectIgnore(
     Effect.gen(function* () {
       const pty = yield* Pty
-      yield* pty.resize(PtyId.make(ptyId), Cols.make(cols), Rows.make(rows))
+      yield* pty.resize(
+        PtyId.make(ptyId),
+        Cols.make(cols),
+        Rows.make(rows),
+        pixelWidth,
+        pixelHeight
+      )
     })
   )
 }

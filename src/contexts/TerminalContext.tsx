@@ -11,6 +11,7 @@ import {
   onCleanup,
   type ParentProps,
 } from 'solid-js';
+import { useRenderer, useTerminalDimensions } from '@opentui/solid';
 
 import { detectHostCapabilities } from '../terminal';
 import type { TerminalState, TerminalScrollState } from '../core/types';
@@ -67,7 +68,7 @@ interface TerminalContextValue {
   /** Paste from clipboard to the focused pane's PTY */
   pasteToFocused: () => Promise<boolean>;
   /** Resize a PTY session */
-  resizePTY: (ptyId: string, cols: number, rows: number) => void;
+  resizePTY: (ptyId: string, cols: number, rows: number, pixelWidth?: number, pixelHeight?: number) => void;
   /** Get the current working directory of the focused pane */
   getFocusedCwd: () => Promise<string | null>;
   /** Get the CWD for a specific PTY session */
@@ -108,6 +109,8 @@ interface TerminalProviderProps extends ParentProps {}
 
 export function TerminalProvider(props: TerminalProviderProps) {
   const layout = useLayout();
+  const renderer = useRenderer();
+  const dimensions = useTerminalDimensions();
   const { setPanePty, closePaneById, newPaneWithPty, getNewPaneDimensions } = layout;
   const titleContext = useTitle();
   let isActive = true;
@@ -163,6 +166,17 @@ export function TerminalProvider(props: TerminalProviderProps) {
     setPanePty,
     newPaneWithPty,
     getNewPaneDimensions,
+    getCellMetrics: () => {
+      const rendererAny = renderer as any;
+      const resolution = rendererAny?.resolution ?? null;
+      const terminalWidth = dimensions().width || rendererAny?.terminalWidth || rendererAny?.width || 0;
+      const terminalHeight = dimensions().height || rendererAny?.terminalHeight || rendererAny?.height || 0;
+      if (!resolution || terminalWidth <= 0 || terminalHeight <= 0) return null;
+      return {
+        cellWidth: Math.max(1, Math.floor(resolution.width / terminalWidth)),
+        cellHeight: Math.max(1, Math.floor(resolution.height / terminalHeight)),
+      };
+    },
     shouldCacheScrollState,
   });
 
@@ -361,9 +375,15 @@ export function TerminalProvider(props: TerminalProviderProps) {
   };
 
   // Resize a PTY session
-  const handleResizePTY = (ptyId: string, cols: number, rows: number) => {
+  const handleResizePTY = (
+    ptyId: string,
+    cols: number,
+    rows: number,
+    pixelWidth?: number,
+    pixelHeight?: number
+  ) => {
     // Fire and forget
-    resizePty(ptyId, cols, rows);
+    resizePty(ptyId, cols, rows, pixelWidth, pixelHeight);
   };
 
   // Write to a specific PTY

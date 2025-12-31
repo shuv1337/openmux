@@ -43,10 +43,12 @@ import { setFocusedPty, setClipboardPasteHandler } from './terminal/focused-pty-
 import { readFromClipboard } from './effect/bridge';
 import { handleNormalModeAction } from './contexts/keyboard/handlers';
 import { createCommandPaletteState } from './components/app/command-palette-state';
+import { deferNextTick } from './core/scheduling';
 import { normalizeKeyEvent, type OpenTuiKeyEvent } from './components/app/keyboard-utils';
 import { usePtyCreation } from './components/app/pty-creation';
 import { AppOverlays } from './components/app/AppOverlays';
 import { createTemplatePendingActions } from './components/app/template-pending-actions';
+import { KittyGraphicsRenderer, setKittyGraphicsRenderer } from './terminal/kitty-graphics';
 
 function AppContent() {
   const config = useConfig();
@@ -70,8 +72,55 @@ function AppContent() {
   const { enterConfirmMode, exitConfirmMode, exitSearchMode: keyboardExitSearchMode } = keyboardState;
   const renderer = useRenderer();
   let detaching = false;
+  const kittyRenderer = new KittyGraphicsRenderer();
+  setKittyGraphicsRenderer(kittyRenderer);
 
   const { commandPaletteState, setCommandPaletteState, toggleCommandPalette } = createCommandPaletteState();
+
+  const getCellMetrics = () => {
+    const rendererAny = renderer as any;
+    const resolution = rendererAny?.resolution ?? null;
+    const terminalWidth = width() || rendererAny?.terminalWidth || rendererAny?.width || 0;
+    const terminalHeight = height() || rendererAny?.terminalHeight || rendererAny?.height || 0;
+    if (!resolution || terminalWidth <= 0 || terminalHeight <= 0) return null;
+    return {
+      cellWidth: Math.max(1, Math.floor(resolution.width / terminalWidth)),
+      cellHeight: Math.max(1, Math.floor(resolution.height / terminalHeight)),
+    };
+  };
+
+  let pixelResizeInterval: ReturnType<typeof setInterval> | null = null;
+  const stopPixelResizePoll = () => {
+    if (pixelResizeInterval) {
+      clearInterval(pixelResizeInterval);
+      pixelResizeInterval = null;
+    }
+  };
+
+  const ensurePixelResize = () => {
+    const metrics = getCellMetrics();
+    const hasPanes = layout.panes.length > 0;
+    if (terminal.isInitialized && metrics && hasPanes) {
+      paneResizeHandlers.scheduleResizeAllPanes();
+      stopPixelResizePoll();
+      return;
+    }
+
+    if (!pixelResizeInterval) {
+      let attempts = 0;
+      const maxAttempts = 40; // ~2s at 50ms
+      pixelResizeInterval = setInterval(() => {
+        attempts += 1;
+        const ready = terminal.isInitialized && getCellMetrics() && layout.panes.length > 0;
+        if (ready || attempts >= maxAttempts) {
+          if (ready) {
+            paneResizeHandlers.scheduleResizeAllPanes();
+          }
+          stopPixelResizePoll();
+        }
+      }, 50);
+    }
+  };
 
   // Quit handler - save session, shutdown shim, and cleanup terminal before exiting
   const handleQuit = async () => {
@@ -143,6 +192,7 @@ function AppContent() {
   const paneResizeHandlers = createPaneResizeHandlers({
     getPanes: () => layout.panes,
     resizePTY,
+    getCellMetrics,
   });
 
   // Connect focused PTY registry for clipboard passthrough
@@ -180,6 +230,41 @@ function AppContent() {
 
     onCleanup(() => {
       unsubscribeDetached();
+    });
+  });
+
+  onMount(() => {
+    const rendererAny = renderer as any;
+    const originalRenderNative = rendererAny.renderNative?.bind(rendererAny);
+    const pixelResolutionRegex = /\x1b\[4;\d+;\d+t/;
+
+    const handlePixelResolution = (sequence: string) => {
+      if (!pixelResolutionRegex.test(sequence)) return false;
+      // Pixel metrics just arrived; push a resize so PTYs report correct px dimensions.
+      deferNextTick(() => {
+        ensurePixelResize();
+      });
+      return false;
+    };
+
+    if (originalRenderNative) {
+      rendererAny.renderNative = () => {
+        originalRenderNative();
+        kittyRenderer.flush(rendererAny);
+      };
+    }
+
+    rendererAny.prependInputHandler?.(handlePixelResolution);
+    ensurePixelResize();
+
+    onCleanup(() => {
+      if (originalRenderNative) {
+        rendererAny.renderNative = originalRenderNative;
+      }
+      rendererAny.removeInputHandler?.(handlePixelResolution);
+      stopPixelResizePoll();
+      kittyRenderer.dispose();
+      setKittyGraphicsRenderer(null);
     });
   });
 
@@ -334,6 +419,9 @@ function AppContent() {
         if (!hasAnyPanes()) {
           newPane('shell');
         }
+        deferNextTick(() => {
+          ensurePixelResize();
+        });
       },
       { defer: true } // Skip initial run, wait for initialized to become true
     )

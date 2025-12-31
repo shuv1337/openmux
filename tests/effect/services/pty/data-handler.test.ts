@@ -10,20 +10,30 @@ import type { TerminalQueryPassthrough } from "../../../../src/terminal/terminal
 function createSession() {
   const emulator = {
     write: vi.fn(),
+    drainResponses: vi.fn(() => [] as string[]),
     isDisposed: false,
+  }
+
+  const pty = {
+    write: vi.fn(),
   }
 
   const queryPassthrough = {
     process: (data: string) => data,
+    processWithResponses: (data: string) => ({ text: data, responses: [] as string[] }),
   } as TerminalQueryPassthrough
 
   const session: InternalPtySession = {
     id: "pty-test" as InternalPtySession["id"],
-    pty: {} as InternalPtySession["pty"],
+    pty: pty as InternalPtySession["pty"],
     emulator: emulator as InternalPtySession["emulator"],
     queryPassthrough,
     cols: 80,
     rows: 24,
+    cellWidth: 8,
+    cellHeight: 16,
+    pixelWidth: 640,
+    pixelHeight: 384,
     cwd: "",
     shell: "",
     closing: false,
@@ -39,7 +49,7 @@ function createSession() {
     },
   }
 
-  return { session, emulator }
+  return { session, emulator, pty }
 }
 
 describe("createDataHandler", () => {
@@ -88,5 +98,60 @@ describe("createDataHandler", () => {
 
     expect(emulator.write).toHaveBeenCalledTimes(1)
     expect(emulator.write).toHaveBeenCalledWith("Hello")
+  })
+
+  it("writes terminal responses back to the PTY", async () => {
+    const { session, emulator, pty } = createSession()
+    emulator.drainResponses = vi.fn(() => ["\x1b_Gi=1;OK\x1b\\"])
+
+    const handler = createDataHandler({
+      session,
+      syncParser: createSyncModeParser(),
+      syncTimeoutMs: 50,
+    })
+
+    handler.handleData("query")
+    await vi.runAllTimersAsync()
+
+    expect(pty.write).toHaveBeenCalledWith("\x1b_Gi=1;OK\x1b\\")
+  })
+
+  it("flushes immediately when kitty queries are present", () => {
+    const { session, emulator } = createSession()
+
+    const handler = createDataHandler({
+      session,
+      syncParser: createSyncModeParser(),
+      syncTimeoutMs: 50,
+    })
+
+    handler.handleData("\x1b_Ga=q,i=1;AAAA\x1b\\")
+
+    expect(emulator.write).toHaveBeenCalledTimes(1)
+  })
+
+  it("defers query responses until after emulator responses for kitty queries", () => {
+    const { session, emulator, pty } = createSession()
+    const passthrough = session.queryPassthrough as TerminalQueryPassthrough & {
+      processWithResponses: (data: string) => { text: string; responses: string[] }
+    }
+
+    passthrough.processWithResponses = vi.fn(() => ({
+      text: "payload",
+      responses: ["\x1b[c"],
+    }))
+    emulator.drainResponses = vi.fn(() => ["\x1b_Gi=1;OK\x1b\\"])
+
+    const handler = createDataHandler({
+      session,
+      syncParser: createSyncModeParser(),
+      syncTimeoutMs: 50,
+    })
+
+    handler.handleData("\x1b_Ga=q,i=1;AAAA\x1b\\")
+
+    const writes = pty.write.mock.calls.map(([data]) => data as string)
+    expect(writes[0]).toBe("\x1b_Gi=1;OK\x1b\\")
+    expect(writes[1]).toBe("\x1b[c")
   })
 })

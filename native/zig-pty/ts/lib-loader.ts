@@ -82,6 +82,10 @@ export const lib = dlopen(libPath, {
     args: [FFIType.i32, FFIType.i32, FFIType.i32],
     returns: FFIType.i32,
   },
+  bun_pty_resize_with_pixels: {
+    args: [FFIType.i32, FFIType.i32, FFIType.i32, FFIType.i32, FFIType.i32],
+    returns: FFIType.i32,
+  },
   bun_pty_kill: { args: [FFIType.i32], returns: FFIType.i32 },
   bun_pty_get_pid: { args: [FFIType.i32], returns: FFIType.i32 },
   bun_pty_get_exit_code: { args: [FFIType.i32], returns: FFIType.i32 },

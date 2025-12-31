@@ -98,4 +98,62 @@ describe("createSession", () => {
     expect(exitCallback).toHaveBeenCalledWith(0)
     expect(onExit).toHaveBeenCalledWith(id, 0)
   })
+
+  it("applies initial pixel sizing when provided", async () => {
+    const resizeWithPixels = vi.fn()
+    const fakePty = {
+      onExit: vi.fn(() => ({ dispose: () => {} })),
+      onData: vi.fn(),
+      write: vi.fn(),
+      resize: vi.fn(),
+      resizeWithPixels,
+      kill: vi.fn(),
+      getCwd: vi.fn(() => "/"),
+      getForegroundProcessName: vi.fn(),
+      pid: 123,
+    }
+
+    vi.mocked(spawnAsync).mockResolvedValue(
+      fakePty as Awaited<ReturnType<typeof spawnAsync>>
+    )
+
+    const emulator = {
+      setUpdateEnabled: vi.fn(),
+      onTitleChange: vi.fn(),
+      onUpdate: vi.fn(),
+      onModeChange: vi.fn(),
+      getMode: vi.fn(() => false),
+      resize: vi.fn(),
+      getTerminalState: vi.fn(),
+      dispose: vi.fn(),
+      getTitle: vi.fn(() => ""),
+    }
+
+    vi.mocked(createGhosttyVTEmulator).mockReturnValue(
+      emulator as ReturnType<typeof createGhosttyVTEmulator>
+    )
+
+    const { session } = await Effect.runPromise(
+      createSession(
+        {
+          colors: {} as TerminalColors,
+          defaultShell: "/bin/sh",
+          onLifecycleEvent: vi.fn(() => Effect.void),
+          onTitleChange: vi.fn(),
+        },
+        {
+          cols: Cols.make(80),
+          rows: Rows.make(24),
+          pixelWidth: 800,
+          pixelHeight: 480,
+        }
+      )
+    )
+
+    expect(resizeWithPixels).toHaveBeenCalledWith(80, 24, 800, 480)
+    expect(session.pixelWidth).toBe(800)
+    expect(session.pixelHeight).toBe(480)
+    expect(session.cellWidth).toBe(10)
+    expect(session.cellHeight).toBe(20)
+  })
 })

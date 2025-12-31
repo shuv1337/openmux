@@ -23,6 +23,7 @@ import {
   XTWINOPS_14T,
   XTWINOPS_16T,
   XTWINOPS_18T,
+  CSI,
   DECXCPR_QUERY,
   OSC_FG_QUERY_BEL,
   OSC_FG_QUERY_ST,
@@ -199,6 +200,22 @@ describe('parseTerminalQueries', () => {
       expect(result.queries).toHaveLength(1);
       expect(result.queries[0].type).toBe('xtwinops');
       expect(result.queries[0].winop).toBe(18);
+    });
+
+    test('parses XTWINOPS 14t with extra params', () => {
+      const query = `${ESC}[14;2t`;
+      const result = parseTerminalQueries(query);
+      expect(result.queries).toHaveLength(1);
+      expect(result.queries[0].type).toBe('xtwinops');
+      expect(result.queries[0].winop).toBe(14);
+    });
+
+    test('parses XTWINOPS 16t using 8-bit CSI', () => {
+      const query = `${CSI}16t`;
+      const result = parseTerminalQueries(query);
+      expect(result.queries).toHaveLength(1);
+      expect(result.queries[0].type).toBe('xtwinops');
+      expect(result.queries[0].winop).toBe(16);
     });
   });
 

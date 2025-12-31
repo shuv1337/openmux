@@ -10,7 +10,13 @@ import { getHostColors } from '../../terminal/terminal-colors';
 import { unpackDirtyUpdate } from '../../terminal/cell-serialization';
 import { encodeFrame, FrameReader, SHIM_SOCKET_DIR, SHIM_SOCKET_PATH, type ShimHeader } from '../protocol';
 import { bufferToArrayBuffer } from './utils';
-import { handlePtyExit, handlePtyLifecycle, handlePtyTitle, handleUnifiedUpdate } from './state';
+import {
+  handlePtyExit,
+  handlePtyLifecycle,
+  handlePtyTitle,
+  handlePtyKittyUpdate,
+  handleUnifiedUpdate,
+} from './state';
 import { runStream } from '../../effect/stream-utils';
 
 const CLIENT_VERSION = 1;
@@ -114,6 +120,71 @@ function handleFrame(header: ShimHeader, payloads: Buffer[]): void {
     const ptyId = header.ptyId as string;
     const exitCode = header.exitCode as number;
     handlePtyExit(ptyId, exitCode);
+    return;
+  }
+
+  if (header.type === 'ptyKitty') {
+    const ptyId = header.ptyId as string;
+    const kitty = header.kitty as {
+      images?: Array<{
+        id: number;
+        number: number;
+        width: number;
+        height: number;
+        dataLength: number;
+        format: number;
+        compression: number;
+        implicitId: boolean;
+        transmitTime: string;
+      }>;
+      placements?: Array<{
+        imageId: number;
+        placementId: number;
+        placementTag: number;
+        screenX: number;
+        screenY: number;
+        xOffset: number;
+        yOffset: number;
+        sourceX: number;
+        sourceY: number;
+        sourceWidth: number;
+        sourceHeight: number;
+        columns: number;
+        rows: number;
+        z: number;
+      }>;
+      removedImageIds?: number[];
+      imageDataIds?: number[];
+    } | undefined;
+
+    if (!kitty) return;
+
+    const imageDataIds = kitty.imageDataIds ?? [];
+    const imageData = new Map<number, Uint8Array>();
+    for (let i = 0; i < imageDataIds.length; i++) {
+      const payload = payloads[i];
+      if (!payload) continue;
+      imageData.set(imageDataIds[i], payload);
+    }
+
+    const images = (kitty.images ?? []).map((info) => ({
+      id: info.id,
+      number: info.number,
+      width: info.width,
+      height: info.height,
+      dataLength: info.dataLength,
+      format: info.format,
+      compression: info.compression,
+      implicitId: info.implicitId,
+      transmitTime: BigInt(info.transmitTime),
+    }));
+
+    handlePtyKittyUpdate(ptyId, {
+      images,
+      placements: kitty.placements ?? [],
+      removedImageIds: kitty.removedImageIds ?? [],
+      imageData,
+    });
     return;
   }
 

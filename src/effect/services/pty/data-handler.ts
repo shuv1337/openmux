@@ -16,7 +16,13 @@ interface DataHandlerOptions {
 interface DataHandlerState {
   pendingSegments: string[]
   syncTimeout: ReturnType<typeof setTimeout> | null
+  pendingResponses: { fence: number; responses: string[] }[]
+  segmentCounter: number
+  processedCounter: number
 }
+
+const ESC = "\x1b"
+const APC_C1 = "\x9f"
 
 /**
  * Creates the PTY data handler that processes incoming data
@@ -32,6 +38,29 @@ export function createDataHandler(options: DataHandlerOptions) {
   const state: DataHandlerState = {
     pendingSegments: [],
     syncTimeout: null,
+    pendingResponses: [],
+    segmentCounter: 0,
+    processedCounter: 0,
+  }
+  let kittyProbeBuffer = ""
+
+  const sawKittyQuery = (data: string): boolean => {
+    if (data.length === 0) return false
+    const combined = kittyProbeBuffer + data
+    kittyProbeBuffer = combined.slice(-256)
+    if (!combined.includes("a=q")) return false
+    return combined.includes(`${ESC}_G`) || combined.includes(`${APC_C1}G`)
+  }
+
+  const flushPendingResponses = () => {
+    while (state.pendingResponses.length > 0) {
+      const next = state.pendingResponses[0]
+      if (next.fence > state.processedCounter) break
+      state.pendingResponses.shift()
+      for (const response of next.responses) {
+        session.pty.write(response)
+      }
+    }
   }
 
   const drainPending = () => {
@@ -43,6 +72,7 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
 
     if (state.pendingSegments.length === 0) {
+      flushPendingResponses()
       return
     }
 
@@ -78,6 +108,17 @@ export function createDataHandler(options: DataHandlerOptions) {
 
     if (batch.length > 0) {
       session.emulator.write(batch)
+      const responses = session.emulator.drainResponses?.()
+      if (responses && responses.length > 0) {
+        for (const response of responses) {
+          session.pty.write(response)
+        }
+      }
+    }
+
+    if (segmentsProcessed > 0) {
+      state.processedCounter += segmentsProcessed
+      flushPendingResponses()
     }
 
     if (state.pendingSegments.length > 0) {
@@ -95,8 +136,19 @@ export function createDataHandler(options: DataHandlerOptions) {
 
   // The data handler function
   const handleData = (data: string) => {
+    const hasKittyQuery = sawKittyQuery(data)
+    let textData: string
+    let deferredResponses: string[] | null = null
+
     // Handle terminal queries (cursor position, device attributes, colors, etc.)
-    const textData = session.queryPassthrough.process(data)
+    if (hasKittyQuery && "processWithResponses" in session.queryPassthrough) {
+      const processed = session.queryPassthrough.processWithResponses(data)
+      textData = processed.text
+      deferredResponses = processed.responses
+    } else {
+      textData = session.queryPassthrough.process(data)
+    }
+
     if (commandParser) {
       commandParser.processData(textData)
     }
@@ -124,16 +176,35 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
 
     // Add ready segments to pending queue
+    let segmentsAdded = 0
     for (const segment of readySegments) {
       if (segment.length > 0) {
         state.pendingSegments.push(segment)
+        segmentsAdded += 1
+      }
+    }
+    if (segmentsAdded > 0) {
+      state.segmentCounter += segmentsAdded
+    }
+
+    if (deferredResponses && deferredResponses.length > 0) {
+      state.pendingResponses.push({
+        fence: state.segmentCounter,
+        responses: deferredResponses,
+      })
+      if (state.pendingSegments.length === 0) {
+        flushPendingResponses()
       }
     }
 
     // Only schedule notification if we have data and aren't buffering
     // When buffering, we wait for the complete frame before notifying
     if (!isBuffering && state.pendingSegments.length > 0) {
-      scheduleNotify()
+      if (hasKittyQuery) {
+        drainPending()
+      } else {
+        scheduleNotify()
+      }
     }
   }
 

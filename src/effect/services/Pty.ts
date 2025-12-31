@@ -34,6 +34,8 @@ export class Pty extends Context.Tag("@openmux/Pty")<
       rows: Rows
       cwd?: string
       env?: Record<string, string>
+      pixelWidth?: number
+      pixelHeight?: number
     }) => Effect.Effect<PtyId, PtySpawnError>
 
     /** Write data to a PTY */
@@ -43,7 +45,9 @@ export class Pty extends Context.Tag("@openmux/Pty")<
     readonly resize: (
       id: PtyId,
       cols: Cols,
-      rows: Rows
+      rows: Rows,
+      pixelWidth?: number,
+      pixelHeight?: number
     ) => Effect.Effect<void, PtyNotFoundError>
 
     /** Get current working directory of a PTY's shell process */
@@ -197,6 +201,8 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         rows: Rows
         cwd?: string
         env?: Record<string, string>
+        pixelWidth?: number
+        pixelHeight?: number
       }) {
         const colors = getHostColors() ?? getDefaultColors()
         const { id, session } = yield* createSession(
@@ -270,13 +276,21 @@ export class Pty extends Context.Tag("@openmux/Pty")<
               cols: options.cols as number,
               rows: options.rows as number,
               cwd: options.cwd,
+              pixelWidth: options.pixelWidth as number | undefined,
+              pixelHeight: options.pixelHeight as number | undefined,
             })
             return PtyId.make(ptyId)
           }),
         write: (id, data) =>
           Effect.promise(() => ShimClient.writePty(String(id), data)),
-        resize: (id, cols, rows) =>
-          Effect.promise(() => ShimClient.resizePty(String(id), cols as number, rows as number)),
+        resize: (id, cols, rows, pixelWidth, pixelHeight) =>
+          Effect.promise(() => ShimClient.resizePty(
+            String(id),
+            cols as number,
+            rows as number,
+            pixelWidth as number | undefined,
+            pixelHeight as number | undefined
+          )),
         getCwd: (id) =>
           Effect.promise(() => ShimClient.getPtyCwd(String(id))),
         destroy: (id) =>

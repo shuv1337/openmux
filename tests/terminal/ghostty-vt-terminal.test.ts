@@ -21,6 +21,7 @@ beforeEach(() => {
 });
 
 const CELL_SIZE = 16;
+const KITTY_PLACEMENT_SIZE = 56;
 
 type CellInput = {
   codepoint: number;
@@ -47,6 +48,71 @@ function writeCell(buffer: Buffer, index: number, cell: CellInput): void {
   view.setUint16(offset + 12, cell.hyperlinkId ?? 0, true);
   buffer[offset + 14] = cell.graphemeLen ?? 0;
   buffer[offset + 15] = 0;
+}
+
+function writeKittyImageInfo(
+  buffer: Buffer,
+  info: {
+    id: number;
+    number: number;
+    width: number;
+    height: number;
+    data_len: number;
+    format: number;
+    compression: number;
+    implicit_id: number;
+    transmit_time: bigint;
+  }
+): void {
+  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  view.setUint32(0, info.id, true);
+  view.setUint32(4, info.number, true);
+  view.setUint32(8, info.width, true);
+  view.setUint32(12, info.height, true);
+  view.setUint32(16, info.data_len, true);
+  view.setUint8(20, info.format);
+  view.setUint8(21, info.compression);
+  view.setUint8(22, info.implicit_id);
+  view.setUint8(23, 0);
+  view.setBigUint64(24, info.transmit_time, true);
+}
+
+function writeKittyPlacement(
+  buffer: Buffer,
+  index: number,
+  placement: {
+    image_id: number;
+    placement_id: number;
+    placement_tag: number;
+    screen_x: number;
+    screen_y: number;
+    x_offset: number;
+    y_offset: number;
+    source_x: number;
+    source_y: number;
+    source_width: number;
+    source_height: number;
+    columns: number;
+    rows: number;
+    z: number;
+  }
+): void {
+  const offset = index * KITTY_PLACEMENT_SIZE;
+  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  view.setUint32(offset, placement.image_id, true);
+  view.setUint32(offset + 4, placement.placement_id, true);
+  view.setUint8(offset + 8, placement.placement_tag);
+  view.setUint32(offset + 12, placement.screen_x, true);
+  view.setUint32(offset + 16, placement.screen_y, true);
+  view.setUint32(offset + 20, placement.x_offset, true);
+  view.setUint32(offset + 24, placement.y_offset, true);
+  view.setUint32(offset + 28, placement.source_x, true);
+  view.setUint32(offset + 32, placement.source_y, true);
+  view.setUint32(offset + 36, placement.source_width, true);
+  view.setUint32(offset + 40, placement.source_height, true);
+  view.setUint32(offset + 44, placement.columns, true);
+  view.setUint32(offset + 48, placement.rows, true);
+  view.setInt32(offset + 52, placement.z, true);
 }
 
 describe("GhosttyVtTerminal", () => {
@@ -218,6 +284,100 @@ describe("GhosttyVtTerminal", () => {
 
     mockGhostty.symbols.ghostty_terminal_has_response = vi.fn(() => false);
     expect(term.readResponse()).toBeNull();
+
+    term.free();
+  });
+
+  it("reads kitty image metadata and data", () => {
+    const info = {
+      id: 42,
+      number: 7,
+      width: 2,
+      height: 3,
+      data_len: 6,
+      format: 0,
+      compression: 0,
+      implicit_id: 1,
+      transmit_time: 987654321n,
+    };
+    const imageData = Buffer.from([1, 2, 3, 4, 5, 6]);
+
+    mockGhostty.symbols = {
+      ghostty_terminal_new: vi.fn(() => 1),
+      ghostty_terminal_free: vi.fn(),
+      ghostty_terminal_get_kitty_image_count: vi.fn(() => 1),
+      ghostty_terminal_get_kitty_image_ids: vi.fn((_handle: number, outBuffer: Buffer, count: number) => {
+        expect(count).toBe(1);
+        outBuffer.writeUInt32LE(info.id, 0);
+        return 1;
+      }),
+      ghostty_terminal_get_kitty_image_info: vi.fn((_handle: number, imageId: number, outBuffer: Buffer) => {
+        expect(imageId).toBe(info.id);
+        writeKittyImageInfo(outBuffer, info);
+        return true;
+      }),
+      ghostty_terminal_copy_kitty_image_data: vi.fn((_handle: number, imageId: number, outBuffer: Buffer, size: number) => {
+        expect(imageId).toBe(info.id);
+        expect(size).toBe(imageData.length);
+        imageData.copy(outBuffer);
+        return imageData.length;
+      }),
+    };
+
+    const term = new GhosttyVtTerminal(2, 2);
+    expect(term.getKittyImageIds()).toEqual([42]);
+
+    const meta = term.getKittyImageInfo(42);
+    expect(meta).not.toBeNull();
+    expect(meta?.width).toBe(info.width);
+    expect(meta?.height).toBe(info.height);
+    expect(meta?.data_len).toBe(info.data_len);
+    expect(meta?.implicit_id).toBe(1);
+    expect(meta?.transmit_time).toBe(info.transmit_time);
+
+    const data = term.getKittyImageData(42);
+    expect(data).not.toBeNull();
+    expect(Buffer.from(data!)).toEqual(imageData);
+
+    term.free();
+  });
+
+  it("reads kitty placements", () => {
+    const placement = {
+      image_id: 3,
+      placement_id: 9,
+      placement_tag: 1,
+      screen_x: 4,
+      screen_y: 5,
+      x_offset: 6,
+      y_offset: 7,
+      source_x: 1,
+      source_y: 2,
+      source_width: 10,
+      source_height: 12,
+      columns: 2,
+      rows: 3,
+      z: -4,
+    };
+
+    mockGhostty.symbols = {
+      ghostty_terminal_new: vi.fn(() => 1),
+      ghostty_terminal_free: vi.fn(),
+      ghostty_terminal_get_kitty_placement_count: vi.fn(() => 1),
+      ghostty_terminal_get_kitty_placements: vi.fn((_handle: number, outBuffer: Buffer, count: number) => {
+        expect(count).toBe(1);
+        writeKittyPlacement(outBuffer, 0, placement);
+        return 1;
+      }),
+    };
+
+    const term = new GhosttyVtTerminal(2, 2);
+    const placements = term.getKittyPlacements();
+    expect(placements).toHaveLength(1);
+    expect(placements[0]?.image_id).toBe(placement.image_id);
+    expect(placements[0]?.placement_tag).toBe(placement.placement_tag);
+    expect(placements[0]?.screen_x).toBe(placement.screen_x);
+    expect(placements[0]?.z).toBe(placement.z);
 
     term.free();
   });

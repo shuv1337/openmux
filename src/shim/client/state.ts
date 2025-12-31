@@ -4,7 +4,11 @@ import type {
   TerminalState,
   UnifiedTerminalUpdate,
 } from '../../core/types';
-import type { ITerminalEmulator } from '../../terminal/emulator-interface';
+import type {
+  ITerminalEmulator,
+  KittyGraphicsImageInfo,
+  KittyGraphicsPlacement,
+} from '../../terminal/emulator-interface';
 
 type ScrollbackAwareEmulator = ITerminalEmulator & {
   handleScrollbackChange?: (newLength: number, isAtScrollbackLimit: boolean) => void;
@@ -15,6 +19,17 @@ export type PtyState = {
   cachedRows: TerminalCell[][];
   scrollState: TerminalScrollState;
   title: string;
+};
+
+export type KittyGraphicsImageEntry = {
+  info: KittyGraphicsImageInfo;
+  data: Uint8Array | null;
+};
+
+export type KittyGraphicsState = {
+  images: Map<number, KittyGraphicsImageEntry>;
+  placements: KittyGraphicsPlacement[];
+  dirty: boolean;
 };
 
 export type LifecycleEvent = { type: 'created' | 'destroyed'; ptyId: string };
@@ -34,6 +49,7 @@ const lifecycleSubscribers = new Set<(event: LifecycleEvent) => void>();
 const ptyStates = new Map<string, PtyState>();
 const emulatorCache = new Map<string, ScrollbackAwareEmulator>();
 let emulatorFactory: ((ptyId: string) => ScrollbackAwareEmulator) | null = null;
+const kittyStates = new Map<string, KittyGraphicsState>();
 
 function clearPtySubscribers(ptyId: string): void {
   unifiedSubscribers.delete(ptyId);
@@ -70,6 +86,7 @@ export function setPtyState(ptyId: string, state: PtyState): void {
 export function deletePtyState(ptyId: string): void {
   ptyStates.delete(ptyId);
   emulatorCache.delete(ptyId);
+  kittyStates.delete(ptyId);
 }
 
 export function handleUnifiedUpdate(ptyId: string, update: UnifiedTerminalUpdate): void {
@@ -118,6 +135,40 @@ export function handlePtyLifecycle(ptyId: string, eventType: 'created' | 'destro
   for (const callback of lifecycleSubscribers) {
     callback({ type: eventType, ptyId });
   }
+}
+
+export function handlePtyKittyUpdate(
+  ptyId: string,
+  update: {
+    images: KittyGraphicsImageInfo[];
+    placements: KittyGraphicsPlacement[];
+    removedImageIds: number[];
+    imageData: Map<number, Uint8Array>;
+  }
+): void {
+  const existing = kittyStates.get(ptyId);
+  const incomingIds = new Set(update.images.map((info) => info.id));
+  const nextImages = new Map<number, KittyGraphicsImageEntry>();
+
+  for (const info of update.images) {
+    const previous = existing?.images.get(info.id);
+    const data = update.imageData.get(info.id) ?? previous?.data ?? null;
+    nextImages.set(info.id, { info, data });
+  }
+
+  for (const id of update.removedImageIds) {
+    nextImages.delete(id);
+  }
+
+  kittyStates.set(ptyId, {
+    images: nextImages,
+    placements: update.placements,
+    dirty: true,
+  });
+}
+
+export function getKittyState(ptyId: string): KittyGraphicsState | undefined {
+  return kittyStates.get(ptyId);
 }
 
 export function subscribeUnified(ptyId: string, callback: UnifiedSubscriber): () => void {

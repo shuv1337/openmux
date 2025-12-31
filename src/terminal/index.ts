@@ -8,3 +8,4 @@ export * from './ghostty-emulator/index';
 export * from './ghostty-vt';
 export * from './capabilities';
 export * from './terminal-query-passthrough';
+export * from './kitty-graphics';

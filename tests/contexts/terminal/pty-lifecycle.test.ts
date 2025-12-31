@@ -147,4 +147,43 @@ describe("createPtyLifecycleHandlers", () => {
     expect(ptyToSessionMap.has("pty-1")).toBe(false);
     expect(sessionPtyMap.get("session-1")?.has("pane-1")).toBe(false);
   });
+
+  test("passes pixel sizing when metrics are available", async () => {
+    vi.mocked(createPtySession).mockResolvedValue("pty-1");
+    vi.mocked(subscribeToPtyExit).mockResolvedValue(vi.fn());
+    vi.mocked(subscribeToPtyWithCaches).mockResolvedValue(vi.fn());
+
+    const ptyToPaneMap = new Map<string, string>();
+    const sessionPtyMap = new Map<string, Map<string, string>>();
+    const ptyToSessionMap = new Map<string, { sessionId: string; paneId: string }>();
+    const ptyCaches = {
+      scrollStates: new Map<string, TerminalScrollState>(),
+      emulators: new Map<string, ITerminalEmulator>(),
+    };
+    const unsubscribeFns = new Map<string, () => void>();
+
+    const handlers = createPtyLifecycleHandlers({
+      ptyToPaneMap,
+      sessionPtyMap,
+      ptyToSessionMap,
+      ptyCaches,
+      unsubscribeFns,
+      closePaneById: vi.fn(),
+      setPanePty: vi.fn(),
+      newPaneWithPty: vi.fn(),
+      getNewPaneDimensions: () => ({ cols: 80, rows: 24 }),
+      getCellMetrics: () => ({ cellWidth: 10, cellHeight: 20 }),
+      shouldCacheScrollState: true,
+    });
+
+    await handlers.createPTY("pane-1", 80, 24);
+
+    expect(vi.mocked(createPtySession)).toHaveBeenCalledWith({
+      cols: 80,
+      rows: 24,
+      cwd: undefined,
+      pixelWidth: 800,
+      pixelHeight: 480,
+    });
+  });
 });

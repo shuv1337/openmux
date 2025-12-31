@@ -87,4 +87,27 @@ describe('createPaneResizeHandlers', () => {
 
     expect(resizePTY).toHaveBeenCalledTimes(3);
   });
+
+  test('re-applies resize when pixel metrics change', () => {
+    const panes = [makePane(0)];
+    const resizePTY = vi.fn();
+    let metrics = { cellWidth: 8, cellHeight: 16 };
+
+    const handlers = createPaneResizeHandlers({
+      getPanes: () => panes,
+      resizePTY,
+      getCellMetrics: () => metrics,
+    });
+
+    handlers.resizeAllPanes();
+
+    expect(resizePTY).toHaveBeenCalledTimes(1);
+    expect(resizePTY).toHaveBeenLastCalledWith('pty-0', 8, 4, 64, 64);
+
+    metrics = { cellWidth: 10, cellHeight: 20 };
+    handlers.resizeAllPanes();
+
+    expect(resizePTY).toHaveBeenCalledTimes(2);
+    expect(resizePTY).toHaveBeenLastCalledWith('pty-0', 8, 4, 80, 80);
+  });
 });

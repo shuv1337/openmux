@@ -18,6 +18,9 @@ import { createDataHandler } from "./data-handler"
 import { setupQueryPassthrough } from "./query-setup"
 import { prepareShellIntegration } from "./shell-integration"
 
+const DEFAULT_CELL_WIDTH = 8
+const DEFAULT_CELL_HEIGHT = 16
+
 
 export interface SessionFactoryDeps {
   colors: TerminalColors
@@ -32,6 +35,8 @@ export interface CreateSessionOptions {
   rows: Rows
   cwd?: string
   env?: Record<string, string>
+  pixelWidth?: number
+  pixelHeight?: number
 }
 
 /**
@@ -45,6 +50,14 @@ export function createSession(
     const id = makePtyId()
     const cols = options.cols
     const rows = options.rows
+    const hasPixels = typeof options.pixelWidth === "number"
+      && options.pixelWidth > 0
+      && typeof options.pixelHeight === "number"
+      && options.pixelHeight > 0
+    const pixelWidth = hasPixels ? options.pixelWidth : undefined
+    const pixelHeight = hasPixels ? options.pixelHeight : undefined
+    const cellWidth = hasPixels ? Math.max(1, Math.floor((pixelWidth ?? 0) / cols)) : DEFAULT_CELL_WIDTH
+    const cellHeight = hasPixels ? Math.max(1, Math.floor((pixelHeight ?? 0) / rows)) : DEFAULT_CELL_HEIGHT
     const cwd = options.cwd ?? process.cwd()
     const shell = deps.defaultShell
     const shellName = shell.split('/').pop() ?? ''
@@ -86,6 +99,14 @@ export function createSession(
         PtySpawnError.make({ shell, cwd, cause: error }),
     })
 
+    if (hasPixels && "resizeWithPixels" in pty) {
+      try {
+        pty.resizeWithPixels(cols, rows, pixelWidth!, pixelHeight!)
+      } catch {
+        // Ignore failures; we will fall back to default sizing.
+      }
+    }
+
     const session: InternalPtySession = {
       id,
       pty,
@@ -93,6 +114,10 @@ export function createSession(
       queryPassthrough,
       cols,
       rows,
+      cellWidth,
+      cellHeight,
+      pixelWidth: hasPixels ? pixelWidth! : cols * DEFAULT_CELL_WIDTH,
+      pixelHeight: hasPixels ? pixelHeight! : rows * DEFAULT_CELL_HEIGHT,
       cwd,
       shell,
       closing: false,
@@ -121,12 +146,20 @@ export function createSession(
       notifySubscribers(session)
     })
 
+    emulator.setPixelSize?.(session.pixelWidth, session.pixelHeight)
+
     // Set up query passthrough
     setupQueryPassthrough({
       queryPassthrough,
       emulator,
       pty,
       getSessionDimensions: () => ({ cols: session.cols, rows: session.rows }),
+      getPixelDimensions: () => ({
+        pixelWidth: session.pixelWidth,
+        pixelHeight: session.pixelHeight,
+        cellWidth: session.cellWidth,
+        cellHeight: session.cellHeight,
+      }),
     })
 
     // Create sync mode parser for DEC Mode 2026 (synchronized output)
@@ -153,11 +186,8 @@ export function createSession(
     emulator.onModeChange((modes, prevModes) => {
       if (modes.inBandResize && !prevModes?.inBandResize) {
         // Mode just got enabled - send initial size notification
-        const cellWidth = 8
-        const cellHeight = 16
-        const pixelWidth = session.cols * cellWidth
-        const pixelHeight = session.rows * cellHeight
-        const resizeNotification = `\x1b[48;${session.rows};${session.cols};${pixelHeight};${pixelWidth}t`
+        const resizeNotification =
+          `\x1b[48;${session.rows};${session.cols};${session.pixelHeight};${session.pixelWidth}t`
         pty.write(resizeNotification)
       }
     })

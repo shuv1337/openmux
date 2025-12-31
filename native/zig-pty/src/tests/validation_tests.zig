@@ -43,6 +43,12 @@ test "resize with invalid handle returns error" {
     try std.testing.expectEqual(constants.ERROR, exports.bun_pty_resize(99999, 80, 24));
 }
 
+test "resize with pixels invalid handle returns error" {
+    try std.testing.expectEqual(constants.ERROR, exports.bun_pty_resize_with_pixels(0, 80, 24, 800, 600));
+    try std.testing.expectEqual(constants.ERROR, exports.bun_pty_resize_with_pixels(-1, 80, 24, 800, 600));
+    try std.testing.expectEqual(constants.ERROR, exports.bun_pty_resize_with_pixels(99999, 80, 24, 800, 600));
+}
+
 // ============================================================================
 // Invalid PID Tests
 // ============================================================================
@@ -121,6 +127,19 @@ test "resize with invalid dimensions returns error" {
     // Negative dimensions
     try std.testing.expectEqual(constants.ERROR, exports.bun_pty_resize(handle, -1, 24));
     try std.testing.expectEqual(constants.ERROR, exports.bun_pty_resize(handle, 80, -1));
+}
+
+test "resize with pixels invalid dimensions returns error" {
+    const handle = spawn_module.spawnPty("sleep 1", "", "", 80, 24);
+    try std.testing.expect(handle > 0);
+    defer exports.bun_pty_close(handle);
+
+    try std.testing.expectEqual(constants.ERROR, exports.bun_pty_resize_with_pixels(handle, 0, 24, 800, 600));
+    try std.testing.expectEqual(constants.ERROR, exports.bun_pty_resize_with_pixels(handle, 80, 0, 800, 600));
+    try std.testing.expectEqual(constants.ERROR, exports.bun_pty_resize_with_pixels(handle, 80, 24, 0, 600));
+    try std.testing.expectEqual(constants.ERROR, exports.bun_pty_resize_with_pixels(handle, 80, 24, 800, 0));
+    try std.testing.expectEqual(constants.ERROR, exports.bun_pty_resize_with_pixels(handle, -1, 24, 800, 600));
+    try std.testing.expectEqual(constants.ERROR, exports.bun_pty_resize_with_pixels(handle, 80, -1, 800, 600));
 }
 
 test "async spawn invalid dimensions returns error" {

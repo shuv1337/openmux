@@ -18,6 +18,10 @@ export interface InternalPtySession {
   queryPassthrough: TerminalQueryPassthrough
   cols: number
   rows: number
+  pixelWidth: number
+  pixelHeight: number
+  cellWidth: number
+  cellHeight: number
   cwd: string
   shell: string
   closing: boolean

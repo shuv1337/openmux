@@ -36,24 +36,40 @@ export function createOperations(deps: OperationsDeps) {
   const resize = Effect.fn("Pty.resize")(function* (
     id: PtyId,
     cols: Cols,
-    rows: Rows
+    rows: Rows,
+    pixelWidth?: number,
+    pixelHeight?: number
   ) {
     const session = yield* getSessionOrFail(id)
 
-    session.pty.resize(cols, rows)
+    const hasPixels = typeof pixelWidth === "number" && pixelWidth > 0
+      && typeof pixelHeight === "number" && pixelHeight > 0
+
+    if (hasPixels && "resizeWithPixels" in session.pty) {
+      session.pty.resizeWithPixels(cols, rows, pixelWidth, pixelHeight)
+    } else {
+      session.pty.resize(cols, rows)
+    }
     session.cols = cols
     session.rows = rows
+    if (hasPixels) {
+      session.pixelWidth = pixelWidth
+      session.pixelHeight = pixelHeight
+      session.cellWidth = Math.max(1, Math.floor(pixelWidth / cols))
+      session.cellHeight = Math.max(1, Math.floor(pixelHeight / rows))
+    } else {
+      session.pixelWidth = cols * session.cellWidth
+      session.pixelHeight = rows * session.cellHeight
+    }
     session.emulator.resize(cols, rows)
+    session.emulator.setPixelSize?.(session.pixelWidth, session.pixelHeight)
 
     // Check if DECSET 2048 (in-band resize notifications) is enabled
     yield* Effect.try(() => {
       const inBandResizeEnabled = session.emulator.getMode(2048)
       if (inBandResizeEnabled) {
-        const cellWidth = 8
-        const cellHeight = 16
-        const pixelWidth = cols * cellWidth
-        const pixelHeight = rows * cellHeight
-        const resizeNotification = `\x1b[48;${rows};${cols};${pixelHeight};${pixelWidth}t`
+        const resizeNotification =
+          `\x1b[48;${rows};${cols};${session.pixelHeight};${session.pixelWidth}t`
         session.pty.write(resizeNotification)
       }
     }).pipe(Effect.ignore)

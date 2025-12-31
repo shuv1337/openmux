@@ -1,7 +1,13 @@
 import type { TerminalCell, TerminalState, TerminalScrollState } from '../../core/types';
-import type { SearchResult, ITerminalEmulator } from '../../terminal/emulator-interface';
+import type {
+  SearchResult,
+  ITerminalEmulator,
+  KittyGraphicsImageInfo,
+  KittyGraphicsPlacement,
+} from '../../terminal/emulator-interface';
 import { getDefaultColors, getHostColors } from '../../terminal/terminal-colors';
 import { ScrollbackCache } from '../../terminal/emulator-utils/scrollback-cache';
+import type { KittyGraphicsState } from './state';
 
 export type RemoteEmulatorDeps = {
   getPtyState: (ptyId: string) => {
@@ -9,6 +15,7 @@ export type RemoteEmulatorDeps = {
     scrollState: TerminalScrollState;
     title: string;
   } | undefined;
+  getKittyState: (ptyId: string) => KittyGraphicsState | undefined;
   fetchScrollbackLines: (
     ptyId: string,
     startOffset: number,
@@ -120,6 +127,35 @@ export class RemoteEmulator implements ITerminalEmulator {
 
   getKittyKeyboardFlags(): number {
     return this.deps.getPtyState(this.ptyId)?.terminalState?.kittyKeyboardFlags ?? 0;
+  }
+
+  getKittyImagesDirty(): boolean {
+    return this.deps.getKittyState(this.ptyId)?.dirty ?? false;
+  }
+
+  clearKittyImagesDirty(): void {
+    const state = this.deps.getKittyState(this.ptyId);
+    if (state) {
+      state.dirty = false;
+    }
+  }
+
+  getKittyImageIds(): number[] {
+    const state = this.deps.getKittyState(this.ptyId);
+    if (!state) return [];
+    return Array.from(state.images.keys());
+  }
+
+  getKittyImageInfo(imageId: number): KittyGraphicsImageInfo | null {
+    return this.deps.getKittyState(this.ptyId)?.images.get(imageId)?.info ?? null;
+  }
+
+  getKittyImageData(imageId: number): Uint8Array | null {
+    return this.deps.getKittyState(this.ptyId)?.images.get(imageId)?.data ?? null;
+  }
+
+  getKittyPlacements(): KittyGraphicsPlacement[] {
+    return this.deps.getKittyState(this.ptyId)?.placements ?? [];
   }
 
   isMouseTrackingEnabled(): boolean {

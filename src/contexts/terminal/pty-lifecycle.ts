@@ -37,6 +37,8 @@ export interface PtyLifecycleDeps {
   newPaneWithPty: (ptyId: string, title?: string) => string;
   /** Get estimated dimensions for a new pane */
   getNewPaneDimensions: () => { cols: number; rows: number };
+  /** Get current cell metrics for pixel sizing */
+  getCellMetrics?: () => { cellWidth: number; cellHeight: number } | null;
   /** Whether to cache scroll state locally */
   shouldCacheScrollState: boolean;
 }
@@ -55,6 +57,7 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     setPanePty,
     newPaneWithPty,
     getNewPaneDimensions,
+    getCellMetrics,
     shouldCacheScrollState,
   } = deps;
 
@@ -122,8 +125,11 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     rows: number,
     cwd?: string
   ): Promise<string> => {
+    const metrics = getCellMetrics?.() ?? null;
+    const pixelWidth = metrics ? cols * metrics.cellWidth : undefined;
+    const pixelHeight = metrics ? rows * metrics.cellHeight : undefined;
     // Ghostty-vt is initialized per PTY session
-    const ptyId = await createPtySession({ cols, rows, cwd });
+    const ptyId = await createPtySession({ cols, rows, cwd, pixelWidth, pixelHeight });
 
     // Track the mapping immediately
     ptyToPaneMap.set(ptyId, paneId);
@@ -179,9 +185,12 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
   const createPaneWithPTY = async (cwd?: string, title?: string): Promise<string> => {
     // Get estimated dimensions for the new pane
     const { cols, rows } = getNewPaneDimensions();
+    const metrics = getCellMetrics?.() ?? null;
+    const pixelWidth = metrics ? cols * metrics.cellWidth : undefined;
+    const pixelHeight = metrics ? rows * metrics.cellHeight : undefined;
 
     // Create PTY first (async - this is the expensive part)
-    const ptyId = await createPtySession({ cols, rows, cwd });
+    const ptyId = await createPtySession({ cols, rows, cwd, pixelWidth, pixelHeight });
 
     // Create pane with PTY already attached - SINGLE render!
     const paneId = newPaneWithPty(ptyId, title);

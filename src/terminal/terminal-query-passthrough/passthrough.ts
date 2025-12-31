@@ -75,6 +75,8 @@ export class TerminalQueryPassthrough {
   private kittyKeyboardFlagsGetter: (() => number) | null = null;
   private terminalVersion: string = '0.1.0';
   private cursorColor: number = 0xFFFFFF;
+  private pendingInput: string = '';
+  private readonly pendingLimit = 8192;
 
   constructor() {}
 
@@ -164,7 +166,24 @@ export class TerminalQueryPassthrough {
    * Returns the data to send to the emulator (without queries)
    */
   process(data: string): string {
-    const result = parseTerminalQueries(data);
+    let input = this.pendingInput + data;
+    this.pendingInput = '';
+
+    const pendingStart = this.findIncompleteSequenceStart(input);
+    if (pendingStart !== null) {
+      this.pendingInput = input.slice(pendingStart);
+      input = input.slice(0, pendingStart);
+      if (this.pendingInput.length > this.pendingLimit) {
+        input += this.pendingInput;
+        this.pendingInput = '';
+      }
+    }
+
+    if (input.length === 0) {
+      return '';
+    }
+
+    const result = parseTerminalQueries(input);
 
     // Handle queries
     if (result.queries.length > 0) {
@@ -174,7 +193,213 @@ export class TerminalQueryPassthrough {
     }
 
     // Return text segments joined (without queries)
-    return result.textSegments.join('');
+    const text = result.textSegments.join('');
+    return this.stripKittyResponses(text);
+  }
+
+  /**
+   * Process PTY data while capturing responses instead of writing to the PTY.
+   * Useful when responses must be ordered after other terminal output.
+   */
+  processWithResponses(data: string): { text: string; responses: string[] } {
+    const responses: string[] = [];
+    const originalWriter = this.ptyWriter;
+    this.ptyWriter = (response: string) => {
+      responses.push(response);
+    };
+    try {
+      const text = this.process(data);
+      return { text, responses };
+    } finally {
+      this.ptyWriter = originalWriter;
+    }
+  }
+
+  private findIncompleteSequenceStart(data: string): number | null {
+    const ESC = '\x1b';
+    const BEL = '\x07';
+    const CSI_C1 = '\x9b';
+    const DCS_C1 = '\x90';
+    const OSC_C1 = '\x9d';
+    const ST_C1 = '\x9c';
+    const APC_C1 = '\x9f';
+    type State = 'text' | 'esc' | 'csi' | 'osc' | 'dcs' | 'apc' | 'osc-esc' | 'dcs-esc' | 'apc-esc';
+    let state: State = 'text';
+    let seqStart = -1;
+
+    for (let i = 0; i < data.length; i++) {
+      const ch = data[i];
+      switch (state) {
+        case 'text':
+          if (ch === ESC) {
+            state = 'esc';
+            seqStart = i;
+          } else if (ch === CSI_C1) {
+            state = 'csi';
+            seqStart = i;
+          } else if (ch === OSC_C1) {
+            state = 'osc';
+            seqStart = i;
+          } else if (ch === DCS_C1) {
+            state = 'dcs';
+            seqStart = i;
+          } else if (ch === APC_C1) {
+            state = 'apc';
+            seqStart = i;
+          }
+          break;
+        case 'esc':
+          if (ch === '[') {
+            state = 'csi';
+          } else if (ch === ']') {
+            state = 'osc';
+          } else if (ch === 'P') {
+            state = 'dcs';
+          } else if (ch === '_') {
+            state = 'apc';
+          } else if (ch === ESC) {
+            state = 'esc';
+            seqStart = i;
+          } else {
+            state = 'text';
+            seqStart = -1;
+          }
+          break;
+        case 'csi': {
+          const code = ch.charCodeAt(0);
+          if (code >= 0x40 && code <= 0x7e) {
+            state = 'text';
+            seqStart = -1;
+          }
+          break;
+        }
+        case 'osc':
+          if (ch === BEL || ch === ST_C1) {
+            state = 'text';
+            seqStart = -1;
+          } else if (ch === ESC) {
+            state = 'osc-esc';
+          }
+          break;
+        case 'osc-esc':
+          if (ch === '\\') {
+            state = 'text';
+            seqStart = -1;
+          } else if (ch === ESC) {
+            state = 'osc-esc';
+          } else {
+            state = 'osc';
+          }
+          break;
+        case 'dcs':
+          if (ch === ST_C1) {
+            state = 'text';
+            seqStart = -1;
+          } else if (ch === ESC) {
+            state = 'dcs-esc';
+          }
+          break;
+        case 'dcs-esc':
+          if (ch === '\\') {
+            state = 'text';
+            seqStart = -1;
+          } else if (ch === ESC) {
+            state = 'dcs-esc';
+          } else {
+            state = 'dcs';
+          }
+          break;
+        case 'apc':
+          if (ch === ST_C1) {
+            state = 'text';
+            seqStart = -1;
+          } else if (ch === ESC) {
+            state = 'apc-esc';
+          }
+          break;
+        case 'apc-esc':
+          if (ch === '\\') {
+            state = 'text';
+            seqStart = -1;
+          } else if (ch === ESC) {
+            state = 'apc-esc';
+          } else {
+            state = 'apc';
+          }
+          break;
+      }
+    }
+
+    if (state === 'text') {
+      return null;
+    }
+    return seqStart >= 0 ? seqStart : null;
+  }
+
+  private stripKittyResponses(data: string): string {
+    const ESC = '\x1b';
+    const ST_C1 = '\x9c';
+    let result = '';
+    let i = 0;
+
+    while (i < data.length) {
+      const ch = data[i];
+      const isEscApc = ch === ESC && i + 2 < data.length && data[i + 1] === '_' && data[i + 2] === 'G';
+      const isC1Apc = ch === '\x9f' && i + 1 < data.length && data[i + 1] === 'G';
+
+      if (!isEscApc && !isC1Apc) {
+        result += ch;
+        i += 1;
+        continue;
+      }
+
+      const start = i;
+      let pos = i + (isEscApc ? 3 : 2);
+      let end = -1;
+      let terminatorLength = 0;
+      while (pos < data.length) {
+        if (data[pos] === ST_C1) {
+          end = pos + 1;
+          terminatorLength = 1;
+          break;
+        }
+        if (data[pos] === ESC && pos + 1 < data.length && data[pos + 1] === '\\') {
+          end = pos + 2;
+          terminatorLength = 2;
+          break;
+        }
+        pos += 1;
+      }
+
+      if (end < 0) {
+        result += data.slice(start);
+        break;
+      }
+
+      const body = data.slice(isEscApc ? start + 3 : start + 2, end - terminatorLength);
+      const sep = body.indexOf(';');
+      if (sep === -1) {
+        result += data.slice(start, end);
+        i = end;
+        continue;
+      }
+
+      const control = body.slice(0, sep);
+      const payload = body.slice(sep + 1);
+      const hasAction = control.includes('a=');
+      const isOk = payload === 'OK';
+      const hasNonBase64 = /[^A-Za-z0-9+/=]/.test(payload);
+
+      if (!hasAction && (isOk || hasNonBase64)) {
+        i = end;
+        continue;
+      }
+
+      result += data.slice(start, end);
+      i = end;
+    }
+
+    return result;
   }
 
   /**
@@ -374,5 +599,6 @@ export class TerminalQueryPassthrough {
     this.modeGetter = null;
     this.paletteGetter = null;
     this.sizeGetter = null;
+    this.pendingInput = '';
   }
 }

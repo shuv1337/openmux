@@ -71,6 +71,16 @@ export fn bun_pty_resize(handle: c_int, cols: c_int, rows: c_int) c_int {
     return exports.bun_pty_resize(handle, cols, rows);
 }
 
+export fn bun_pty_resize_with_pixels(
+    handle: c_int,
+    cols: c_int,
+    rows: c_int,
+    pixel_width: c_int,
+    pixel_height: c_int,
+) c_int {
+    return exports.bun_pty_resize_with_pixels(handle, cols, rows, pixel_width, pixel_height);
+}
+
 export fn bun_pty_kill(handle: c_int) c_int {
     return exports.bun_pty_kill(handle);
 }

@@ -39,6 +39,11 @@ export interface ITerminalEmulator {
   resize(cols: number, rows: number): void;
 
   /**
+   * Update terminal pixel dimensions (used for kitty graphics sizing).
+   */
+  setPixelSize?(widthPx: number, heightPx: number): void;
+
+  /**
    * Reset the emulator to a clean state (for pool reuse).
    * Clears all state but keeps the underlying resources alive.
    */
@@ -155,6 +160,34 @@ export interface ITerminalEmulator {
    */
   onModeChange(callback: (modes: TerminalModes, prevModes?: TerminalModes) => void): () => void;
 
+  // ==========================================================================
+  // Kitty graphics (optional)
+  // ==========================================================================
+
+  /** Check if kitty images/placements changed since last clear. */
+  getKittyImagesDirty?(): boolean;
+
+  /** Clear kitty images/placements dirty flag. */
+  clearKittyImagesDirty?(): void;
+
+  /** Get list of kitty image IDs. */
+  getKittyImageIds?(): number[];
+
+  /** Get kitty image metadata by ID. */
+  getKittyImageInfo?(imageId: number): KittyGraphicsImageInfo | null;
+
+  /** Get kitty image data by ID. */
+  getKittyImageData?(imageId: number): Uint8Array | null;
+
+  /** Get kitty placements for the active screen. */
+  getKittyPlacements?(): KittyGraphicsPlacement[];
+
+  /**
+   * Drain pending terminal responses (e.g., Kitty graphics query replies).
+   * Returns an array of response strings to write back to the PTY.
+   */
+  drainResponses?(): string[];
+
   // ============================================================================
   // Search
   // ============================================================================
@@ -177,6 +210,53 @@ export interface TerminalModes {
   alternateScreen: boolean;
   /** DECSET 2048 - in-band resize notifications (used by neovim) */
   inBandResize: boolean;
+}
+
+export const enum KittyGraphicsFormat {
+  RGB = 0,
+  RGBA = 1,
+  PNG = 2,
+  GRAY_ALPHA = 3,
+  GRAY = 4,
+}
+
+export const enum KittyGraphicsCompression {
+  NONE = 0,
+  ZLIB_DEFLATE = 1,
+}
+
+export const enum KittyGraphicsPlacementTag {
+  INTERNAL = 0,
+  EXTERNAL = 1,
+}
+
+export interface KittyGraphicsImageInfo {
+  id: number;
+  number: number;
+  width: number;
+  height: number;
+  dataLength: number;
+  format: KittyGraphicsFormat;
+  compression: KittyGraphicsCompression;
+  implicitId: boolean;
+  transmitTime: bigint;
+}
+
+export interface KittyGraphicsPlacement {
+  imageId: number;
+  placementId: number;
+  placementTag: KittyGraphicsPlacementTag;
+  screenX: number;
+  screenY: number;
+  xOffset: number;
+  yOffset: number;
+  sourceX: number;
+  sourceY: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  columns: number;
+  rows: number;
+  z: number;
 }
 
 /**

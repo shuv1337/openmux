@@ -3,8 +3,10 @@ import type { TerminalCell, TerminalState, UnifiedTerminalUpdate } from '../../s
 import {
   deletePtyState,
   getEmulator,
+  getKittyState,
   getPtyState,
   handlePtyLifecycle,
+  handlePtyKittyUpdate,
   handlePtyTitle,
   handleUnifiedUpdate,
   registerEmulatorFactory,
@@ -16,6 +18,11 @@ import {
   subscribeToTitle,
   subscribeUnified,
 } from '../../src/shim/client/state';
+import {
+  KittyGraphicsCompression,
+  KittyGraphicsFormat,
+  KittyGraphicsPlacementTag,
+} from '../../src/terminal/emulator-interface';
 
 const baseCell: TerminalCell = {
   char: 'a',
@@ -202,6 +209,72 @@ describe('shim client state', () => {
 
     expect(lastScrollback).toBe(3);
     expect(lastLimit).toBe(true);
+
+    deletePtyState(ptyId);
+  });
+
+  test('stores kitty graphics updates and retains image data', () => {
+    const ptyId = 'pty-kitty';
+    const info = {
+      id: 1,
+      number: 0,
+      width: 2,
+      height: 2,
+      dataLength: 12,
+      format: KittyGraphicsFormat.RGB,
+      compression: KittyGraphicsCompression.NONE,
+      implicitId: false,
+      transmitTime: 100n,
+    };
+    const placement = {
+      imageId: 1,
+      placementId: 9,
+      placementTag: KittyGraphicsPlacementTag.INTERNAL,
+      screenX: 0,
+      screenY: 0,
+      xOffset: 0,
+      yOffset: 0,
+      sourceX: 0,
+      sourceY: 0,
+      sourceWidth: 0,
+      sourceHeight: 0,
+      columns: 1,
+      rows: 1,
+      z: 0,
+    };
+    const data = new Uint8Array([1, 2, 3]);
+
+    handlePtyKittyUpdate(ptyId, {
+      images: [info],
+      placements: [placement],
+      removedImageIds: [],
+      imageData: new Map([[info.id, data]]),
+    });
+
+    const state = getKittyState(ptyId);
+    expect(state?.dirty).toBe(true);
+    expect(state?.images.get(info.id)?.data).toEqual(data);
+    expect(state?.placements).toHaveLength(1);
+
+    handlePtyKittyUpdate(ptyId, {
+      images: [info],
+      placements: [],
+      removedImageIds: [],
+      imageData: new Map(),
+    });
+
+    const next = getKittyState(ptyId);
+    expect(next?.images.get(info.id)?.data).toEqual(data);
+
+    handlePtyKittyUpdate(ptyId, {
+      images: [],
+      placements: [],
+      removedImageIds: [info.id],
+      imageData: new Map(),
+    });
+
+    const finalState = getKittyState(ptyId);
+    expect(finalState?.images.size).toBe(0);
 
     deletePtyState(ptyId);
   });

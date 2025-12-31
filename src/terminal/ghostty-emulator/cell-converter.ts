@@ -9,6 +9,8 @@ import type { TerminalColors } from '../terminal-colors';
 import { extractRgb } from '../terminal-colors';
 import { isZeroWidthChar, isSpaceLikeChar, isCjkIdeograph, codepointToChar } from './codepoint-utils';
 
+const KITTY_PLACEHOLDER = 0x10eeee;
+
 /**
  * RGB color value
  */
@@ -102,6 +104,23 @@ export function convertCell(cell: GhosttyCell): TerminalCell {
   // Safely extract colors with validation
   const fg = safeRgb(cell.fg_r, cell.fg_g, cell.fg_b);
   const bg = safeRgb(cell.bg_r, cell.bg_g, cell.bg_b);
+
+  // Kitty graphics placeholder cells encode image IDs in colors; keep them invisible.
+  if (cell.codepoint === KITTY_PLACEHOLDER) {
+    return {
+      char: ' ',
+      fg: bg,
+      bg,
+      bold: false,
+      italic: false,
+      underline: false,
+      strikethrough: false,
+      inverse: false,
+      blink: false,
+      dim: false,
+      width: 1,
+    };
+  }
 
   // Zero-width characters render as space but preserve background color
   // Only strip foreground to prevent invisible colored text

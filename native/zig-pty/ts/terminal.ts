@@ -115,6 +115,13 @@ export class Terminal implements IPty {
     lib.symbols.bun_pty_resize(this.handle, cols, rows);
   }
 
+  resizeWithPixels(cols: number, rows: number, pixelWidth: number, pixelHeight: number): void {
+    if (this._closing) return;
+    this._cols = cols;
+    this._rows = rows;
+    lib.symbols.bun_pty_resize_with_pixels(this.handle, cols, rows, pixelWidth, pixelHeight);
+  }
+
   kill(signal: string = "SIGTERM"): void {
     if (this._closing) return;
     this._closing = true;

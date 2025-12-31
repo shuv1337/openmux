@@ -8,7 +8,18 @@ import type {
   TerminalScrollState,
   DirtyTerminalUpdate,
 } from "../../core/types";
-import type { ITerminalEmulator, SearchResult, TerminalModes } from "../emulator-interface";
+import {
+  KittyGraphicsCompression,
+  KittyGraphicsFormat,
+  KittyGraphicsPlacementTag,
+} from "../emulator-interface";
+import type {
+  ITerminalEmulator,
+  SearchResult,
+  TerminalModes,
+  KittyGraphicsImageInfo,
+  KittyGraphicsPlacement,
+} from "../emulator-interface";
 import type { TerminalColors } from "../terminal-colors";
 import { createTitleParser } from "../title-parser";
 import { stripProblematicOscSequences } from "./osc-stripping";
@@ -138,6 +149,11 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
     }
   }
 
+  setPixelSize(widthPx: number, heightPx: number): void {
+    if (this._disposed) return;
+    this.terminal.setPixelSize(widthPx, heightPx);
+  }
+
   reset(): void {
     if (this._disposed) return;
     this.terminal.write("\x1bc");
@@ -235,6 +251,69 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
 
   getKittyKeyboardFlags(): number {
     return this.terminal.getKittyKeyboardFlags();
+  }
+
+  getKittyImagesDirty(): boolean {
+    return this.terminal.getKittyImagesDirty();
+  }
+
+  clearKittyImagesDirty(): void {
+    this.terminal.clearKittyImagesDirty();
+  }
+
+  getKittyImageIds(): number[] {
+    return this.terminal.getKittyImageIds();
+  }
+
+  getKittyImageInfo(imageId: number): KittyGraphicsImageInfo | null {
+    const info = this.terminal.getKittyImageInfo(imageId);
+    if (!info) return null;
+
+    return {
+      id: info.id,
+      number: info.number,
+      width: info.width,
+      height: info.height,
+      dataLength: info.data_len,
+      format: info.format as KittyGraphicsFormat,
+      compression: info.compression as KittyGraphicsCompression,
+      implicitId: info.implicit_id !== 0,
+      transmitTime: info.transmit_time,
+    };
+  }
+
+  getKittyImageData(imageId: number): Uint8Array | null {
+    return this.terminal.getKittyImageData(imageId);
+  }
+
+  getKittyPlacements(): KittyGraphicsPlacement[] {
+    const placements = this.terminal.getKittyPlacements();
+    return placements.map((placement) => ({
+      imageId: placement.image_id,
+      placementId: placement.placement_id,
+      placementTag: placement.placement_tag as KittyGraphicsPlacementTag,
+      screenX: placement.screen_x,
+      screenY: placement.screen_y,
+      xOffset: placement.x_offset,
+      yOffset: placement.y_offset,
+      sourceX: placement.source_x,
+      sourceY: placement.source_y,
+      sourceWidth: placement.source_width,
+      sourceHeight: placement.source_height,
+      columns: placement.columns,
+      rows: placement.rows,
+      z: placement.z,
+    }));
+  }
+
+  drainResponses(): string[] {
+    const responses: string[] = [];
+    while (true) {
+      const response = this.terminal.readResponse();
+      if (!response) break;
+      responses.push(response);
+    }
+    return responses;
   }
 
   isMouseTrackingEnabled(): boolean {

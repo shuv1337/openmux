@@ -67,6 +67,34 @@ pub fn resize(handle: c_int, cols: c_int, rows: c_int) c_int {
     return pty.resize(@intCast(cols), @intCast(rows));
 }
 
+/// Resize PTY terminal dimensions with pixel size.
+/// Returns: SUCCESS (0) or ERROR (-1).
+pub fn resizeWithPixels(
+    handle: c_int,
+    cols: c_int,
+    rows: c_int,
+    pixel_width: c_int,
+    pixel_height: c_int,
+) c_int {
+    if (handle <= 0 or cols <= 0 or rows <= 0 or pixel_width <= 0 or pixel_height <= 0) {
+        return constants.ERROR;
+    }
+    if (cols > 65535 or rows > 65535) {
+        return constants.ERROR;
+    }
+
+    const h: u32 = @intCast(handle);
+    const pty = handle_registry.acquireHandle(h) orelse return constants.ERROR;
+    defer handle_registry.releaseHandle(h);
+
+    return pty.resizeWithPixels(
+        @intCast(cols),
+        @intCast(rows),
+        @intCast(pixel_width),
+        @intCast(pixel_height),
+    );
+}
+
 /// Send SIGTERM to PTY child process.
 /// Returns: SUCCESS (0) or ERROR (-1).
 pub fn kill(handle: c_int) c_int {

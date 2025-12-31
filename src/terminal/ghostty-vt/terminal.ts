@@ -4,11 +4,18 @@
 
 import { ghostty } from "./ffi";
 import type { Pointer } from "bun:ffi";
-import type { GhosttyCell, GhosttyTerminalConfig } from "./types";
-import type { DirtyState } from "./types";
+import { DirtyState } from "./types";
+import type {
+  GhosttyCell,
+  GhosttyTerminalConfig,
+  GhosttyKittyImageInfo,
+  GhosttyKittyPlacement,
+} from "./types";
 
 const CELL_SIZE = 16;
 const CONFIG_SIZE = 4 * 4 + 16 * 4;
+const KITTY_IMAGE_INFO_SIZE = 32;
+const KITTY_PLACEMENT_SIZE = 56;
 
 function toBuffer(data: Uint8Array): Buffer {
   return Buffer.isBuffer(data)
@@ -92,6 +99,11 @@ export class GhosttyVtTerminal {
     this.viewportBuffer = null;
     this.lineBuffer = null;
     this.initCellPool();
+  }
+
+  setPixelSize(widthPx: number, heightPx: number): void {
+    if (widthPx <= 0 || heightPx <= 0) return;
+    ghostty.symbols.ghostty_terminal_set_pixel_size(this.handle, widthPx, heightPx);
   }
 
   free(): void {
@@ -204,6 +216,102 @@ export class GhosttyVtTerminal {
     const count = ghostty.symbols.ghostty_terminal_read_response(this.handle, buffer, buffer.byteLength);
     if (count <= 0) return null;
     return buffer.subarray(0, count).toString("utf8");
+  }
+
+  // ==========================================================================
+  // Kitty graphics
+  // ==========================================================================
+
+  getKittyImagesDirty(): boolean {
+    return ghostty.symbols.ghostty_terminal_get_kitty_images_dirty(this.handle);
+  }
+
+  clearKittyImagesDirty(): void {
+    ghostty.symbols.ghostty_terminal_clear_kitty_images_dirty(this.handle);
+  }
+
+  getKittyImageIds(): number[] {
+    const count = ghostty.symbols.ghostty_terminal_get_kitty_image_count(this.handle);
+    if (count <= 0) return [];
+
+    const buffer = Buffer.alloc(count * 4);
+    const written = ghostty.symbols.ghostty_terminal_get_kitty_image_ids(this.handle, buffer, count);
+    if (written <= 0) return [];
+
+    const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+    const ids: number[] = [];
+    const total = Math.min(written, count);
+    for (let i = 0; i < total; i++) {
+      ids.push(view.getUint32(i * 4, true));
+    }
+    return ids;
+  }
+
+  getKittyImageInfo(imageId: number): GhosttyKittyImageInfo | null {
+    const buffer = Buffer.alloc(KITTY_IMAGE_INFO_SIZE);
+    const ok = ghostty.symbols.ghostty_terminal_get_kitty_image_info(this.handle, imageId, buffer);
+    if (!ok) return null;
+
+    const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+    return {
+      id: view.getUint32(0, true),
+      number: view.getUint32(4, true),
+      width: view.getUint32(8, true),
+      height: view.getUint32(12, true),
+      data_len: view.getUint32(16, true),
+      format: view.getUint8(20),
+      compression: view.getUint8(21),
+      implicit_id: view.getUint8(22),
+      transmit_time: view.getBigUint64(24, true),
+    };
+  }
+
+  getKittyImageData(imageId: number): Uint8Array | null {
+    const info = this.getKittyImageInfo(imageId);
+    if (!info || info.data_len === 0) return null;
+
+    const buffer = Buffer.alloc(info.data_len);
+    const written = ghostty.symbols.ghostty_terminal_copy_kitty_image_data(
+      this.handle,
+      imageId,
+      buffer,
+      buffer.byteLength
+    );
+    if (written <= 0) return null;
+    return buffer.subarray(0, written);
+  }
+
+  getKittyPlacements(): GhosttyKittyPlacement[] {
+    const count = ghostty.symbols.ghostty_terminal_get_kitty_placement_count(this.handle);
+    if (count <= 0) return [];
+
+    const buffer = Buffer.alloc(count * KITTY_PLACEMENT_SIZE);
+    const written = ghostty.symbols.ghostty_terminal_get_kitty_placements(this.handle, buffer, count);
+    if (written <= 0) return [];
+
+    const placements: GhosttyKittyPlacement[] = [];
+    const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+    const total = Math.min(written, count);
+    for (let i = 0; i < total; i++) {
+      const offset = i * KITTY_PLACEMENT_SIZE;
+      placements.push({
+        image_id: view.getUint32(offset, true),
+        placement_id: view.getUint32(offset + 4, true),
+        placement_tag: view.getUint8(offset + 8),
+        screen_x: view.getUint32(offset + 12, true),
+        screen_y: view.getUint32(offset + 16, true),
+        x_offset: view.getUint32(offset + 20, true),
+        y_offset: view.getUint32(offset + 24, true),
+        source_x: view.getUint32(offset + 28, true),
+        source_y: view.getUint32(offset + 32, true),
+        source_width: view.getUint32(offset + 36, true),
+        source_height: view.getUint32(offset + 40, true),
+        columns: view.getUint32(offset + 44, true),
+        rows: view.getUint32(offset + 48, true),
+        z: view.getInt32(offset + 52, true),
+      });
+    }
+    return placements;
   }
 
   // ==========================================================================

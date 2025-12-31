@@ -4,6 +4,7 @@ const std = @import("std");
 const posix = @import("../util/posix.zig");
 const c = posix.c;
 const constants = @import("../util/constants.zig");
+const winsize = @import("../util/winsize.zig");
 const Pty = @import("pty.zig").Pty;
 const handle_registry = @import("handle_registry.zig");
 
@@ -28,12 +29,7 @@ pub fn spawnPty(
     var slave_fd: c_int = undefined;
 
     // Set up window size
-    var ws: c.winsize = .{
-        .ws_col = cols,
-        .ws_row = rows,
-        .ws_xpixel = 0,
-        .ws_ypixel = 0,
-    };
+    var ws: c.winsize = winsize.makeWinsize(cols, rows);
 
     // Open PTY pair
     if (c.openpty(&master_fd, &slave_fd, null, null, &ws) == -1) {
@@ -147,7 +143,7 @@ pub fn spawnPty(
         return constants.ERROR;
     };
 
-    const pty = Pty.init(master_fd, pid);
+    const pty = Pty.init(master_fd, pid, cols, rows, ws.ws_xpixel, ws.ws_ypixel);
     handle_registry.setHandle(h, pty);
 
     // Start the background reader thread
