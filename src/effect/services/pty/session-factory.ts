@@ -13,6 +13,7 @@ import type { PtyId, Cols, Rows} from "../../types";
 import { makePtyId } from "../../types"
 import type { InternalPtySession } from "./types"
 import type { TerminalColors } from "../../../terminal/terminal-colors"
+import { tracePtyEvent } from "../../../terminal/pty-trace"
 import { notifySubscribers } from "./notification"
 import { createDataHandler } from "./data-handler"
 import { setupQueryPassthrough } from "./query-setup"
@@ -153,6 +154,7 @@ export function createSession(
       queryPassthrough,
       emulator,
       pty,
+      ptyId: id,
       getSessionDimensions: () => ({ cols: session.cols, rows: session.rows }),
       getPixelDimensions: () => ({
         pixelWidth: session.pixelWidth,
@@ -197,6 +199,7 @@ export function createSession(
       if (session.closing) {
         return
       }
+      tracePtyEvent("pty-exit", { ptyId: id, exitCode })
       for (const callback of session.exitCallbacks) {
         callback(exitCode)
       }

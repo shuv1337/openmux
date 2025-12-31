@@ -110,6 +110,7 @@ export class KittyGraphicsRenderer {
     state: Omit<PaneState, 'needsClear' | 'removed' | 'hidden' | 'layer'> & { layer?: KittyPaneLayer }
   ): void {
     const layer = state.layer ?? 'base';
+    const emulator = state.emulator && !state.emulator.isDisposed ? state.emulator : null;
     const existing = this.panes.get(paneKey);
     if (existing) {
       if (existing.ptyId !== state.ptyId) {
@@ -118,8 +119,11 @@ export class KittyGraphicsRenderer {
       if (existing.layer !== layer) {
         existing.needsClear = true;
       }
+      if (existing.emulator && !emulator) {
+        existing.needsClear = true;
+      }
       existing.ptyId = state.ptyId;
-      existing.emulator = state.emulator;
+      existing.emulator = emulator;
       existing.offsetX = state.offsetX;
       existing.offsetY = state.offsetY;
       existing.width = state.width;
@@ -134,7 +138,14 @@ export class KittyGraphicsRenderer {
       return;
     }
 
-    this.panes.set(paneKey, { ...state, layer, hidden: false, needsClear: false, removed: false });
+    this.panes.set(paneKey, {
+      ...state,
+      emulator,
+      layer,
+      hidden: false,
+      needsClear: false,
+      removed: false,
+    });
   }
 
   removePane(paneKey: string): void {
@@ -206,6 +217,11 @@ export class KittyGraphicsRenderer {
       if (pane.removed || !pane.ptyId || !pane.emulator) {
         continue;
       }
+      if (pane.emulator.isDisposed) {
+        pane.emulator = null;
+        pane.needsClear = true;
+        continue;
+      }
       activePtys.add(pane.ptyId);
       const shouldBeVisible = this.visibleLayers.has(pane.layer);
       if (shouldBeVisible && pane.hidden) {
@@ -220,6 +236,11 @@ export class KittyGraphicsRenderer {
     const updatedPtys = new Set<string>();
     for (const pane of this.panes.values()) {
       if (pane.removed || !pane.ptyId || !pane.emulator) continue;
+      if (pane.emulator.isDisposed) {
+        pane.emulator = null;
+        pane.needsClear = true;
+        continue;
+      }
       if (pane.hidden) continue;
       if (updatedPtys.has(pane.ptyId)) continue;
       updatedPtys.add(pane.ptyId);
@@ -299,6 +320,7 @@ export class KittyGraphicsRenderer {
     isAlternateScreen: boolean,
     output: string[]
   ): void {
+    if (emulator.isDisposed) return;
     const supportsKitty = !!emulator.getKittyImageIds && !!emulator.getKittyPlacements;
     if (!supportsKitty) return;
 

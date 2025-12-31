@@ -5,6 +5,7 @@
 import type { SyncModeParser } from "../../../terminal/sync-mode-parser"
 import type { InternalPtySession } from "./types"
 import { deferMacrotask } from "../../../core/scheduling"
+import { tracePtyChunk } from "../../../terminal/pty-trace"
 
 interface DataHandlerOptions {
   session: InternalPtySession
@@ -108,10 +109,13 @@ export function createDataHandler(options: DataHandlerOptions) {
 
     if (batch.length > 0) {
       session.emulator.write(batch)
-      const responses = session.emulator.drainResponses?.()
-      if (responses && responses.length > 0) {
-        for (const response of responses) {
-          session.pty.write(response)
+      if (!session.emulator.isDisposed) {
+        const responses = session.emulator.drainResponses?.()
+        if (responses && responses.length > 0) {
+          for (const response of responses) {
+            tracePtyChunk("emulator-response", response, { ptyId: session.id })
+            session.pty.write(response)
+          }
         }
       }
     }
@@ -136,6 +140,7 @@ export function createDataHandler(options: DataHandlerOptions) {
 
   // The data handler function
   const handleData = (data: string) => {
+    tracePtyChunk("pty-in", data, { ptyId: session.id })
     const hasKittyQuery = sawKittyQuery(data)
     let textData: string
     let deferredResponses: string[] | null = null
@@ -188,6 +193,12 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
 
     if (deferredResponses && deferredResponses.length > 0) {
+      for (const response of deferredResponses) {
+        tracePtyChunk("pty-query-response", response, {
+          ptyId: session.id,
+          deferred: true,
+        })
+      }
       state.pendingResponses.push({
         fence: state.segmentCounter,
         responses: deferredResponses,

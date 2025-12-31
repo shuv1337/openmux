@@ -353,7 +353,7 @@ export function encodeKeyForEmulator(
   event: KeyboardEvent,
   emulator: ITerminalEmulator | null
 ): string {
-  if (!emulator) return "";
+  if (!emulator || emulator.isDisposed) return "";
   const action = resolveAction(event);
   if (
     action !== KEY_ACTION_RELEASE &&

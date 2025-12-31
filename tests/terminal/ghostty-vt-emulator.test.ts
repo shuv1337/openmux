@@ -12,6 +12,7 @@ const { MockTerminal, terminalState } = vi.hoisted(() => {
     writeCalls: Array<string | Uint8Array> = []
     cols: number
     rows: number
+    freed = false
 
     constructor(cols: number, rows: number) {
       this.cols = cols
@@ -19,51 +20,105 @@ const { MockTerminal, terminalState } = vi.hoisted(() => {
       MockTerminal.instances.push(this)
     }
 
+    private assertAlive(): void {
+      if (this.freed) {
+        throw new Error("terminal used after free")
+      }
+    }
+
     write(data: string | Uint8Array): void {
+      this.assertAlive()
       this.writeCalls.push(data)
     }
 
     update(): DirtyState {
+      this.assertAlive()
       this.updateCalls += 1
       return DirtyState.FULL
     }
 
-    markClean(): void {}
+    markClean(): void {
+      this.assertAlive()
+    }
 
     getCursor(): { x: number; y: number; visible: boolean } {
+      this.assertAlive()
       return { x: 0, y: 0, visible: true }
     }
 
     getScrollbackLength(): number {
+      this.assertAlive()
       return 0
     }
 
     getViewport(): any[] {
+      this.assertAlive()
       return []
     }
 
     isRowDirty(): boolean {
+      this.assertAlive()
       return true
     }
 
     resize(cols: number, rows: number): void {
+      this.assertAlive()
       this.cols = cols
       this.rows = rows
     }
 
     getMode(): boolean {
+      this.assertAlive()
       return false
     }
 
     getKittyKeyboardFlags(): number {
+      this.assertAlive()
       return 0
     }
 
-    isAlternateScreen(): boolean {
+    getKittyImagesDirty(): boolean {
+      this.assertAlive()
       return false
     }
 
-    free(): void {}
+    clearKittyImagesDirty(): void {
+      this.assertAlive()
+    }
+
+    getKittyImageIds(): number[] {
+      this.assertAlive()
+      return []
+    }
+
+    getKittyImageInfo(): null {
+      this.assertAlive()
+      return null
+    }
+
+    getKittyImageData(): null {
+      this.assertAlive()
+      return null
+    }
+
+    getKittyPlacements(): any[] {
+      this.assertAlive()
+      return []
+    }
+
+    readResponse(): null {
+      this.assertAlive()
+      return null
+    }
+
+    isAlternateScreen(): boolean {
+      this.assertAlive()
+      return false
+    }
+
+    free(): void {
+      this.freed = true
+    }
   }
 
   const terminalState = {
@@ -115,5 +170,16 @@ describe("GhosttyVTEmulator", () => {
 
     expect(terminal!.updateCalls).toBeGreaterThan(updateCallsBefore)
     expect(updateSpy).toHaveBeenCalled()
+  })
+
+  it("returns safe defaults after dispose", () => {
+    const emulator = new GhosttyVTEmulator(2, 1, getDefaultColors())
+    emulator.dispose()
+
+    expect(emulator.getCursor()).toEqual({ x: 0, y: 0, visible: false })
+    expect(emulator.getKittyImagesDirty()).toBe(false)
+    expect(emulator.getKittyImageIds()).toEqual([])
+    expect(emulator.getKittyPlacements()).toEqual([])
+    expect(emulator.drainResponses()).toEqual([])
   })
 })

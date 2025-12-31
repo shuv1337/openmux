@@ -103,20 +103,20 @@ export class Terminal implements IPty {
   }
 
   write(data: string): void {
-    if (this._closing) return;
+    if (this._closing || this.handle < 0) return;
     const buf = Buffer.from(data, "utf8");
     lib.symbols.bun_pty_write(this.handle, ptr(buf), buf.length);
   }
 
   resize(cols: number, rows: number): void {
-    if (this._closing) return;
+    if (this._closing || this.handle < 0) return;
     this._cols = cols;
     this._rows = rows;
     lib.symbols.bun_pty_resize(this.handle, cols, rows);
   }
 
   resizeWithPixels(cols: number, rows: number, pixelWidth: number, pixelHeight: number): void {
-    if (this._closing) return;
+    if (this._closing || this.handle < 0) return;
     this._cols = cols;
     this._rows = rows;
     lib.symbols.bun_pty_resize_with_pixels(this.handle, cols, rows, pixelWidth, pixelHeight);
@@ -127,6 +127,7 @@ export class Terminal implements IPty {
     this._closing = true;
     lib.symbols.bun_pty_kill(this.handle);
     lib.symbols.bun_pty_close(this.handle);
+    this.handle = -1;
     if (!this._exitFired) {
       this._exitFired = true;
       this._onExit.fire({ exitCode: 0, signal });
@@ -217,10 +218,12 @@ export class Terminal implements IPty {
         await Bun.sleep(0);
       } else if (n === -2) {
         // Child exited - flush decoder, close handle, and fire exit
+        this._closing = true;
         const remaining = this._decoder.decode();
         if (remaining.length > 0) this._onData.fire(remaining);
         const exitCode = lib.symbols.bun_pty_get_exit_code(this.handle);
         lib.symbols.bun_pty_close(this.handle);
+        this.handle = -1;
         if (!this._exitFired) {
           this._exitFired = true;
           this._onExit.fire({ exitCode });
@@ -228,8 +231,10 @@ export class Terminal implements IPty {
         return;
       } else if (n < 0) {
         // Error - treat as exit to avoid hanging panes
+        this._closing = true;
         const exitCode = lib.symbols.bun_pty_get_exit_code(this.handle);
         lib.symbols.bun_pty_close(this.handle);
+        this.handle = -1;
         if (!this._exitFired) {
           this._exitFired = true;
           this._onExit.fire({ exitCode });

@@ -221,6 +221,12 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
   }
 
   getTerminalState(): TerminalState {
+    if (this._disposed) {
+      if (this.cachedState) {
+        return { ...(this.cachedState as TerminalState) };
+      }
+      return createEmptyTerminalState(this._cols, this._rows, this.colors, this.modes);
+    }
     if (this.cachedState) {
       return { ...(this.cachedState as TerminalState) };
     }
@@ -234,6 +240,16 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
   }
 
   getCursor(): { x: number; y: number; visible: boolean } {
+    if (this._disposed) {
+      if (this.cachedState?.cursor) {
+        return {
+          x: this.cachedState.cursor.x,
+          y: this.cachedState.cursor.y,
+          visible: this.cachedState.cursor.visible,
+        };
+      }
+      return { x: 0, y: 0, visible: false };
+    }
     if (this.cachedState?.cursor) {
       return {
         x: this.cachedState.cursor.x,
@@ -250,22 +266,27 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
   }
 
   getKittyKeyboardFlags(): number {
+    if (this._disposed) return 0;
     return this.terminal.getKittyKeyboardFlags();
   }
 
   getKittyImagesDirty(): boolean {
+    if (this._disposed) return false;
     return this.terminal.getKittyImagesDirty();
   }
 
   clearKittyImagesDirty(): void {
+    if (this._disposed) return;
     this.terminal.clearKittyImagesDirty();
   }
 
   getKittyImageIds(): number[] {
+    if (this._disposed) return [];
     return this.terminal.getKittyImageIds();
   }
 
   getKittyImageInfo(imageId: number): KittyGraphicsImageInfo | null {
+    if (this._disposed) return null;
     const info = this.terminal.getKittyImageInfo(imageId);
     if (!info) return null;
 
@@ -283,10 +304,12 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
   }
 
   getKittyImageData(imageId: number): Uint8Array | null {
+    if (this._disposed) return null;
     return this.terminal.getKittyImageData(imageId);
   }
 
   getKittyPlacements(): KittyGraphicsPlacement[] {
+    if (this._disposed) return [];
     const placements = this.terminal.getKittyPlacements();
     return placements.map((placement) => ({
       imageId: placement.image_id,
@@ -307,6 +330,7 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
   }
 
   drainResponses(): string[] {
+    if (this._disposed) return [];
     const responses: string[] = [];
     while (true) {
       const response = this.terminal.readResponse();
@@ -325,6 +349,7 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
   }
 
   getMode(mode: number): boolean {
+    if (this._disposed) return false;
     return this.terminal.getMode(mode, false);
   }
 
@@ -403,6 +428,7 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
   // ==========================================================================
 
   private fetchScrollbackLine(offset: number): TerminalCell[] | null {
+    if (this._disposed) return null;
     const cached = this.scrollbackCache.get(offset);
     if (cached) return cached;
 
@@ -419,6 +445,7 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
   }
 
   private prepareUpdate(forceFull: boolean): void {
+    if (this._disposed) return;
     const dirtyState = this.terminal.update();
     this.scrollbackSnapshotDirty = false;
     const cursor = this.terminal.getCursor();

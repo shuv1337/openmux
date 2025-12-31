@@ -34,6 +34,7 @@
 
 import type { TerminalQuery } from './types';
 import { parseTerminalQueries } from './parser';
+import { tracePtyEvent } from '../pty-trace';
 import { KNOWN_CAPABILITIES, KNOWN_MODES, DEFAULT_PALETTE } from './constants';
 import {
   hexToString,
@@ -166,6 +167,7 @@ export class TerminalQueryPassthrough {
    * Returns the data to send to the emulator (without queries)
    */
   process(data: string): string {
+    tracePtyEvent('query-process-start', { len: data.length });
     let input = this.pendingInput + data;
     this.pendingInput = '';
 
@@ -184,6 +186,11 @@ export class TerminalQueryPassthrough {
     }
 
     const result = parseTerminalQueries(input);
+    tracePtyEvent('query-process-parsed', {
+      queryCount: result.queries.length,
+      queryTypes: result.queries.map((query) => query.type),
+      textCount: result.textSegments.length,
+    });
 
     // Handle queries
     if (result.queries.length > 0) {
@@ -408,6 +415,12 @@ export class TerminalQueryPassthrough {
   private handleQuery(query: TerminalQuery): void {
     if (!this.ptyWriter) return;
 
+    tracePtyEvent('query-handle', {
+      queryType: query.type,
+      mode: query.type === 'decrqm' ? query.mode : undefined,
+      winop: query.type === 'xtwinops' ? query.winop : undefined,
+    });
+
     if (query.type === 'cpr') {
       // Get cursor position from emulator
       const cursor = this.cursorGetter?.() ?? { x: 0, y: 0 };
@@ -518,30 +531,48 @@ export class TerminalQueryPassthrough {
     } else if (query.type === 'xtwinops') {
       // Window size queries
       const winop = query.winop ?? 18;
-      if (this.sizeGetter) {
-        const size = this.sizeGetter();
-        let height: number, width: number;
-        switch (winop) {
-          case 14: // Window size in pixels
-            height = size.pixelHeight;
-            width = size.pixelWidth;
-            break;
-          case 16: // Cell size in pixels
-            height = size.cellHeight;
-            width = size.cellWidth;
-            break;
-          case 18: // Text area in characters
-          default:
-            height = size.rows;
-            width = size.cols;
-            break;
+      tracePtyEvent('xtwinops-start', { winop });
+      try {
+        if (this.sizeGetter) {
+          const size = this.sizeGetter();
+          tracePtyEvent('xtwinops-size', {
+            winop,
+            cols: size.cols,
+            rows: size.rows,
+            pixelWidth: size.pixelWidth,
+            pixelHeight: size.pixelHeight,
+            cellWidth: size.cellWidth,
+            cellHeight: size.cellHeight,
+          });
+          let height: number, width: number;
+          switch (winop) {
+            case 14: // Window size in pixels
+              height = size.pixelHeight;
+              width = size.pixelWidth;
+              break;
+            case 16: // Cell size in pixels
+              height = size.cellHeight;
+              width = size.cellWidth;
+              break;
+            case 18: // Text area in characters
+            default:
+              height = size.rows;
+              width = size.cols;
+              break;
+          }
+          const response = generateXtwinopsResponse(winop, height, width);
+          tracePtyEvent('xtwinops-response', { winop, height, width, len: response.length });
+          this.ptyWriter(response);
+          tracePtyEvent('xtwinops-response-written', { winop, len: response.length });
+        } else {
+          // Fallback to default sizes
+          const response = generateXtwinopsResponse(winop, 24, 80);
+          tracePtyEvent('xtwinops-response', { winop, height: 24, width: 80, len: response.length });
+          this.ptyWriter(response);
+          tracePtyEvent('xtwinops-response-written', { winop, len: response.length });
         }
-        const response = generateXtwinopsResponse(winop, height, width);
-        this.ptyWriter(response);
-      } else {
-        // Fallback to default sizes
-        const response = generateXtwinopsResponse(winop, 24, 80);
-        this.ptyWriter(response);
+      } catch (err) {
+        tracePtyEvent('xtwinops-error', { winop, error: err });
       }
     } else if (query.type === 'osc-clipboard') {
       // Clipboard query - respond with empty for security

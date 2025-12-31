@@ -308,6 +308,47 @@ describe('KittyGraphicsRenderer', () => {
     expect(joined).toContain('\x1b_Ga=p');
   });
 
+  it('ignores disposed emulators', () => {
+    const renderer = new KittyGraphicsRenderer();
+    const output: string[] = [];
+    const renderTarget = {
+      resolution: { width: 10, height: 10 },
+      terminalWidth: 10,
+      terminalHeight: 10,
+      writeOut: (chunk: string) => output.push(chunk),
+    };
+
+    const emulator = {
+      isDisposed: true,
+      getKittyImagesDirty: () => {
+        throw new Error('should not query disposed emulator');
+      },
+      getKittyImageIds: () => {
+        throw new Error('should not query disposed emulator');
+      },
+      getKittyPlacements: () => {
+        throw new Error('should not query disposed emulator');
+      },
+    } as ITerminalEmulator;
+
+    renderer.updatePane('pane-disposed', {
+      ptyId: 'pty-disposed',
+      emulator,
+      offsetX: 0,
+      offsetY: 0,
+      width: 10,
+      height: 10,
+      cols: 10,
+      rows: 10,
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAlternateScreen: false,
+    });
+
+    renderer.flush(renderTarget);
+    expect(output.join('')).toBe('');
+  });
+
   it('clears placements when panes are removed', () => {
     const renderer = new KittyGraphicsRenderer();
     const output: string[] = [];
