@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 GHOSTTY_DIR="${GHOSTTY_VT_DIR:-$PROJECT_DIR/vendor/ghostty}"
-PATCH_FILE="$PROJECT_DIR/scripts/ghostty-vt.patch"
+PATCH_FILE="$PROJECT_DIR/patches/ghostty-vt.patch"
 REMOTE_URL="${GHOSTTY_VT_REMOTE:-https://github.com/ghostty-org/ghostty.git}"
 
 MODE="update"
@@ -100,7 +100,7 @@ else
     cat "$err_file" >&2
     rm -f "$err_file"
     echo "" >&2
-    echo "ghostty-vt patch failed to apply. Update scripts/ghostty-vt.patch or adjust for upstream changes." >&2
+    echo "ghostty-vt patch failed to apply. Update patches/ghostty-vt.patch or adjust for upstream changes." >&2
     exit 1
   fi
   rm -f "$err_file"

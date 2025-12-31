@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 LIBGIT2_DIR="${LIBGIT2_DIR:-$PROJECT_DIR/vendor/libgit2}"
-PATCH_FILE="${LIBGIT2_PATCH_FILE:-$PROJECT_DIR/scripts/libgit2.patch}"
+PATCH_FILE="${LIBGIT2_PATCH_FILE:-$PROJECT_DIR/patches/libgit2.patch}"
 REMOTE_URL="${LIBGIT2_REMOTE:-https://github.com/libgit2/libgit2.git}"
 
 MODE="update"
@@ -23,7 +23,7 @@ Options:
 Environment:
   LIBGIT2_DIR         Override libgit2 source directory (default: vendor/libgit2)
   LIBGIT2_REMOTE      Override libgit2 remote URL
-  LIBGIT2_PATCH_FILE  Override patch file path (default: scripts/libgit2.patch)
+  LIBGIT2_PATCH_FILE  Override patch file path (default: patches/libgit2.patch)
 USAGE
 }
 
@@ -97,7 +97,7 @@ if [[ -f "$PATCH_FILE" && -s "$PATCH_FILE" ]]; then
       cat "$err_file" >&2
       rm -f "$err_file"
       echo "" >&2
-      echo "libgit2 patch failed to apply. Update scripts/libgit2.patch or adjust for upstream changes." >&2
+      echo "libgit2 patch failed to apply. Update patches/libgit2.patch or adjust for upstream changes." >&2
       exit 1
     fi
     rm -f "$err_file"
