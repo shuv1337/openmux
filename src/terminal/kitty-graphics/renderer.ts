@@ -46,6 +46,9 @@ export class KittyGraphicsRenderer {
       if (existing.ptyId !== state.ptyId) {
         existing.needsClear = true;
       }
+      if (existing.isAlternateScreen !== state.isAlternateScreen) {
+        existing.needsClear = true;
+      }
       if (existing.layer !== layer) {
         existing.needsClear = true;
       }
@@ -274,14 +277,6 @@ export class KittyGraphicsRenderer {
 
     const broker = getKittyTransmitBroker();
     if (!existing || existing.screenIsAlternate !== isAlternateScreen) {
-      if (existing) {
-        for (const image of existing.images.values()) {
-          output.push(buildDeleteImage(image.hostId));
-        }
-        if (broker) {
-          broker.clearPty(ptyId);
-        }
-      }
       this.ptyStates.set(ptyId, {
         screenIsAlternate: isAlternateScreen,
         images: new Map(),

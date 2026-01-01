@@ -108,4 +108,39 @@ describe('KittyTransmitRelay', () => {
       process.env.OPENMUX_KITTY_OFFLOAD_CLEANUP_MS = priorCleanup;
     });
   });
+
+  it('stubs shared memory payloads when stubAllFormats is enabled', () => {
+    const relay = new KittyTransmitRelay({ stubAllFormats: true });
+    const sequence = `${ESC}_Ga=T,t=s,s=10,v=12,i=7;SHMKEY${ESC}\\`;
+    const result = relay.handleSequence('pty-5', sequence);
+
+    expect(result.forwardSequence).toBe(sequence);
+    expect(result.emuSequence).toContain('f=100');
+    expect(result.emuSequence).toContain('s=10');
+    expect(result.emuSequence).toContain('v=12');
+    expect(result.emuSequence).not.toContain('t=s');
+    expect(result.emuSequence).not.toContain('SHMKEY');
+  });
+
+  it('stubs shared memory payloads when stubPng is enabled', () => {
+    const relay = new KittyTransmitRelay({ stubPng: true });
+    const sequence = `${ESC}_Ga=T,t=s,s=10,v=12,i=8;SHMKEY${ESC}\\`;
+    const result = relay.handleSequence('pty-6', sequence);
+
+    expect(result.forwardSequence).toBe(sequence);
+    expect(result.emuSequence).toContain('f=100');
+    expect(result.emuSequence).toContain('s=10');
+    expect(result.emuSequence).toContain('v=12');
+    expect(result.emuSequence).not.toContain('t=s');
+    expect(result.emuSequence).not.toContain('SHMKEY');
+  });
+
+  it('forwards delete-image commands for the host', () => {
+    const relay = new KittyTransmitRelay({ stubPng: true });
+    const sequence = `${ESC}_Ga=d,d=i,i=5${ESC}\\`;
+    const result = relay.handleSequence('pty-7', sequence);
+
+    expect(result.emuSequence).toBe(sequence);
+    expect(result.forwardSequence).toBe(sequence);
+  });
 });

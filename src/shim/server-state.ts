@@ -11,6 +11,8 @@ export type ShimServerState = {
   ptySubscriptions: PtySubscriptions;
   ptyEmulators: Map<string, ITerminalEmulator>;
   kittyImages: Map<string, Map<number, KittyGraphicsImageInfo>>;
+  kittyTransmitCache: Map<string, Map<string, string[]>>;
+  kittyTransmitPending: Map<string, Map<string, string[]>>;
   lifecycleUnsub: (() => void) | null;
   titleUnsub: (() => void) | null;
   activeClient: net.Socket | null;
@@ -27,6 +29,8 @@ export function createShimServerState(): ShimServerState {
     ptySubscriptions: new Map(),
     ptyEmulators: new Map(),
     kittyImages: new Map(),
+    kittyTransmitCache: new Map(),
+    kittyTransmitPending: new Map(),
     lifecycleUnsub: null,
     titleUnsub: null,
     activeClient: null,
@@ -43,6 +47,8 @@ export function resetShimServerState(state: ShimServerState): void {
   state.ptySubscriptions.clear();
   state.ptyEmulators.clear();
   state.kittyImages.clear();
+  state.kittyTransmitCache.clear();
+  state.kittyTransmitPending.clear();
   state.lifecycleUnsub = null;
   state.titleUnsub = null;
   state.activeClient = null;

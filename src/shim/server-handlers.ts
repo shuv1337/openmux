@@ -7,6 +7,13 @@ import { PtyId } from '../effect/types';
 import type { UnifiedTerminalUpdate, TerminalScrollState, TerminalState, DirtyTerminalUpdate } from '../core/types';
 import { packDirtyUpdate } from '../terminal/cell-serialization';
 import type { ITerminalEmulator, KittyGraphicsImageInfo, KittyGraphicsPlacement } from '../terminal/emulator-interface';
+import {
+  buildGuestKey,
+  normalizeParamId,
+  parseKittySequence,
+  parseTransmitParams,
+} from '../terminal/kitty-graphics/sequence-utils';
+import { tracePtyEvent } from '../terminal/pty-trace';
 import { setHostColors as setHostColorsDefault, type TerminalColors } from '../terminal/terminal-colors';
 import { encodeFrame, SHIM_SOCKET_PATH, type ShimHeader } from './protocol';
 import { setKittyTransmitForwarder, setKittyUpdateForwarder } from './kitty-forwarder';
@@ -72,6 +79,93 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
   const withPty = options?.withPty ?? defaultWithPty;
   const setHostColors = options?.setHostColors ?? setHostColorsDefault;
 
+  const getTransmitCache = (ptyId: string): Map<string, string[]> => {
+    let cache = state.kittyTransmitCache.get(ptyId);
+    if (!cache) {
+      cache = new Map();
+      state.kittyTransmitCache.set(ptyId, cache);
+    }
+    return cache;
+  };
+
+  const getTransmitPending = (ptyId: string): Map<string, string[]> => {
+    let pending = state.kittyTransmitPending.get(ptyId);
+    if (!pending) {
+      pending = new Map();
+      state.kittyTransmitPending.set(ptyId, pending);
+    }
+    return pending;
+  };
+
+  const resolveGuestKey = (params: Map<string, string>): string | null => {
+    const guestId = normalizeParamId(params.get('i'));
+    const guestNumber = normalizeParamId(params.get('I'));
+    return buildGuestKey(guestId, guestNumber);
+  };
+
+  const recordKittyTransmit = (ptyId: string, sequence: string): void => {
+    const parsed = parseKittySequence(sequence);
+    if (!parsed) return;
+    const action = parsed.params.get('a') ?? '';
+    const deleteTarget = parsed.params.get('d') ?? '';
+
+    if (action === 'd') {
+      if (deleteTarget === 'a') {
+        state.kittyTransmitCache.delete(ptyId);
+        state.kittyTransmitPending.delete(ptyId);
+        return;
+      }
+      if (deleteTarget === 'i' || deleteTarget === 'I') {
+        const guestKey = resolveGuestKey(parsed.params);
+        if (!guestKey) return;
+        state.kittyTransmitCache.get(ptyId)?.delete(guestKey);
+        state.kittyTransmitPending.get(ptyId)?.delete(guestKey);
+      }
+      return;
+    }
+
+    if (action !== 't' && action !== 'T') return;
+    const guestKey = resolveGuestKey(parsed.params);
+    if (!guestKey) return;
+
+    const transmit = parseTransmitParams(parsed);
+    const more = transmit?.more ?? parsed.params.get('m') === '1';
+    const cache = getTransmitCache(ptyId);
+    const pending = getTransmitPending(ptyId);
+
+    if (more) {
+      const chunks = pending.get(guestKey) ?? [];
+      if (chunks.length === 0) {
+        cache.delete(guestKey);
+      }
+      chunks.push(sequence);
+      pending.set(guestKey, chunks);
+      return;
+    }
+
+    const chunks = pending.get(guestKey);
+    if (chunks) {
+      chunks.push(sequence);
+      pending.delete(guestKey);
+      cache.set(guestKey, chunks);
+      return;
+    }
+
+    cache.set(guestKey, [sequence]);
+  };
+
+  const hasCachedTransmit = (ptyId: string, info: KittyGraphicsImageInfo): boolean => {
+    const cache = state.kittyTransmitCache.get(ptyId);
+    if (!cache || cache.size === 0) return false;
+    const idKey = buildGuestKey(info.id, null);
+    if (idKey && cache.has(idKey)) return true;
+    if (info.number > 0) {
+      const numberKey = buildGuestKey(null, info.number);
+      if (numberKey && cache.has(numberKey)) return true;
+    }
+    return false;
+  };
+
   const sendEvent = (header: ShimHeader, payloads: ArrayBuffer[] = []) => {
     if (!state.activeClient) return;
     sendFrame(state.activeClient, header, payloads);
@@ -120,6 +214,7 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
 
   const sendKittyTransmit = (ptyId: string, sequence: string): void => {
     if (!state.activeClient) return;
+    recordKittyTransmit(ptyId, sequence);
     const payload = Buffer.from(sequence, 'utf8');
     sendEvent({
       type: 'ptyKittyTransmit',
@@ -153,7 +248,7 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
 
       const prev = previous.get(id);
       const changed = force || !prev || !isSameKittyImage(prev, info);
-      if (changed) {
+      if (changed && !hasCachedTransmit(ptyId, info)) {
         const data = emulator.getKittyImageData?.(id);
         if (data) {
           imageDataIds.push(id);
@@ -185,6 +280,13 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
       },
       payloadLengths: payloads.map((payload) => payload.byteLength),
     };
+
+    tracePtyEvent('kitty-update', {
+      ptyId,
+      imageCount: images.length,
+      imageDataCount: imageDataIds.length,
+      imageDataBytes: payloads.reduce((sum, payload) => sum + payload.byteLength, 0),
+    });
 
     sendEvent(header, payloads);
     emulator.clearKittyImagesDirty?.();
@@ -295,6 +397,8 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     state.ptySubscriptions.delete(ptyId);
     state.ptyEmulators.delete(ptyId);
     state.kittyImages.delete(ptyId);
+    state.kittyTransmitCache.delete(ptyId);
+    state.kittyTransmitPending.delete(ptyId);
   }
 
   async function subscribeAllPtys(): Promise<string[]> {
@@ -381,6 +485,14 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
         await withPty((pty) => pty.getEmulator(PtyId.make(ptyId))) as ITerminalEmulator;
       if (emulator) {
         state.ptyEmulators.set(ptyId, emulator);
+        const cache = state.kittyTransmitCache.get(ptyId);
+        if (cache && cache.size > 0) {
+          for (const sequences of cache.values()) {
+            for (const seq of sequences) {
+              sendKittyTransmit(ptyId, seq);
+            }
+          }
+        }
         sendKittyUpdate(ptyId, emulator, true);
       }
     } catch {

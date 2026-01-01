@@ -2,6 +2,7 @@ import { Buffer } from 'buffer';
 import fs from 'fs';
 import { getHostCapabilities } from '../capabilities';
 import type { KittyGraphicsImageInfo } from '../emulator-interface';
+import { buildDeleteImage } from './commands';
 import type { RendererLike } from './types';
 import { tracePtyEvent } from '../pty-trace';
 import {
@@ -176,11 +177,41 @@ export class KittyTransmitBroker {
     if (!this.enabled || !this.writer) return sequence;
     const parsed = parseKittySequence(sequence);
     if (!parsed) return sequence;
+    const action = parsed.params.get('a');
+    if (action === 'd') {
+      const state = this.getState(ptyId);
+      const deleteTarget = parsed.params.get('d') ?? '';
+      if (deleteTarget === 'a') {
+        state.hostIdByGuestKey.clear();
+        state.stubbedGuestKeys.clear();
+        if (state.pendingChunk?.offload) {
+          this.abortOffload(state.pendingChunk.offload);
+        }
+        state.pendingChunk = null;
+        this.enqueue(`${parsed.prefix}${parsed.control};${parsed.data}${parsed.suffix}`);
+        return sequence;
+      }
+
+      if (deleteTarget === 'i' || deleteTarget === 'I') {
+        const guestId = normalizeParamId(parsed.params.get('i'));
+        const guestNumber = normalizeParamId(parsed.params.get('I'));
+        const guestKey = buildGuestKey(guestId, guestNumber);
+        if (guestKey) {
+          const hostId = state.hostIdByGuestKey.get(guestKey);
+          if (hostId) {
+            this.enqueue(buildDeleteImage(hostId));
+            state.hostIdByGuestKey.delete(guestKey);
+            state.stubbedGuestKeys.delete(guestKey);
+          }
+        }
+      }
+      return sequence;
+    }
     tracePtyEvent('kitty-broker-seq', {
       ptyId,
       control: parsed.control,
       dataLen: parsed.data.length,
-      action: parsed.params.get('a') ?? '',
+      action: action ?? '',
       format: parsed.params.get('f') ?? '',
       medium: parsed.params.get('t') ?? '',
       more: parsed.params.get('m') ?? '',
@@ -328,7 +359,6 @@ export class KittyTransmitBroker {
     const medium = params.medium ?? 'd';
     if (medium !== 'd') return false;
     if (!data && !isChunked) return false;
-    if (isChunked) return true;
     const estimated = estimateDecodedSize(data);
     return estimated >= this.offloadThresholdBytes;
   }
@@ -477,9 +507,6 @@ function buildEmulatorSequence(
 ): { emuSequence: string | null; dropEmulator: boolean } {
   const format = params.format ?? '';
   const isPng = format === '100';
-  if (!isPng) {
-    return { emuSequence: null, dropEmulator: false };
-  }
 
   const medium = params.medium ?? 'd';
   if (medium !== 'd' && medium !== 'f' && medium !== 't') {
@@ -492,6 +519,9 @@ function buildEmulatorSequence(
 
   const controlParams = new Map(parsed.params);
   if (!controlParams.get('s') || !controlParams.get('v')) {
+    if (!isPng) {
+      return { emuSequence: null, dropEmulator: false };
+    }
     const dims = medium === 'd'
       ? parsePngDimensionsFromBase64(parsed.data)
       : parsePngDimensionsFromFilePayload(parsed.data);
@@ -505,11 +535,17 @@ function buildEmulatorSequence(
     return { emuSequence: parsed.prefix + parsed.control + ';' + parsed.data + parsed.suffix, dropEmulator: false };
   }
 
+  if (!isPng) {
+    controlParams.set('f', '100');
+  }
+
   if (medium !== 'd') {
     controlParams.delete('t');
   }
   controlParams.delete('m');
   controlParams.delete('o');
+  controlParams.delete('S');
+  controlParams.delete('O');
   const rebuiltControl = rebuildControl(controlParams);
   stubbed.add(guestKey);
   return { emuSequence: `${parsed.prefix}${rebuiltControl};${parsed.suffix}`, dropEmulator: false };

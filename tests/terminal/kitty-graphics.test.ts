@@ -110,6 +110,103 @@ describe('KittyGraphicsRenderer', () => {
     expect(dirty).toBe(false);
   });
 
+  it('keeps host images across alternate screen switches', () => {
+    const broker = new KittyTransmitBroker();
+    broker.setWriter(() => {});
+    setKittyTransmitBroker(broker);
+    const renderer = new KittyGraphicsRenderer();
+    const output: string[] = [];
+    const renderTarget = {
+      resolution: { width: 10, height: 10 },
+      terminalWidth: 10,
+      terminalHeight: 10,
+      writeOut: (chunk: string) => output.push(chunk),
+    };
+
+    let dirty = true;
+    let isAlternate = false;
+    const imageInfo = {
+      id: 10,
+      number: 0,
+      width: 1,
+      height: 1,
+      dataLength: 3,
+      format: KittyGraphicsFormat.RGB,
+      compression: KittyGraphicsCompression.NONE,
+      implicitId: false,
+      transmitTime: 10n,
+    };
+    const placement = {
+      imageId: 10,
+      placementId: 1,
+      placementTag: KittyGraphicsPlacementTag.INTERNAL,
+      screenX: 0,
+      screenY: 0,
+      xOffset: 0,
+      yOffset: 0,
+      sourceX: 0,
+      sourceY: 0,
+      sourceWidth: 0,
+      sourceHeight: 0,
+      columns: 1,
+      rows: 1,
+      z: 0,
+    };
+    const emulator = {
+      getKittyImagesDirty: () => dirty,
+      clearKittyImagesDirty: () => {
+        dirty = false;
+      },
+      getKittyImageIds: () => (isAlternate ? [] : [10]),
+      getKittyImageInfo: () => imageInfo,
+      getKittyImageData: () => new Uint8Array([255, 0, 0]),
+      getKittyPlacements: () => (isAlternate ? [] : [placement]),
+    } as ITerminalEmulator;
+
+    const ESC = '\x1b';
+    const payload = Buffer.from([255, 0, 0]).toString('base64');
+    broker.handleSequence('pty-10', `${ESC}_Ga=t,f=24,i=10;${payload}${ESC}\\`);
+
+    renderer.updatePane('pane-10', {
+      ptyId: 'pty-10',
+      emulator,
+      offsetX: 0,
+      offsetY: 0,
+      width: 10,
+      height: 10,
+      cols: 10,
+      rows: 10,
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAlternateScreen: isAlternate,
+    });
+    renderer.flush(renderTarget);
+    expect(output.join('')).toContain('\x1b_Ga=p');
+
+    output.length = 0;
+    isAlternate = true;
+    renderer.updatePane('pane-10', {
+      ptyId: 'pty-10',
+      emulator,
+      offsetX: 0,
+      offsetY: 0,
+      width: 10,
+      height: 10,
+      cols: 10,
+      rows: 10,
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAlternateScreen: isAlternate,
+    });
+    renderer.flush(renderTarget);
+
+    const switchOutput = output.join('');
+    expect(switchOutput).toContain('a=d');
+    expect(switchOutput).toContain('d=i');
+    expect(switchOutput).not.toContain('d=I');
+    expect(broker.resolveHostId('pty-10', imageInfo)).toBe(1);
+  });
+
   it('clips placements when overlay rects are set', () => {
     const renderer = new KittyGraphicsRenderer();
     const output: string[] = [];

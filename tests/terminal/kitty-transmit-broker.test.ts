@@ -142,6 +142,22 @@ describe('KittyTransmitBroker', () => {
     });
   });
 
+  it('stubs shared memory payloads when emulator stub is enabled', () => {
+    withStubEnv(() => {
+      const broker = new KittyTransmitBroker();
+      broker.setWriter(() => {});
+
+      const sequence = `${ESC}_Ga=t,t=s,s=10,v=12,i=9;SHMKEY${ESC}\\`;
+      const output = broker.handleSequence('pty-9', sequence);
+
+      expect(output).toContain('f=100');
+      expect(output).toContain('s=10');
+      expect(output).toContain('v=12');
+      expect(output).not.toContain('t=s');
+      expect(output).not.toContain('SHMKEY');
+    });
+  });
+
   it('treats i=0 as implicit and injects a synthetic id', () => {
     const broker = new KittyTransmitBroker();
     const writes: string[] = [];
@@ -153,6 +169,25 @@ describe('KittyTransmitBroker', () => {
     expect(output).toContain('i=');
     expect(output).not.toContain('i=0');
     expect(writes[0]).toContain('i=1');
+  });
+
+  it('forwards delete-image commands with mapped host ids', () => {
+    const broker = new KittyTransmitBroker();
+    const writes: string[] = [];
+    broker.setWriter((chunk) => writes.push(chunk));
+
+    const payload = Buffer.from('abcd').toString('base64');
+    const sequence = `${ESC}_Ga=t,f=24,i=9;${payload}${ESC}\\`;
+    broker.handleSequence('pty-9', sequence);
+
+    const deleteSeq = `${ESC}_Ga=d,d=i,i=9${ESC}\\`;
+    const output = broker.handleSequence('pty-9', deleteSeq);
+
+    expect(output).toBe(deleteSeq);
+    expect(writes).toHaveLength(2);
+    expect(writes[1]).toContain('a=d');
+    expect(writes[1]).toContain('d=I');
+    expect(writes[1]).toContain('i=1');
   });
 
   it('offloads large direct payloads to file transfers', () => {

@@ -50,8 +50,9 @@ export class KittyTransmitRelay {
   private tempFileCounter = 0;
   private stubEmulator = false;
   private stubPng = false;
+  private stubAllFormats = false;
 
-  constructor(options?: { stubPng?: boolean }) {
+  constructor(options?: { stubPng?: boolean; stubAllFormats?: boolean }) {
     const thresholdEnv = Number(process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD ?? '');
     this.offloadThresholdBytes = Number.isFinite(thresholdEnv) && thresholdEnv >= 0
       ? thresholdEnv
@@ -61,6 +62,7 @@ export class KittyTransmitRelay {
     const stubEnv = (process.env.OPENMUX_KITTY_EMULATOR_STUB ?? '').toLowerCase();
     this.stubEmulator = stubEnv === '1' || stubEnv === 'true';
     this.stubPng = options?.stubPng ?? false;
+    this.stubAllFormats = options?.stubAllFormats ?? false;
   }
 
   dispose(): void {
@@ -87,7 +89,9 @@ export class KittyTransmitRelay {
       if (key) {
         this.stubbedGuestKeys.delete(key);
       }
-      return { emuSequence: sequence, forwardSequence: null };
+      const deleteTarget = parsed.params.get('d') ?? '';
+      const shouldForward = deleteTarget === 'a' || deleteTarget === 'i' || deleteTarget === 'I';
+      return { emuSequence: sequence, forwardSequence: shouldForward ? sequence : null };
     }
 
     let transmit = parseTransmitParams(parsed);
@@ -152,7 +156,11 @@ export class KittyTransmitRelay {
 
     const activeOffload = this.pendingChunk?.offload ?? null;
     const shouldOffload = activeOffload ?? this.shouldOffload(mergedParams, parsed.data, transmit.more);
-    const shouldStubEmulator = this.stubEmulator || (this.stubPng && isPng);
+    const shouldStubEmulator =
+      this.stubEmulator ||
+      this.stubAllFormats ||
+      (this.stubPng && isPng) ||
+      medium === 's';
     let offloadDims: { width: number; height: number } | null = null;
     let forwardSequence: string | null = null;
     if (shouldOffload) {
@@ -193,7 +201,7 @@ export class KittyTransmitRelay {
       });
     }
 
-    if (this.stubEmulator && (medium === 'f' || medium === 't') && transmit.more) {
+    if (shouldStubEmulator && (medium === 'f' || medium === 't') && transmit.more) {
       const filePayload = `${this.pendingChunk?.mode === 'buffer' ? this.pendingChunk.filePayload : ''}${parsed.data}`;
       const controlParams = this.pendingChunk?.mode === 'buffer'
         ? this.pendingChunk.controlParams
@@ -282,7 +290,8 @@ export class KittyTransmitRelay {
   ): { emuSequence: string | null; dropEmulator: boolean } {
     const format = params.format ?? '';
     const isPng = format === '100';
-    if (!isPng) {
+    const allowNonPngStub = this.stubEmulator || this.stubAllFormats;
+    if (!isPng && !allowNonPngStub) {
       return { emuSequence: null, dropEmulator: false };
     }
 
@@ -297,6 +306,9 @@ export class KittyTransmitRelay {
 
     const controlParams = new Map(parsed.params);
     if (!controlParams.get('s') || !controlParams.get('v')) {
+      if (!isPng) {
+        return { emuSequence: null, dropEmulator: false };
+      }
       const dims = dimsOverride ?? (medium === 'd'
         ? parsePngDimensionsFromBase64(parsed.data)
         : parsePngDimensionsFromFilePayload(parsed.data));
@@ -310,11 +322,17 @@ export class KittyTransmitRelay {
       return { emuSequence: null, dropEmulator: false };
     }
 
+    if (!isPng) {
+      controlParams.set('f', '100');
+    }
+
     if (medium !== 'd') {
       controlParams.delete('t');
     }
     controlParams.delete('m');
     controlParams.delete('o');
+    controlParams.delete('S');
+    controlParams.delete('O');
     const rebuiltControl = rebuildControl(controlParams);
     this.stubbedGuestKeys.add(guestKey);
     return { emuSequence: `${parsed.prefix}${rebuiltControl};${parsed.suffix}`, dropEmulator: false };
@@ -325,7 +343,6 @@ export class KittyTransmitRelay {
     const medium = params.medium ?? 'd';
     if (medium !== 'd') return false;
     if (!data && !isChunked) return false;
-    if (isChunked) return true;
     const estimated = estimateDecodedSize(data);
     return estimated >= this.offloadThresholdBytes;
   }
