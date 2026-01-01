@@ -81,12 +81,13 @@ export class TerminalQueryPassthrough {
   }) | null = null;
   private kittyKeyboardFlags: number = 0;
   private kittyKeyboardFlagsGetter: (() => number) | null = null;
+  private kittySequenceHandler: ((sequence: string) => string) | null = null;
   private terminalVersion: string = '0.1.0';
   private cursorColor: number = 0xFFFFFF;
   private pendingInput: string = '';
   private readonly pendingLimit = 8192;
   private kittyPartialBuffer = '';
-  private readonly kittyPartialLimit = 65536;
+  private readonly kittyPartialLimit = resolveKittyPartialLimit();
 
   constructor() {}
 
@@ -133,6 +134,14 @@ export class TerminalQueryPassthrough {
    */
   setKittyKeyboardFlagsGetter(getter: () => number): void {
     this.kittyKeyboardFlagsGetter = getter;
+  }
+
+  /**
+   * Set a handler for full Kitty APC sequences.
+   * The handler may return a rewritten sequence for the emulator.
+   */
+  setKittySequenceHandler(handler: ((sequence: string) => string) | null): void {
+    this.kittySequenceHandler = handler;
   }
 
   /**
@@ -204,6 +213,10 @@ export class TerminalQueryPassthrough {
       if (end === -1) {
         const partial = input.slice(start);
         if (partial.length > this.kittyPartialLimit) {
+          tracePtyEvent('kitty-seq-overflow', {
+            partialLen: partial.length,
+            limit: this.kittyPartialLimit,
+          });
           output += partial;
         } else {
           this.kittyPartialBuffer = partial;
@@ -212,7 +225,8 @@ export class TerminalQueryPassthrough {
       }
 
       const sequence = input.slice(start, end);
-      output += this.filterKittySequence(sequence);
+      const rewritten = this.kittySequenceHandler ? this.kittySequenceHandler(sequence) : sequence;
+      output += this.filterKittySequence(rewritten);
       cursor = end;
     }
 
@@ -459,6 +473,7 @@ export class TerminalQueryPassthrough {
     this.paletteGetter = null;
     this.sizeGetter = null;
     this.pendingInput = '';
+    this.kittySequenceHandler = null;
   }
 
   private processQueriesChunk(input: string): string {
@@ -526,6 +541,26 @@ export class TerminalQueryPassthrough {
     if (sequence.length > this.kittyPartialLimit) {
       return sequence;
     }
+    const prefixLen = sequence.startsWith(KITTY_APC_PREFIX)
+      ? KITTY_APC_PREFIX.length
+      : sequence.startsWith(KITTY_APC_C1_PREFIX)
+        ? KITTY_APC_C1_PREFIX.length
+        : 0;
+    if (prefixLen > 0) {
+      const sep = sequence.indexOf(';', prefixLen);
+      if (sep !== -1) {
+        const control = sequence.slice(prefixLen, sep);
+        if (control.includes('a=')) {
+          return sequence;
+        }
+      }
+    }
     return stripKittyResponses(sequence);
   }
+}
+
+function resolveKittyPartialLimit(): number {
+  const env = Number.parseInt(process.env.OPENMUX_KITTY_APC_LIMIT ?? '', 10);
+  if (Number.isFinite(env) && env > 0) return env;
+  return 8 * 1024 * 1024;
 }

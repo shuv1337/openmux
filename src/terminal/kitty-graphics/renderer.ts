@@ -2,6 +2,7 @@ import { getHostCapabilities } from '../capabilities';
 import type { ITerminalEmulator, KittyGraphicsImageInfo } from '../emulator-interface';
 import { buildDeleteImage, buildDeletePlacement, buildDisplay, buildTransmitImage } from './commands';
 import { applyClipRects, computePlacementRender } from './geometry';
+import { getKittyTransmitBroker } from './transmit-broker';
 import type {
   ClipRect,
   KittyPaneLayer,
@@ -122,6 +123,12 @@ export class KittyGraphicsRenderer {
   }
 
   dispose(): void {
+    const broker = getKittyTransmitBroker();
+    if (broker) {
+      for (const ptyId of this.ptyStates.keys()) {
+        broker.clearPty(ptyId);
+      }
+    }
     this.panes.clear();
     this.ptyStates.clear();
     this.placementsByPane.clear();
@@ -138,6 +145,8 @@ export class KittyGraphicsRenderer {
 
     const writeOut = this.getWriter(renderer);
     if (!writeOut) return;
+
+    const broker = getKittyTransmitBroker();
 
     const output: string[] = [];
     const activePtys = new Set<string>();
@@ -177,6 +186,8 @@ export class KittyGraphicsRenderer {
       this.updatePtyState(pane.ptyId, pane.emulator, pane.isAlternateScreen, output);
     }
 
+    const flushedBroker = broker?.flushPending(writeOut) ?? false;
+
     for (const [paneKey, pane] of this.panes) {
       if (pane.removed || !pane.ptyId || !pane.emulator) {
         this.clearPanePlacements(paneKey, output);
@@ -214,7 +225,10 @@ export class KittyGraphicsRenderer {
       }
     }
 
-    if (output.length === 0) return;
+    if (output.length === 0) {
+      if (flushedBroker) return;
+      return;
+    }
     writeOut(output.join(''));
   }
 
@@ -256,10 +270,14 @@ export class KittyGraphicsRenderer {
     const existing = this.ptyStates.get(ptyId);
     const dirty = emulator.getKittyImagesDirty?.() ?? false;
 
+    const broker = getKittyTransmitBroker();
     if (!existing || existing.screenIsAlternate !== isAlternateScreen) {
       if (existing) {
         for (const image of existing.images.values()) {
           output.push(buildDeleteImage(image.hostId));
+        }
+        if (broker) {
+          broker.clearPty(ptyId);
         }
       }
       this.ptyStates.set(ptyId, {
@@ -282,10 +300,11 @@ export class KittyGraphicsRenderer {
       if (!info) continue;
 
       const previous = state.images.get(id);
-      const hostId = previous?.hostId ?? this.nextHostImageId++;
+      const brokerHostId = broker?.resolveHostId(ptyId, info) ?? null;
+      const hostId = brokerHostId ?? previous?.hostId ?? this.nextHostImageId++;
       const changed = !previous || !this.isSameImage(previous.info, info);
 
-      if (changed) {
+      if (changed && !brokerHostId) {
         const data = emulator.getKittyImageData?.(id);
         if (data) {
           const transmit = buildTransmitImage(hostId, info, data);
@@ -302,6 +321,7 @@ export class KittyGraphicsRenderer {
       if (!nextImages.has(id)) {
         output.push(buildDeleteImage(image.hostId));
         this.deletePlacementsForImage(id, output);
+        broker?.dropMapping(ptyId, image.info);
       }
     }
 

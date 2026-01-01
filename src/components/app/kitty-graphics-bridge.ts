@@ -6,7 +6,6 @@ import {
   setKittyGraphicsRenderer,
   setKittyTransmitBroker,
 } from '../../terminal/kitty-graphics';
-import { getHostCapabilities } from '../../terminal/capabilities';
 import { isShimClient } from '../../shim/mode';
 import { subscribeKittyTransmit } from '../../shim/client';
 
@@ -61,14 +60,6 @@ export function createKittyGraphicsBridge(params: {
       return true;
     };
 
-    const hostCaps = getHostCapabilities();
-    // Avoid render-thread output interleaving with kitty APC writes on shared stdout.
-    const shouldDisableThread = !!hostCaps?.kittyGraphics && typeof rendererAny.useThread !== 'undefined';
-    const previousUseThread = shouldDisableThread ? rendererAny.useThread : undefined;
-    if (shouldDisableThread && rendererAny.useThread !== false) {
-      rendererAny.useThread = false;
-    }
-
     if (originalRenderNative) {
       rendererAny.renderNative = () => {
         originalRenderNative();
@@ -77,6 +68,7 @@ export function createKittyGraphicsBridge(params: {
     }
 
     kittyBroker.setRenderer(rendererAny);
+    kittyBroker.setAutoFlush(false);
     let unsubscribeTransmit: (() => void) | null = null;
     if (isShimClient()) {
       unsubscribeTransmit = subscribeKittyTransmit((event) => {
@@ -91,9 +83,7 @@ export function createKittyGraphicsBridge(params: {
       if (originalRenderNative) {
         rendererAny.renderNative = originalRenderNative;
       }
-      if (shouldDisableThread && typeof previousUseThread === 'boolean') {
-        rendererAny.useThread = previousUseThread;
-      }
+      kittyBroker.setAutoFlush(true);
       rendererAny.removeInputHandler?.(handleKittyResponses);
       rendererAny.removeInputHandler?.(handlePixelResolution);
       stopPixelResizePoll();

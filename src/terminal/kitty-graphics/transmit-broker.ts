@@ -61,18 +61,33 @@ export class KittyTransmitBroker {
   private offloadCleanupDelayMs: number;
   private cleanupTimers = new Set<ReturnType<typeof setTimeout>>();
   private tempFileCounter = 0;
+  private pendingWrites: string[] = [];
+  private autoFlush = true;
 
   constructor() {
     const thresholdEnv = Number(process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD ?? '');
     this.offloadThresholdBytes = Number.isFinite(thresholdEnv) && thresholdEnv >= 0
       ? thresholdEnv
-      : 512 * 1024;
+      : 0;
     const cleanupEnv = Number(process.env.OPENMUX_KITTY_OFFLOAD_CLEANUP_MS ?? '');
     this.offloadCleanupDelayMs = Number.isFinite(cleanupEnv) && cleanupEnv >= 0 ? cleanupEnv : 5000;
   }
 
   setWriter(writer: ((chunk: string) => void) | null): void {
     this.writer = writer;
+  }
+
+  setAutoFlush(enabled: boolean): void {
+    this.autoFlush = enabled;
+  }
+
+  flushPending(writerOverride?: (chunk: string) => void): boolean {
+    const writer = writerOverride ?? this.writer;
+    if (!writer || this.pendingWrites.length === 0) return false;
+    const payload = this.pendingWrites.join('');
+    this.pendingWrites = [];
+    writer(payload);
+    return true;
   }
 
   setRenderer(renderer: RendererLike | null): void {
@@ -94,6 +109,7 @@ export class KittyTransmitBroker {
   dispose(): void {
     this.stateByPty.clear();
     this.writer = null;
+    this.pendingWrites = [];
     for (const timer of this.cleanupTimers) {
       clearTimeout(timer);
     }
@@ -198,7 +214,7 @@ export class KittyTransmitBroker {
         const filePath = this.finishOffload(offload);
         const hostSequence = buildHostFileTransmitSequence(hostId, mergedParams, filePath);
         if (hostSequence.length > 0) {
-          this.writer(hostSequence);
+          this.enqueue(hostSequence);
         }
         tracePtyEvent('kitty-broker-host', {
           ptyId,
@@ -213,7 +229,7 @@ export class KittyTransmitBroker {
     } else {
       const hostSequence = buildHostTransmitSequence(hostId, mergedParams, parsed.data);
       if (hostSequence.length > 0) {
-        this.writer(hostSequence);
+        this.enqueue(hostSequence);
       }
       tracePtyEvent('kitty-broker-host', {
         ptyId,
@@ -361,6 +377,15 @@ export class KittyTransmitBroker {
       }
     }, this.offloadCleanupDelayMs);
     this.cleanupTimers.add(timer);
+  }
+
+  private enqueue(chunk: string): void {
+    if (!this.writer) return;
+    if (this.autoFlush) {
+      this.writer(chunk);
+      return;
+    }
+    this.pendingWrites.push(chunk);
   }
 }
 
