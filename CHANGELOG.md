@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.80](https://github.com/monotykamary/openmux/compare/v0.2.79...v0.2.80) (2026-01-02)
+
+
+### Features
+
+* relay focus tracking for notifications ([af85b23](https://github.com/monotykamary/openmux/commit/af85b231221a85a9da6cb88d4e45f0c49e6b6b04))
+
+
+### Bug Fixes
+
+* harden focus tracking handling ([1b05166](https://github.com/monotykamary/openmux/commit/1b051662b9768f7131bcbbc8fa2a38ad49d4d601))
+
+
+### Documentation
+
+* add kitty graphics protocol support to README ([920535a](https://github.com/monotykamary/openmux/commit/920535a3b25d74b989f18d3bca5d9148d83408a0))
+
 ### [0.2.79](https://github.com/monotykamary/openmux/compare/v0.2.78...v0.2.79) (2026-01-02)
 
 
