@@ -26,6 +26,7 @@ A terminal multiplexer with master-stack layout (Zellij-style), built with:
 - Aggregate view for browsing/filtering PTYs across workspaces
 - Mouse tracking (click to focus, tabbed pane switching)
 - Scrollback support with mouse wheel and scrollbar
+- Kitty graphics protocol support (image rendering, pixel sizing, SSH-aware offloading)
 
 ## Installation
 
@@ -312,6 +313,7 @@ Current status:
 - [x] Attach/detach (steal + lock)
 - [x] Configurable keybindings
 - [x] Configurable settings and colors
+- [x] Kitty graphics protocol support
 
 ## License
 
