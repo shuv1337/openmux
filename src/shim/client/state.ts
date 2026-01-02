@@ -9,6 +9,7 @@ import type {
   KittyGraphicsImageInfo,
   KittyGraphicsPlacement,
 } from '../../terminal/emulator-interface';
+import { tracePtyEvent } from '../../terminal/pty-trace';
 
 type ScrollbackAwareEmulator = ITerminalEmulator & {
   handleScrollbackChange?: (newLength: number, isAtScrollbackLimit: boolean) => void;
@@ -30,6 +31,12 @@ export type KittyGraphicsState = {
   images: Map<number, KittyGraphicsImageEntry>;
   placements: KittyGraphicsPlacement[];
   dirty: boolean;
+};
+
+export type KittyScreenKey = 'main' | 'alt';
+type KittyScreenState = {
+  main: KittyGraphicsState;
+  alt: KittyGraphicsState;
 };
 
 export type LifecycleEvent = { type: 'created' | 'destroyed'; ptyId: string };
@@ -54,7 +61,7 @@ const kittyUpdateSubscribers = new Set<(event: KittyUpdateEvent) => void>();
 const ptyStates = new Map<string, PtyState>();
 const emulatorCache = new Map<string, ScrollbackAwareEmulator>();
 let emulatorFactory: ((ptyId: string) => ScrollbackAwareEmulator) | null = null;
-const kittyStates = new Map<string, KittyGraphicsState>();
+const kittyStates = new Map<string, KittyScreenState>();
 
 function clearPtySubscribers(ptyId: string): void {
   unifiedSubscribers.delete(ptyId);
@@ -92,6 +99,19 @@ export function deletePtyState(ptyId: string): void {
   ptyStates.delete(ptyId);
   emulatorCache.delete(ptyId);
   kittyStates.delete(ptyId);
+}
+
+function createEmptyKittyState(): KittyGraphicsState {
+  return { images: new Map(), placements: [], dirty: false };
+}
+
+function getKittyScreenState(ptyId: string, screen: KittyScreenKey): KittyGraphicsState {
+  let state = kittyStates.get(ptyId);
+  if (!state) {
+    state = { main: createEmptyKittyState(), alt: createEmptyKittyState() };
+    kittyStates.set(ptyId, state);
+  }
+  return state[screen];
 }
 
 export function handleUnifiedUpdate(ptyId: string, update: UnifiedTerminalUpdate): void {
@@ -149,10 +169,11 @@ export function handlePtyKittyUpdate(
     placements: KittyGraphicsPlacement[];
     removedImageIds: number[];
     imageData: Map<number, Uint8Array>;
+    alternateScreen: boolean;
   }
 ): void {
-  const existing = kittyStates.get(ptyId);
-  const incomingIds = new Set(update.images.map((info) => info.id));
+  const screen: KittyScreenKey = update.alternateScreen ? 'alt' : 'main';
+  const existing = getKittyScreenState(ptyId, screen);
   const nextImages = new Map<number, KittyGraphicsImageEntry>();
 
   for (const info of update.images) {
@@ -165,10 +186,22 @@ export function handlePtyKittyUpdate(
     nextImages.delete(id);
   }
 
-  kittyStates.set(ptyId, {
+  const nextState: KittyGraphicsState = {
     images: nextImages,
     placements: update.placements,
     dirty: true,
+  };
+  const bundle = kittyStates.get(ptyId) ?? { main: createEmptyKittyState(), alt: createEmptyKittyState() };
+  bundle[screen] = nextState;
+  kittyStates.set(ptyId, bundle);
+
+  tracePtyEvent('kitty-client-update', {
+    ptyId,
+    screen,
+    images: nextImages.size,
+    placements: update.placements.length,
+    removed: update.removedImageIds.length,
+    imageData: update.imageData.size,
   });
 
   for (const callback of kittyUpdateSubscribers) {
@@ -182,8 +215,10 @@ export function handlePtyKittyTransmit(ptyId: string, sequence: string): void {
   }
 }
 
-export function getKittyState(ptyId: string): KittyGraphicsState | undefined {
-  return kittyStates.get(ptyId);
+export function getKittyState(ptyId: string, alternateScreen: boolean = false): KittyGraphicsState | undefined {
+  const state = kittyStates.get(ptyId);
+  if (!state) return undefined;
+  return alternateScreen ? state.alt : state.main;
 }
 
 export function subscribeUnified(ptyId: string, callback: UnifiedSubscriber): () => void {

@@ -17,7 +17,7 @@ import { tracePtyEvent } from '../terminal/pty-trace';
 import { setHostColors as setHostColorsDefault, type TerminalColors } from '../terminal/terminal-colors';
 import { encodeFrame, SHIM_SOCKET_PATH, type ShimHeader } from './protocol';
 import { setKittyTransmitForwarder, setKittyUpdateForwarder } from './kitty-forwarder';
-import type { ShimServerState } from './server-state';
+import type { KittyScreenImages, KittyScreenKey, ShimServerState } from './server-state';
 import { createRequestHandler } from './server-requests';
 
 export type WithPty = <A>(fn: (pty: any) => Effect.Effect<A, unknown, any> | A) => Promise<A>;
@@ -223,6 +223,15 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     }, [toArrayBuffer(payload)]);
   };
 
+  const getKittyImagesForScreen = (ptyId: string, screen: KittyScreenKey): Map<number, KittyGraphicsImageInfo> => {
+    let screens = state.kittyImages.get(ptyId);
+    if (!screens) {
+      screens = { main: new Map(), alt: new Map() };
+      state.kittyImages.set(ptyId, screens);
+    }
+    return screens[screen];
+  };
+
   const sendKittyUpdate = (
     ptyId: string,
     emulator: ITerminalEmulator,
@@ -234,7 +243,9 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     const dirty = emulator.getKittyImagesDirty?.() ?? false;
     if (!dirty && !force) return;
 
-    const previous = state.kittyImages.get(ptyId) ?? new Map<number, KittyGraphicsImageInfo>();
+    const alternateScreen = emulator.isAlternateScreen?.() ?? false;
+    const screenKey: KittyScreenKey = alternateScreen ? 'alt' : 'main';
+    const previous = getKittyImagesForScreen(ptyId, screenKey);
     const nextImages = new Map<number, KittyGraphicsImageInfo>();
     const images: KittyGraphicsImageInfo[] = [];
     const imageDataIds: number[] = [];
@@ -266,7 +277,9 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
       }
     }
 
-    state.kittyImages.set(ptyId, nextImages);
+    const screens: KittyScreenImages = state.kittyImages.get(ptyId) ?? { main: new Map(), alt: new Map() };
+    screens[screenKey] = nextImages;
+    state.kittyImages.set(ptyId, screens);
 
     const placements = emulator.getKittyPlacements?.() ?? [];
     const header: ShimHeader = {
@@ -277,6 +290,7 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
         placements: placements.map(serializeKittyPlacement),
         removedImageIds,
         imageDataIds,
+        alternateScreen,
       },
       payloadLengths: payloads.map((payload) => payload.byteLength),
     };
@@ -284,6 +298,11 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     tracePtyEvent('kitty-update', {
       ptyId,
       imageCount: images.length,
+      placementCount: placements.length,
+      removedImageCount: removedImageIds.length,
+      dirty,
+      force,
+      alternateScreen,
       imageDataCount: imageDataIds.length,
       imageDataBytes: payloads.reduce((sum, payload) => sum + payload.byteLength, 0),
     });

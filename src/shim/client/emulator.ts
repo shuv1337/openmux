@@ -15,7 +15,7 @@ export type RemoteEmulatorDeps = {
     scrollState: TerminalScrollState;
     title: string;
   } | undefined;
-  getKittyState: (ptyId: string) => KittyGraphicsState | undefined;
+  getKittyState: (ptyId: string, alternateScreen?: boolean) => KittyGraphicsState | undefined;
   fetchScrollbackLines: (
     ptyId: string,
     startOffset: number,
@@ -130,32 +130,38 @@ export class RemoteEmulator implements ITerminalEmulator {
   }
 
   getKittyImagesDirty(): boolean {
-    return this.deps.getKittyState(this.ptyId)?.dirty ?? false;
+    const alternateScreen = this.deps.getPtyState(this.ptyId)?.terminalState?.alternateScreen ?? false;
+    return this.deps.getKittyState(this.ptyId, alternateScreen)?.dirty ?? false;
   }
 
   clearKittyImagesDirty(): void {
-    const state = this.deps.getKittyState(this.ptyId);
+    const alternateScreen = this.deps.getPtyState(this.ptyId)?.terminalState?.alternateScreen ?? false;
+    const state = this.deps.getKittyState(this.ptyId, alternateScreen);
     if (state) {
       state.dirty = false;
     }
   }
 
   getKittyImageIds(): number[] {
-    const state = this.deps.getKittyState(this.ptyId);
+    const alternateScreen = this.deps.getPtyState(this.ptyId)?.terminalState?.alternateScreen ?? false;
+    const state = this.deps.getKittyState(this.ptyId, alternateScreen);
     if (!state) return [];
     return Array.from(state.images.keys());
   }
 
   getKittyImageInfo(imageId: number): KittyGraphicsImageInfo | null {
-    return this.deps.getKittyState(this.ptyId)?.images.get(imageId)?.info ?? null;
+    const alternateScreen = this.deps.getPtyState(this.ptyId)?.terminalState?.alternateScreen ?? false;
+    return this.deps.getKittyState(this.ptyId, alternateScreen)?.images.get(imageId)?.info ?? null;
   }
 
   getKittyImageData(imageId: number): Uint8Array | null {
-    return this.deps.getKittyState(this.ptyId)?.images.get(imageId)?.data ?? null;
+    const alternateScreen = this.deps.getPtyState(this.ptyId)?.terminalState?.alternateScreen ?? false;
+    return this.deps.getKittyState(this.ptyId, alternateScreen)?.images.get(imageId)?.data ?? null;
   }
 
   getKittyPlacements(): KittyGraphicsPlacement[] {
-    return this.deps.getKittyState(this.ptyId)?.placements ?? [];
+    const alternateScreen = this.deps.getPtyState(this.ptyId)?.terminalState?.alternateScreen ?? false;
+    return this.deps.getKittyState(this.ptyId, alternateScreen)?.placements ?? [];
   }
 
   isMouseTrackingEnabled(): boolean {

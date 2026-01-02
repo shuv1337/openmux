@@ -1,6 +1,12 @@
 import type net from 'net';
 import type { ITerminalEmulator, KittyGraphicsImageInfo } from '../terminal/emulator-interface';
 
+export type KittyScreenKey = 'main' | 'alt';
+export type KittyScreenImages = {
+  main: Map<number, KittyGraphicsImageInfo>;
+  alt: Map<number, KittyGraphicsImageInfo>;
+};
+
 type PtySubscriptions = Map<string, { unifiedUnsub: () => void; exitUnsub: () => void }>;
 
 export type ShimServerState = {
@@ -10,7 +16,7 @@ export type ShimServerState = {
   revokedClientIds: Set<string>;
   ptySubscriptions: PtySubscriptions;
   ptyEmulators: Map<string, ITerminalEmulator>;
-  kittyImages: Map<string, Map<number, KittyGraphicsImageInfo>>;
+  kittyImages: Map<string, KittyScreenImages>;
   kittyTransmitCache: Map<string, Map<string, string[]>>;
   kittyTransmitPending: Map<string, Map<string, string[]>>;
   lifecycleUnsub: (() => void) | null;

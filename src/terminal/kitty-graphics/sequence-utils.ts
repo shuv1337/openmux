@@ -24,6 +24,8 @@ export type TransmitParams = {
   width?: string;
   height?: string;
   compression?: string;
+  size?: string;
+  offset?: string;
   more: boolean;
 };
 
@@ -88,6 +90,8 @@ export function parseTransmitParams(parsed: KittySequence): TransmitParams | nul
     width: params.get('s'),
     height: params.get('v'),
     compression: params.get('o'),
+    size: params.get('S'),
+    offset: params.get('O'),
     more: params.get('m') === '1',
   };
 }
@@ -101,6 +105,8 @@ export function mergeTransmitParams(base: TransmitParams | null, next: TransmitP
     width: next.width ?? base.width,
     height: next.height ?? base.height,
     compression: next.compression ?? base.compression,
+    size: next.size ?? base.size,
+    offset: next.offset ?? base.offset,
     more: next.more,
   };
 }

@@ -83,6 +83,7 @@ describe('KittyGraphicsRenderer', () => {
       getKittyImageInfo: () => imageInfo,
       getKittyImageData: () => new Uint8Array([255, 0, 0]),
       getKittyPlacements: () => [placement],
+      isAlternateScreen: () => false,
     } as ITerminalEmulator;
 
     const ESC = '\x1b';
@@ -161,6 +162,7 @@ describe('KittyGraphicsRenderer', () => {
       getKittyImageInfo: () => imageInfo,
       getKittyImageData: () => new Uint8Array([255, 0, 0]),
       getKittyPlacements: () => (isAlternate ? [] : [placement]),
+      isAlternateScreen: () => isAlternate,
     } as ITerminalEmulator;
 
     const ESC = '\x1b';
@@ -205,6 +207,234 @@ describe('KittyGraphicsRenderer', () => {
     expect(switchOutput).toContain('d=i');
     expect(switchOutput).not.toContain('d=I');
     expect(broker.resolveHostId('pty-10', imageInfo)).toBe(1);
+  });
+
+  it('replays cached placements when returning to the main screen', () => {
+    const broker = new KittyTransmitBroker();
+    broker.setWriter(() => {});
+    setKittyTransmitBroker(broker);
+    const renderer = new KittyGraphicsRenderer();
+    const output: string[] = [];
+    const renderTarget = {
+      resolution: { width: 10, height: 10 },
+      terminalWidth: 10,
+      terminalHeight: 10,
+      writeOut: (chunk: string) => output.push(chunk),
+    };
+
+    let dirty = true;
+    let isAlternate = false;
+    const imageInfo = {
+      id: 11,
+      number: 0,
+      width: 1,
+      height: 1,
+      dataLength: 3,
+      format: KittyGraphicsFormat.RGB,
+      compression: KittyGraphicsCompression.NONE,
+      implicitId: false,
+      transmitTime: 11n,
+    };
+    const placement = {
+      imageId: 11,
+      placementId: 1,
+      placementTag: KittyGraphicsPlacementTag.INTERNAL,
+      screenX: 0,
+      screenY: 0,
+      xOffset: 0,
+      yOffset: 0,
+      sourceX: 0,
+      sourceY: 0,
+      sourceWidth: 0,
+      sourceHeight: 0,
+      columns: 1,
+      rows: 1,
+      z: 0,
+    };
+    const emulator = {
+      getKittyImagesDirty: () => dirty,
+      clearKittyImagesDirty: () => {
+        dirty = false;
+      },
+      getKittyImageIds: () => (isAlternate ? [] : [11]),
+      getKittyImageInfo: () => imageInfo,
+      getKittyImageData: () => new Uint8Array([255, 0, 0]),
+      getKittyPlacements: () => (isAlternate ? [] : [placement]),
+      isAlternateScreen: () => isAlternate,
+    } as ITerminalEmulator;
+
+    const ESC = '\x1b';
+    const payload = Buffer.from([255, 0, 0]).toString('base64');
+    broker.handleSequence('pty-11', `${ESC}_Ga=t,f=24,i=11;${payload}${ESC}\\`);
+
+    renderer.updatePane('pane-11', {
+      ptyId: 'pty-11',
+      emulator,
+      offsetX: 0,
+      offsetY: 0,
+      width: 10,
+      height: 10,
+      cols: 10,
+      rows: 10,
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAlternateScreen: isAlternate,
+    });
+    renderer.flush(renderTarget);
+    expect(output.join('')).toContain('\x1b_Ga=p');
+
+    output.length = 0;
+    isAlternate = true;
+    renderer.updatePane('pane-11', {
+      ptyId: 'pty-11',
+      emulator,
+      offsetX: 0,
+      offsetY: 0,
+      width: 10,
+      height: 10,
+      cols: 10,
+      rows: 10,
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAlternateScreen: isAlternate,
+    });
+    renderer.flush(renderTarget);
+
+    output.length = 0;
+    isAlternate = false;
+    renderer.updatePane('pane-11', {
+      ptyId: 'pty-11',
+      emulator,
+      offsetX: 0,
+      offsetY: 0,
+      width: 10,
+      height: 10,
+      cols: 10,
+      rows: 10,
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAlternateScreen: isAlternate,
+    });
+    renderer.flush(renderTarget);
+
+    expect(output.join('')).toContain('\x1b_Ga=p');
+  });
+
+  it('reuses cached placements after alt switch when placements are missing', () => {
+    const broker = new KittyTransmitBroker();
+    broker.setWriter(() => {});
+    setKittyTransmitBroker(broker);
+    const renderer = new KittyGraphicsRenderer();
+    const output: string[] = [];
+    const renderTarget = {
+      resolution: { width: 10, height: 10 },
+      terminalWidth: 10,
+      terminalHeight: 10,
+      writeOut: (chunk: string) => output.push(chunk),
+    };
+
+    let dirty = true;
+    let isAlternate = false;
+    let dropPlacementsOnReturn = false;
+    const imageInfo = {
+      id: 12,
+      number: 0,
+      width: 1,
+      height: 1,
+      dataLength: 3,
+      format: KittyGraphicsFormat.RGB,
+      compression: KittyGraphicsCompression.NONE,
+      implicitId: false,
+      transmitTime: 12n,
+    };
+    const placement = {
+      imageId: 12,
+      placementId: 1,
+      placementTag: KittyGraphicsPlacementTag.INTERNAL,
+      screenX: 0,
+      screenY: 0,
+      xOffset: 0,
+      yOffset: 0,
+      sourceX: 0,
+      sourceY: 0,
+      sourceWidth: 0,
+      sourceHeight: 0,
+      columns: 1,
+      rows: 1,
+      z: 0,
+    };
+    const emulator = {
+      getKittyImagesDirty: () => dirty,
+      clearKittyImagesDirty: () => {
+        dirty = false;
+      },
+      getKittyImageIds: () => (isAlternate ? [] : [12]),
+      getKittyImageInfo: () => imageInfo,
+      getKittyImageData: () => new Uint8Array([255, 0, 0]),
+      getKittyPlacements: () => {
+        if (isAlternate) return [];
+        if (dropPlacementsOnReturn) return [];
+        return [placement];
+      },
+      isAlternateScreen: () => isAlternate,
+    } as ITerminalEmulator;
+
+    const ESC = '\x1b';
+    const payload = Buffer.from([255, 0, 0]).toString('base64');
+    broker.handleSequence('pty-12', `${ESC}_Ga=t,f=24,i=12;${payload}${ESC}\\`);
+
+    renderer.updatePane('pane-12', {
+      ptyId: 'pty-12',
+      emulator,
+      offsetX: 0,
+      offsetY: 0,
+      width: 10,
+      height: 10,
+      cols: 10,
+      rows: 10,
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAlternateScreen: isAlternate,
+    });
+    renderer.flush(renderTarget);
+    expect(output.join('')).toContain('\x1b_Ga=p');
+
+    output.length = 0;
+    isAlternate = true;
+    renderer.updatePane('pane-12', {
+      ptyId: 'pty-12',
+      emulator,
+      offsetX: 0,
+      offsetY: 0,
+      width: 10,
+      height: 10,
+      cols: 10,
+      rows: 10,
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAlternateScreen: isAlternate,
+    });
+    renderer.flush(renderTarget);
+
+    output.length = 0;
+    isAlternate = false;
+    dropPlacementsOnReturn = true;
+    renderer.updatePane('pane-12', {
+      ptyId: 'pty-12',
+      emulator,
+      offsetX: 0,
+      offsetY: 0,
+      width: 10,
+      height: 10,
+      cols: 10,
+      rows: 10,
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAlternateScreen: isAlternate,
+    });
+    renderer.flush(renderTarget);
+
+    expect(output.join('')).toContain('\x1b_Ga=p');
   });
 
   it('clips placements when overlay rects are set', () => {
@@ -254,6 +484,7 @@ describe('KittyGraphicsRenderer', () => {
       getKittyImageInfo: () => imageInfo,
       getKittyImageData: () => new Uint8Array([0, 0, 255]),
       getKittyPlacements: () => [placement],
+      isAlternateScreen: () => false,
     } as ITerminalEmulator;
 
     renderer.updatePane('pane-3', {
@@ -335,6 +566,7 @@ describe('KittyGraphicsRenderer', () => {
       getKittyImageInfo: () => baseImage,
       getKittyImageData: () => new Uint8Array([255, 255, 0]),
       getKittyPlacements: () => [basePlacement],
+      isAlternateScreen: () => false,
     } as ITerminalEmulator;
 
     let dirtyOverlay = true;
@@ -374,6 +606,7 @@ describe('KittyGraphicsRenderer', () => {
       getKittyImageInfo: () => overlayImage,
       getKittyImageData: () => new Uint8Array([255, 0, 255]),
       getKittyPlacements: () => [overlayPlacement],
+      isAlternateScreen: () => false,
     } as ITerminalEmulator;
 
     renderer.updatePane('pane-base', {
@@ -439,6 +672,7 @@ describe('KittyGraphicsRenderer', () => {
       getKittyPlacements: () => {
         throw new Error('should not query disposed emulator');
       },
+      isAlternateScreen: () => false,
     } as ITerminalEmulator;
 
     renderer.updatePane('pane-disposed', {
@@ -506,6 +740,7 @@ describe('KittyGraphicsRenderer', () => {
       getKittyImageInfo: () => imageInfo,
       getKittyImageData: () => new Uint8Array([0, 255, 0]),
       getKittyPlacements: () => [placement],
+      isAlternateScreen: () => false,
     } as ITerminalEmulator;
 
     renderer.updatePane('pane-2', {

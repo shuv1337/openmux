@@ -43,6 +43,14 @@ type OffloadState = {
   bytesWritten: number;
 };
 
+const hostQueryMode = (() => {
+  const explicit = (process.env.OPENMUX_KITTY_HOST_QUERY ?? '').toLowerCase();
+  if (explicit === '1' || explicit === 'true' || explicit === 'yes') return '1';
+  if (explicit === '0' || explicit === 'false' || explicit === 'no') return '0';
+  if (explicit === '2') return '2';
+  return process.env.OPENMUX_PTY_TRACE ? '1' : '2';
+})();
+
 let activeBroker: KittyTransmitBroker | null = null;
 
 export function getKittyTransmitBroker(): KittyTransmitBroker | null {
@@ -67,6 +75,7 @@ export class KittyTransmitBroker {
   private flushScheduled = false;
   private flushScheduler: (() => void) | null = null;
   private stubEmulator = false;
+  private stubSharedMemory = true;
 
   constructor() {
     const thresholdEnv = Number(process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD ?? '');
@@ -77,6 +86,8 @@ export class KittyTransmitBroker {
     this.offloadCleanupDelayMs = Number.isFinite(cleanupEnv) && cleanupEnv >= 0 ? cleanupEnv : 5000;
     const stubEnv = (process.env.OPENMUX_KITTY_EMULATOR_STUB ?? '').toLowerCase();
     this.stubEmulator = stubEnv === '1' || stubEnv === 'true';
+    const stubSharedEnv = (process.env.OPENMUX_KITTY_STUB_SHARED_MEMORY ?? '').toLowerCase();
+    this.stubSharedMemory = !(stubSharedEnv === '0' || stubSharedEnv === 'false');
   }
 
   setWriter(writer: ((chunk: string) => void) | null): void {
@@ -182,13 +193,12 @@ export class KittyTransmitBroker {
       const state = this.getState(ptyId);
       const deleteTarget = parsed.params.get('d') ?? '';
       if (deleteTarget === 'a') {
-        state.hostIdByGuestKey.clear();
-        state.stubbedGuestKeys.clear();
         if (state.pendingChunk?.offload) {
           this.abortOffload(state.pendingChunk.offload);
         }
         state.pendingChunk = null;
-        this.enqueue(`${parsed.prefix}${parsed.control};${parsed.data}${parsed.suffix}`);
+        // Host renders are driven by the emulator state; forwarding d=a would
+        // nuke images from unrelated screens/panes.
         return sequence;
       }
 
@@ -262,6 +272,9 @@ export class KittyTransmitBroker {
         if (hostSequence.length > 0) {
           this.enqueue(hostSequence);
         }
+        const hostControl = process.env.OPENMUX_PTY_TRACE
+          ? parseKittySequence(hostSequence)?.control ?? ''
+          : '';
         tracePtyEvent('kitty-broker-host', {
           ptyId,
           hostId,
@@ -269,6 +282,7 @@ export class KittyTransmitBroker {
           offload: true,
           filePath,
           bytesWritten: offload.bytesWritten,
+          control: hostControl,
         });
         this.scheduleCleanup(filePath);
       }
@@ -277,12 +291,16 @@ export class KittyTransmitBroker {
       if (hostSequence.length > 0) {
         this.enqueue(hostSequence);
       }
+      const hostControl = process.env.OPENMUX_PTY_TRACE
+        ? parseKittySequence(hostSequence)?.control ?? ''
+        : '';
       tracePtyEvent('kitty-broker-host', {
         ptyId,
         hostId,
         guestKey,
         offload: false,
         dataLen: parsed.data.length,
+        control: hostControl,
       });
     }
 
@@ -308,7 +326,8 @@ export class KittyTransmitBroker {
       rebuiltSequence = `${parsed.prefix}${rebuiltControl};${parsed.data}${parsed.suffix}`;
     }
 
-    if (!this.stubEmulator) {
+    const shouldStubSharedMemory = this.stubSharedMemory && mergedParams.medium === 's';
+    if (!this.stubEmulator && !shouldStubSharedMemory) {
       return rebuiltSequence ?? sequence;
     }
 
@@ -316,7 +335,8 @@ export class KittyTransmitBroker {
       parsed,
       mergedParams,
       guestKey,
-      state.stubbedGuestKeys
+      state.stubbedGuestKeys,
+      shouldStubSharedMemory
     );
 
     if (dropEmulator) {
@@ -453,9 +473,13 @@ function buildHostTransmitSequence(hostId: number, params: TransmitParams, data:
   if (!data && !params.more) return '';
   const control: string[] = [];
   control.push('a=t');
-  control.push('q=2');
-  if (params.format) {
-    control.push(`f=${params.format}`);
+  control.push(`q=${hostQueryMode}`);
+  let format = params.format;
+  if (!format && params.medium === 's') {
+    format = '32';
+  }
+  if (format) {
+    control.push(`f=${format}`);
   }
   if (params.medium) {
     control.push(`t=${params.medium}`);
@@ -469,6 +493,14 @@ function buildHostTransmitSequence(hostId: number, params: TransmitParams, data:
   if (params.compression) {
     control.push(`o=${params.compression}`);
   }
+  if (params.medium === 's') {
+    if (params.size) {
+      control.push(`S=${params.size}`);
+    }
+    if (params.offset) {
+      control.push(`O=${params.offset}`);
+    }
+  }
   if (params.more) {
     control.push('m=1');
   }
@@ -480,7 +512,7 @@ function buildHostTransmitSequence(hostId: number, params: TransmitParams, data:
 function buildHostFileTransmitSequence(hostId: number, params: TransmitParams, filePath: string): string {
   const control: string[] = [];
   control.push('a=t');
-  control.push('q=2');
+  control.push(`q=${hostQueryMode}`);
   if (params.format) {
     control.push(`f=${params.format}`);
   }
@@ -503,13 +535,15 @@ function buildEmulatorSequence(
   parsed: KittySequence,
   params: TransmitParams,
   guestKey: string,
-  stubbed: Set<string>
+  stubbed: Set<string>,
+  forceStub: boolean = false
 ): { emuSequence: string | null; dropEmulator: boolean } {
   const format = params.format ?? '';
   const isPng = format === '100';
+  const allowNonPngStub = forceStub;
 
   const medium = params.medium ?? 'd';
-  if (medium !== 'd' && medium !== 'f' && medium !== 't') {
+  if (medium !== 'd' && medium !== 'f' && medium !== 't' && medium !== 's') {
     return { emuSequence: null, dropEmulator: false };
   }
 
@@ -519,15 +553,20 @@ function buildEmulatorSequence(
 
   const controlParams = new Map(parsed.params);
   if (!controlParams.get('s') || !controlParams.get('v')) {
-    if (!isPng) {
+    if (medium === 's') {
+      controlParams.set('s', '1');
+      controlParams.set('v', '1');
+    } else if (!isPng && !allowNonPngStub) {
       return { emuSequence: null, dropEmulator: false };
     }
-    const dims = medium === 'd'
-      ? parsePngDimensionsFromBase64(parsed.data)
-      : parsePngDimensionsFromFilePayload(parsed.data);
-    if (dims) {
-      controlParams.set('s', String(dims.width));
-      controlParams.set('v', String(dims.height));
+    if (medium !== 's') {
+      const dims = medium === 'd'
+        ? parsePngDimensionsFromBase64(parsed.data)
+        : parsePngDimensionsFromFilePayload(parsed.data);
+      if (dims) {
+        controlParams.set('s', String(dims.width));
+        controlParams.set('v', String(dims.height));
+      }
     }
   }
 
@@ -547,6 +586,8 @@ function buildEmulatorSequence(
   controlParams.delete('S');
   controlParams.delete('O');
   const rebuiltControl = rebuildControl(controlParams);
-  stubbed.add(guestKey);
+  if (!forceStub) {
+    stubbed.add(guestKey);
+  }
   return { emuSequence: `${parsed.prefix}${rebuiltControl};${parsed.suffix}`, dropEmulator: false };
 }

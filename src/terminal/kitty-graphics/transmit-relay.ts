@@ -51,8 +51,9 @@ export class KittyTransmitRelay {
   private stubEmulator = false;
   private stubPng = false;
   private stubAllFormats = false;
+  private stubSharedMemory = true;
 
-  constructor(options?: { stubPng?: boolean; stubAllFormats?: boolean }) {
+  constructor(options?: { stubPng?: boolean; stubAllFormats?: boolean; stubSharedMemory?: boolean }) {
     const thresholdEnv = Number(process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD ?? '');
     this.offloadThresholdBytes = Number.isFinite(thresholdEnv) && thresholdEnv >= 0
       ? thresholdEnv
@@ -63,6 +64,7 @@ export class KittyTransmitRelay {
     this.stubEmulator = stubEnv === '1' || stubEnv === 'true';
     this.stubPng = options?.stubPng ?? false;
     this.stubAllFormats = options?.stubAllFormats ?? false;
+    this.stubSharedMemory = options?.stubSharedMemory ?? true;
   }
 
   dispose(): void {
@@ -156,11 +158,12 @@ export class KittyTransmitRelay {
 
     const activeOffload = this.pendingChunk?.offload ?? null;
     const shouldOffload = activeOffload ?? this.shouldOffload(mergedParams, parsed.data, transmit.more);
+    const shouldStubSharedMemory = this.stubSharedMemory && medium === 's';
     const shouldStubEmulator =
       this.stubEmulator ||
       this.stubAllFormats ||
       (this.stubPng && isPng) ||
-      medium === 's';
+      shouldStubSharedMemory;
     let offloadDims: { width: number; height: number } | null = null;
     let forwardSequence: string | null = null;
     if (shouldOffload) {
@@ -237,7 +240,13 @@ export class KittyTransmitRelay {
     let dropEmulator = false;
 
     if (shouldStubEmulator && this.pendingChunk?.mode !== 'pass') {
-      const stub = this.buildEmulatorSequence(parsedForStub, mergedParams, guestKey, offloadDims);
+      const stub = this.buildEmulatorSequence(
+        parsedForStub,
+        mergedParams,
+        guestKey,
+        offloadDims,
+        shouldStubSharedMemory
+      );
       if (stub.dropEmulator) {
         emuSequence = '';
         dropEmulator = true;
@@ -286,17 +295,18 @@ export class KittyTransmitRelay {
     parsed: KittySequence,
     params: TransmitParams,
     guestKey: string,
-    dimsOverride: { width: number; height: number } | null = null
+    dimsOverride: { width: number; height: number } | null = null,
+    forceStub: boolean = false
   ): { emuSequence: string | null; dropEmulator: boolean } {
     const format = params.format ?? '';
     const isPng = format === '100';
-    const allowNonPngStub = this.stubEmulator || this.stubAllFormats;
+    const allowNonPngStub = forceStub || this.stubEmulator || this.stubAllFormats;
     if (!isPng && !allowNonPngStub) {
       return { emuSequence: null, dropEmulator: false };
     }
 
     const medium = params.medium ?? 'd';
-    if (medium !== 'd' && medium !== 'f' && medium !== 't') {
+    if (medium !== 'd' && medium !== 'f' && medium !== 't' && medium !== 's') {
       return { emuSequence: null, dropEmulator: false };
     }
 
@@ -306,15 +316,20 @@ export class KittyTransmitRelay {
 
     const controlParams = new Map(parsed.params);
     if (!controlParams.get('s') || !controlParams.get('v')) {
-      if (!isPng) {
+      if (medium === 's') {
+        controlParams.set('s', '1');
+        controlParams.set('v', '1');
+      } else if (!isPng) {
         return { emuSequence: null, dropEmulator: false };
       }
-      const dims = dimsOverride ?? (medium === 'd'
-        ? parsePngDimensionsFromBase64(parsed.data)
-        : parsePngDimensionsFromFilePayload(parsed.data));
-      if (dims) {
-        controlParams.set('s', String(dims.width));
-        controlParams.set('v', String(dims.height));
+      if (medium !== 's') {
+        const dims = dimsOverride ?? (medium === 'd'
+          ? parsePngDimensionsFromBase64(parsed.data)
+          : parsePngDimensionsFromFilePayload(parsed.data));
+        if (dims) {
+          controlParams.set('s', String(dims.width));
+          controlParams.set('v', String(dims.height));
+        }
       }
     }
 
@@ -334,7 +349,9 @@ export class KittyTransmitRelay {
     controlParams.delete('S');
     controlParams.delete('O');
     const rebuiltControl = rebuildControl(controlParams);
-    this.stubbedGuestKeys.add(guestKey);
+    if (!forceStub) {
+      this.stubbedGuestKeys.add(guestKey);
+    }
     return { emuSequence: `${parsed.prefix}${rebuiltControl};${parsed.suffix}`, dropEmulator: false };
   }
 

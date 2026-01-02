@@ -156,6 +156,7 @@ function handleFrame(header: ShimHeader, payloads: Buffer[]): void {
       }>;
       removedImageIds?: number[];
       imageDataIds?: number[];
+      alternateScreen?: boolean;
     } | undefined;
 
     if (!kitty) return;
@@ -185,6 +186,7 @@ function handleFrame(header: ShimHeader, payloads: Buffer[]): void {
       placements: kitty.placements ?? [],
       removedImageIds: kitty.removedImageIds ?? [],
       imageData,
+      alternateScreen: kitty.alternateScreen ?? false,
     });
     return;
   }

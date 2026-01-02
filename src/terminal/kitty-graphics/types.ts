@@ -48,9 +48,9 @@ export type PaneState = {
 };
 
 export type PtyKittyState = {
-  screenIsAlternate: boolean;
   images: Map<number, ImageCache>;
   placements: KittyGraphicsPlacement[];
+  initialized: boolean;
 };
 
 export type ImageCache = {

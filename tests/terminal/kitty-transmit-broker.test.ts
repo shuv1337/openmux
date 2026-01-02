@@ -190,6 +190,22 @@ describe('KittyTransmitBroker', () => {
     expect(writes[1]).toContain('i=1');
   });
 
+  it('does not forward delete-all commands to the host', () => {
+    const broker = new KittyTransmitBroker();
+    const writes: string[] = [];
+    broker.setWriter((chunk) => writes.push(chunk));
+
+    const payload = Buffer.from('abcd').toString('base64');
+    const sequence = `${ESC}_Ga=t,f=24,i=9;${payload}${ESC}\\`;
+    broker.handleSequence('pty-10', sequence);
+
+    const deleteSeq = `${ESC}_Ga=d,d=a${ESC}\\`;
+    const output = broker.handleSequence('pty-10', deleteSeq);
+
+    expect(output).toBe(deleteSeq);
+    expect(writes).toHaveLength(1);
+  });
+
   it('offloads large direct payloads to file transfers', () => {
     const priorThreshold = process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD;
     const priorCleanup = process.env.OPENMUX_KITTY_OFFLOAD_CLEANUP_MS;
