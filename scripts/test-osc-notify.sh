@@ -33,6 +33,7 @@ wait_for_focus_out="1"
 focus_timeout="10"
 backend="auto"
 debug_input="0"
+focus_tracking_enabled="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -146,10 +147,12 @@ cleanup() {
   if [[ -n "$stty_state" ]]; then
     stty "$stty_state" < "$TTY_PATH"
   fi
-  if [[ -w "$TTY_PATH" ]]; then
-    printf '%s' "$FOCUS_TRACKING_DISABLE" > "$TTY_PATH"
-  else
-    printf '%s' "$FOCUS_TRACKING_DISABLE"
+  if [[ "$focus_tracking_enabled" == "1" ]]; then
+    if [[ -w "$TTY_PATH" ]]; then
+      printf '%s' "$FOCUS_TRACKING_DISABLE" > "$TTY_PATH"
+    else
+      printf '%s' "$FOCUS_TRACKING_DISABLE"
+    fi
   fi
 }
 
@@ -252,6 +255,7 @@ if [[ "$wait_for_focus_out" == "1" ]]; then
   else
     printf '%s' "$FOCUS_TRACKING_ENABLE"
   fi
+  focus_tracking_enabled="1"
 
   stty_state=$(stty -g < "$TTY_PATH")
   stty raw -echo < "$TTY_PATH"

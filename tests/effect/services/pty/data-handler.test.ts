@@ -25,8 +25,8 @@ function createSession() {
 
   const session: InternalPtySession = {
     id: "pty-test" as InternalPtySession["id"],
-    pty: pty as InternalPtySession["pty"],
-    emulator: emulator as InternalPtySession["emulator"],
+    pty: pty as unknown as InternalPtySession["pty"],
+    emulator: emulator as unknown as InternalPtySession["emulator"],
     queryPassthrough,
     cols: 80,
     rows: 24,
@@ -42,6 +42,9 @@ function createSession() {
     unifiedSubscribers: new Set(),
     exitCallbacks: new Set(),
     titleSubscribers: new Set(),
+    lastCommand: null,
+    focusTrackingEnabled: false,
+    focusState: false,
     pendingNotify: false,
     scrollState: {
       viewportOffset: 0,
@@ -153,5 +156,21 @@ describe("createDataHandler", () => {
     const writes = pty.write.mock.calls.map(([data]) => data as string)
     expect(writes[0]).toBe("\x1b_Gi=1;OK\x1b\\")
     expect(writes[1]).toBe("\x1b[c")
+  })
+
+  it("syncs focus state when focus tracking enables", () => {
+    const { session, pty } = createSession()
+    session.focusState = false
+
+    const handler = createDataHandler({
+      session,
+      syncParser: createSyncModeParser(),
+      syncTimeoutMs: 50,
+    })
+
+    handler.handleData("\x1b[?1004h")
+
+    expect(session.focusTrackingEnabled).toBe(true)
+    expect(pty.write).toHaveBeenCalledWith("\x1b[O")
   })
 })

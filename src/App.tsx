@@ -85,7 +85,7 @@ function AppContent() {
   const { enterConfirmMode, exitConfirmMode, exitSearchMode: keyboardExitSearchMode } = keyboardState;
   const renderer = useRenderer();
 
-  const [isHostFocused, setIsHostFocused] = createSignal(true);
+  const [isHostFocused, setIsHostFocused] = createSignal<boolean | null>(null);
 
   const FOCUS_IN_SEQUENCE = '\x1b[I';
   const FOCUS_OUT_SEQUENCE = '\x1b[O';
@@ -205,7 +205,12 @@ function AppContent() {
   });
 
   onMount(() => {
+    let focusBuffer = '';
+    const maxFocusBuffer = 8;
+
     const handleFocusSequence = (sequence: string) => {
+      if (!sequence) return false;
+
       if (sequence === FOCUS_IN_SEQUENCE) {
         setIsHostFocused(true);
         return true;
@@ -214,6 +219,21 @@ function AppContent() {
         setIsHostFocused(false);
         return true;
       }
+
+      focusBuffer = `${focusBuffer}${sequence}`;
+      const lastIn = focusBuffer.lastIndexOf(FOCUS_IN_SEQUENCE);
+      const lastOut = focusBuffer.lastIndexOf(FOCUS_OUT_SEQUENCE);
+
+      if (lastIn !== -1 || lastOut !== -1) {
+        setIsHostFocused(lastIn > lastOut);
+        focusBuffer = focusBuffer.slice(-2);
+        return false;
+      }
+
+      if (focusBuffer.length > maxFocusBuffer) {
+        focusBuffer = focusBuffer.slice(-maxFocusBuffer);
+      }
+
       return false;
     };
 
@@ -238,7 +258,12 @@ function AppContent() {
   let lastEffectiveFocusedPtyId: string | undefined;
   createEffect(() => {
     const focusedPtyId = getFocusedPtyId(layout.activeWorkspace);
-    const effectiveFocusedPtyId = isHostFocused() ? focusedPtyId : undefined;
+    const hostFocused = isHostFocused();
+    if (hostFocused === null) {
+      return;
+    }
+
+    const effectiveFocusedPtyId = hostFocused ? focusedPtyId : undefined;
 
     if (effectiveFocusedPtyId === lastEffectiveFocusedPtyId) {
       return;

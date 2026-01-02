@@ -18,4 +18,9 @@ describe("stripProblematicOscSequences", () => {
     const input = `A${ESC}]10;?${BEL}B`;
     expect(stripProblematicOscSequences(input)).toBe(input);
   });
+
+  it("strips desktop notification sequences", () => {
+    const input = `A${ESC}]9;Title;Body${BEL}B${ESC}]777;notify;Task;Done${BEL}C`;
+    expect(stripProblematicOscSequences(input)).toBe("ABC");
+  });
 });
