@@ -1,5 +1,4 @@
 import { Buffer } from 'buffer';
-import { vi } from 'vitest';
 import {
   KittyGraphicsCompression,
   KittyGraphicsFormat,
@@ -8,18 +7,6 @@ import {
   type KittyGraphicsPlacement,
 } from '../../../src/terminal/emulator-interface';
 import type { KittyTransmitBroker } from '../../../src/terminal/kitty-graphics';
-
-vi.mock('../../../src/terminal/capabilities', () => ({
-  getHostCapabilities: () => ({
-    terminalName: 'kitty',
-    da1Response: null,
-    da2Response: null,
-    xtversionResponse: null,
-    kittyGraphics: true,
-    trueColor: true,
-    colors: null,
-  }),
-}));
 
 export const defaultRenderTarget = (output: string[], size = 10) => ({
   resolution: { width: size, height: size },

@@ -21,6 +21,7 @@ import {
   rebuildControl,
   type TransmitParams,
 } from './sequence-utils';
+import { resolveKittyOffloadCleanupDelay, resolveKittyOffloadThreshold } from './offload-utils';
 
 type PendingChunk = {
   guestKey: string;
@@ -70,12 +71,8 @@ export class KittyTransmitBroker {
   private stubSharedMemory = true;
 
   constructor() {
-    const thresholdEnv = Number(process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD ?? '');
-    this.offloadThresholdBytes = Number.isFinite(thresholdEnv) && thresholdEnv >= 0
-      ? thresholdEnv
-      : 512 * 1024;
-    const cleanupEnv = Number(process.env.OPENMUX_KITTY_OFFLOAD_CLEANUP_MS ?? '');
-    this.offloadCleanupDelayMs = Number.isFinite(cleanupEnv) && cleanupEnv >= 0 ? cleanupEnv : 5000;
+    this.offloadThresholdBytes = resolveKittyOffloadThreshold();
+    this.offloadCleanupDelayMs = resolveKittyOffloadCleanupDelay();
     const stubEnv = (process.env.OPENMUX_KITTY_EMULATOR_STUB ?? '').toLowerCase();
     this.stubEmulator = stubEnv === '1' || stubEnv === 'true';
     const stubSharedEnv = (process.env.OPENMUX_KITTY_STUB_SHARED_MEMORY ?? '').toLowerCase();
