@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.81](https://github.com/monotykamary/openmux/compare/v0.2.80...v0.2.81) (2026-01-02)
+
+
+### Features
+
+* set default notification sound to Glass ([7178a8f](https://github.com/monotykamary/openmux/commit/7178a8f510f139db1503f740ee511392b8cc800a))
+
 ### [0.2.80](https://github.com/monotykamary/openmux/compare/v0.2.79...v0.2.80) (2026-01-02)
 
 
