@@ -41,6 +41,8 @@ export interface PtyLifecycleDeps {
   getCellMetrics?: () => { cellWidth: number; cellHeight: number } | null;
   /** Whether to cache scroll state locally */
   shouldCacheScrollState: boolean;
+  /** Callback when a PTY is destroyed */
+  onPtyDestroyed?: (ptyId: string) => void;
 }
 
 /**
@@ -59,6 +61,7 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     getNewPaneDimensions,
     getCellMetrics,
     shouldCacheScrollState,
+    onPtyDestroyed,
   } = deps;
 
   const resolvePaneId = (ptyId: string, fallbackPaneId?: string): string | undefined => {
@@ -99,6 +102,8 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     if (shouldDestroy) {
       destroyPty(ptyId);
     }
+
+    onPtyDestroyed?.(ptyId);
   };
 
   /**
@@ -256,6 +261,9 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     }
     unsubscribeFns.clear();
     clearAllPtyCaches(ptyCaches);
+    for (const ptyId of ptyToPaneMap.keys()) {
+      onPtyDestroyed?.(ptyId);
+    }
     ptyToPaneMap.clear();
     ptyToSessionMap.clear();
     sessionPtyMap.clear();

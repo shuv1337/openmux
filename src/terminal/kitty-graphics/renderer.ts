@@ -39,6 +39,7 @@ export class KittyGraphicsRenderer {
   private imageRegistry = new Map<string, Map<number, ImageCache>>();
   private placementsByPane = new Map<string, Map<string, PlacementRender>>();
   private screenTransitionTarget = new Map<string, boolean>();
+  private pendingPtyDeletes = new Set<string>();
   private nextHostImageId = 1;
   private nextHostPlacementId = 1;
   private enabled = getHostCapabilities()?.kittyGraphics ?? false;
@@ -104,6 +105,10 @@ export class KittyGraphicsRenderer {
     if (pane) {
       pane.removed = true;
     }
+  }
+
+  markPtyDestroyed(ptyId: string): void {
+    this.pendingPtyDeletes.add(ptyId);
   }
 
   setClipRects(rects: ClipRect[]): void {
@@ -175,7 +180,6 @@ export class KittyGraphicsRenderer {
     }
 
     const output: string[] = [];
-    const activePtys = new Set<string>();
 
     for (const pane of this.panes.values()) {
       if (pane.removed || !pane.ptyId || !pane.emulator) {
@@ -186,7 +190,6 @@ export class KittyGraphicsRenderer {
         pane.needsClear = true;
         continue;
       }
-      activePtys.add(pane.ptyId);
       const shouldBeVisible = this.visibleLayers.has(pane.layer);
       if (shouldBeVisible && pane.hidden) {
         pane.hidden = false;
@@ -258,16 +261,24 @@ export class KittyGraphicsRenderer {
       this.renderPanePlacements(paneKey, pane, ptyState, metrics, output);
     }
 
-    for (const [ptyId, images] of this.imageRegistry) {
-      if (!activePtys.has(ptyId)) {
-        for (const image of images.values()) {
-          output.push(buildDeleteImage(image.hostId));
+    if (this.pendingPtyDeletes.size > 0) {
+      for (const ptyId of this.pendingPtyDeletes) {
+        const images = this.imageRegistry.get(ptyId);
+        if (images) {
+          for (const [id, image] of images) {
+            output.push(buildDeleteImage(image.hostId));
+            this.deletePlacementsForImage(id, output);
+            broker?.dropMapping(ptyId, image.info);
+          }
+          this.imageRegistry.delete(ptyId);
         }
-        this.imageRegistry.delete(ptyId);
         for (const screenKey of getScreenKeys(ptyId)) {
           this.screenStates.delete(screenKey);
         }
+        this.screenTransitionTarget.delete(ptyId);
+        broker?.clearPty(ptyId);
       }
+      this.pendingPtyDeletes.clear();
     }
 
     if (output.length === 0) {

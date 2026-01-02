@@ -13,7 +13,7 @@ import {
 } from 'solid-js';
 import { useRenderer, useTerminalDimensions } from '@opentui/solid';
 
-import { detectHostCapabilities } from '../terminal';
+import { detectHostCapabilities, getKittyGraphicsRenderer } from '../terminal';
 import type { TerminalState, TerminalScrollState } from '../core/types';
 import {
   createScrollHandlers,
@@ -178,6 +178,9 @@ export function TerminalProvider(props: TerminalProviderProps) {
       };
     },
     shouldCacheScrollState,
+    onPtyDestroyed: (ptyId) => {
+      getKittyGraphicsRenderer()?.markPtyDestroyed(ptyId);
+    },
   });
 
   // Create cache accessors (extracted for reduced file size)
