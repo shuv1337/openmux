@@ -217,22 +217,21 @@ function handleFrame(header: ShimHeader, payloads: Buffer[]): void {
     const ptyId = header.ptyId as string | undefined;
     const hostFocused = getHostFocusState();
     const focusedPtyId = getFocusedPtyId();
-    const isUnfocusedPane = Boolean(ptyId && focusedPtyId && ptyId !== focusedPtyId);
-    const allowFocusedPaneOsc = (() => {
-      const raw = (process.env.OPENMUX_ALLOW_FOCUSED_PANE_OSC ?? '').toLowerCase();
-      return raw === '1' || raw === 'true' || raw === 'on';
-    })();
-
-    if (hostFocused === true && (isUnfocusedPane || !allowFocusedPaneOsc)) {
-      sendMacOsNotification({
-        title: notification.title,
+    const allowFocusedPaneOsc = readBoolEnv('OPENMUX_ALLOW_FOCUSED_PANE_OSC');
+    handlePtyNotification(
+      {
+        notification,
         subtitle,
-        body: notification.body,
-      });
-      return;
-    }
-
-    sendDesktopNotification({ notification, subtitle });
+        ptyId,
+        hostFocused,
+        focusedPtyId,
+        allowFocusedPaneOsc,
+      },
+      {
+        sendMacOsNotification,
+        sendDesktopNotification,
+      }
+    );
     return;
   }
 
@@ -246,6 +245,50 @@ function handleFrame(header: ShimHeader, payloads: Buffer[]): void {
   if (header.type === 'detached') {
     markDetached();
   }
+}
+
+function readBoolEnv(name: string): boolean {
+  const raw = (process.env[name] ?? '').toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'on';
+}
+
+export function handlePtyNotification(
+  params: {
+    notification: DesktopNotification;
+    subtitle?: string;
+    ptyId?: string;
+    hostFocused: boolean | null;
+    focusedPtyId: string | null;
+    allowFocusedPaneOsc: boolean;
+  },
+  deps: {
+    sendMacOsNotification: (args: { title: string; subtitle?: string; body: string }) => boolean;
+    sendDesktopNotification: (args: { notification: DesktopNotification; subtitle?: string }) => boolean;
+  }
+): void {
+  const {
+    notification,
+    subtitle,
+    ptyId,
+    hostFocused,
+    focusedPtyId,
+    allowFocusedPaneOsc,
+  } = params;
+  const isUnfocusedPane = Boolean(ptyId && focusedPtyId && ptyId !== focusedPtyId);
+  const shouldUseMacOs = hostFocused === true && (isUnfocusedPane || !allowFocusedPaneOsc);
+
+  if (shouldUseMacOs) {
+    const sent = deps.sendMacOsNotification({
+      title: notification.title,
+      subtitle,
+      body: notification.body,
+    });
+    if (sent) {
+      return;
+    }
+  }
+
+  deps.sendDesktopNotification({ notification, subtitle });
 }
 
 function createSocketDataStream(

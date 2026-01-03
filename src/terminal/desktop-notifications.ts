@@ -43,7 +43,7 @@ function buildOscPayload(title: string, body: string): string | null {
   return `${safeTitle};${safeBody}`;
 }
 
-function buildOscSequence(notification: DesktopNotification): string | null {
+export function buildOscSequence(notification: DesktopNotification): string | null {
   const payload = buildOscPayload(notification.title, notification.body);
   if (!payload) return null;
   if (notification.source === "osc777") {
@@ -59,13 +59,13 @@ export function sendHostNotification(notification: DesktopNotification): boolean
   return writeHostSequence(sequence);
 }
 
-export function sendMacOsNotification(params: { title: string; subtitle?: string; body: string }): void {
-  if (!desktopNotificationsEnabled()) return;
-  if (typeof Bun === "undefined" || typeof Bun.spawn !== "function") return;
+export function sendMacOsNotification(params: { title: string; subtitle?: string; body: string }): boolean {
+  if (!desktopNotificationsEnabled()) return false;
+  if (typeof Bun === "undefined" || typeof Bun.spawn !== "function") return false;
 
   const title = params.title.trim() || DEFAULT_NOTIFICATION_TITLE;
   const body = params.body.trim();
-  if (!body) return;
+  if (!body) return false;
 
   const subtitle = params.subtitle?.trim() ?? "";
   const sound = (process.env[DESKTOP_NOTIFICATION_SOUND_ENV] ?? "Glass").trim();
@@ -97,8 +97,10 @@ end run`;
       { stdout: "ignore", stderr: "ignore" }
     );
     proc.exited.catch(() => {});
+    return true;
   } catch {
     // Ignore notification failures (e.g., missing osascript)
+    return false;
   }
 }
 
@@ -109,10 +111,9 @@ export function sendDesktopNotification(params: {
   if (sendHostNotification(params.notification)) {
     return true;
   }
-  sendMacOsNotification({
+  return sendMacOsNotification({
     title: params.notification.title,
     subtitle: params.subtitle,
     body: params.notification.body,
   });
-  return true;
 }
