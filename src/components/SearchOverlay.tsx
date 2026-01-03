@@ -27,6 +27,7 @@ export function SearchOverlay(props: SearchOverlayProps) {
   // Keep search context to access searchState reactively (it's a getter)
   const search = useSearch();
   const accentColor = () => theme.searchAccentColor;
+  const vimEnabled = () => config.config().keyboard.vimMode === 'overlays';
 
   // Calculate overlay dimensions
   const overlayWidth = () => Math.min(props.width - 4, 60);
@@ -49,6 +50,10 @@ export function SearchOverlay(props: SearchOverlayProps) {
   };
 
   const hintText = () => {
+    if (vimEnabled()) {
+      const modeHint = search.vimMode === 'insert' ? 'esc:normal' : 'i:insert';
+      return `n/N:nav enter:confirm q:cancel ${modeHint}`;
+    }
     const bindings = config.keybindings().search;
     const nav = formatComboSet([
       ...getCombos(bindings, 'search.next'),

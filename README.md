@@ -164,7 +164,7 @@ bun dev        # Run with watch mode
 
 ### Command Palette
 
-- `↑` / `↓` or `Ctrl+k` / `Ctrl+j` - Navigate commands
+- `↑` / `↓` - Navigate commands
 - `Enter` - Execute selected command
 - `Esc` - Close command palette
 - `Backspace` - Delete last character
@@ -187,7 +187,7 @@ bun dev        # Run with watch mode
 ### Aggregate View
 
 **List:**
-- `j/k` / `↑` / `↓` - Navigate PTYs
+- `↑` / `↓` - Navigate PTYs
 - `Enter` - Preview selected PTY
 - `Tab` - Jump to selected PTY and close view
 - `Alt+a` - Toggle scope (all workspaces vs current)
@@ -236,6 +236,26 @@ bun dev        # Run with watch mode
 - `Tab` - Toggle between confirm/cancel
 - `Enter` - Confirm
 - `Esc` - Cancel
+
+### Vim Mode (Overlays, opt-in)
+
+Enable via the command palette ("Toggle overlay vim mode"), or in `config.toml`:
+
+```toml
+[keyboard]
+vimMode = "overlays"
+vimSequenceTimeoutMs = 1000
+```
+
+When enabled, overlays open in normal mode:
+
+- `j/k` - Navigate lists
+- `gg` / `G` - Jump to first/last item
+- `Enter` - Confirm/preview
+- `q` - Close overlay
+- `i` - Enter insert mode
+- `Esc` - Return to normal mode
+- Search overlays: `n` / `N` for next/prev match
 
 ## Concepts
 
@@ -292,7 +312,7 @@ A fullscreen overlay (`Alt+g` or `Ctrl+b` then `g`) that lets you browse all PTY
 - **Card-style PTY list** showing directory, process name, and git branch
 - **Interactive terminal preview** with full input support (keyboard + mouse)
 - **Filter by typing** to search by process name, directory, or git branch
-- Navigate with `j/k` or arrow keys, `Enter` to interact, `Prefix+Esc` to return to list
+- Navigate with arrow keys (or `j/k` in overlay vim mode), `Enter` to interact, `Prefix+Esc` to return to list
 
 ## Development Status
 

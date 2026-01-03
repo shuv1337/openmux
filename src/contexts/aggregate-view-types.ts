@@ -83,6 +83,7 @@ export interface AggregateViewContextValue {
   toggleShowInactive: () => void;
   navigateUp: () => void;
   navigateDown: () => void;
+  setSelectedIndex: (index: number) => void;
   selectPty: (ptyId: string) => void;
   getSelectedPty: () => PtyInfo | null;
   refreshPtys: () => Promise<void>;

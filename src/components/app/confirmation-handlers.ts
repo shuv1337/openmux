@@ -40,6 +40,8 @@ export interface ConfirmationHandlerDeps {
   onCancelOverwriteTemplate?: () => void;
   onConfirmDeleteTemplate?: () => Promise<void> | void;
   onCancelDeleteTemplate?: () => void;
+  onConfirmDeleteSession?: () => Promise<void> | void;
+  onCancelDeleteSession?: () => void;
 
 }
 
@@ -64,6 +66,8 @@ export function createConfirmationHandlers(deps: ConfirmationHandlerDeps) {
     onCancelOverwriteTemplate,
     onConfirmDeleteTemplate,
     onCancelDeleteTemplate,
+    onConfirmDeleteSession,
+    onCancelDeleteSession,
   } = deps;
 
   /**
@@ -105,6 +109,14 @@ export function createConfirmationHandlers(deps: ConfirmationHandlerDeps) {
   const handleRequestDeleteTemplate = () => {
     enterConfirmMode('delete_template');
     setConfirmationState({ visible: true, type: 'delete_template' });
+  };
+
+  /**
+   * Request session delete (show confirmation)
+   */
+  const handleRequestDeleteSession = () => {
+    enterConfirmMode('delete_session');
+    setConfirmationState({ visible: true, type: 'delete_session' });
   };
 
   /**
@@ -150,6 +162,8 @@ export function createConfirmationHandlers(deps: ConfirmationHandlerDeps) {
       await onConfirmOverwriteTemplate?.();
     } else if (type === 'delete_template') {
       await onConfirmDeleteTemplate?.();
+    } else if (type === 'delete_session') {
+      await onConfirmDeleteSession?.();
     }
   };
 
@@ -170,6 +184,9 @@ export function createConfirmationHandlers(deps: ConfirmationHandlerDeps) {
     if (type === 'delete_template') {
       onCancelDeleteTemplate?.();
     }
+    if (type === 'delete_session') {
+      onCancelDeleteSession?.();
+    }
   };
 
   return {
@@ -179,6 +196,7 @@ export function createConfirmationHandlers(deps: ConfirmationHandlerDeps) {
     handleRequestApplyTemplate,
     handleRequestOverwriteTemplate,
     handleRequestDeleteTemplate,
+    handleRequestDeleteSession,
     handleConfirmAction,
     handleCancelConfirmation,
   };

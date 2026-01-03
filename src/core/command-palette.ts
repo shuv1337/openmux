@@ -155,6 +155,13 @@ const BASE_COMMANDS: CommandPaletteCommand[] = [
     keywords: ['console', 'debug'],
   },
   {
+    id: 'keyboard.vim.toggle',
+    title: 'Toggle overlay vim mode',
+    description: 'Enable or disable vim keybindings in overlays',
+    action: 'keyboard.vim.toggle',
+    keywords: ['vim', 'keyboard', 'overlays'],
+  },
+  {
     id: 'app.detach',
     title: 'Detach',
     description: 'Detach the current client',

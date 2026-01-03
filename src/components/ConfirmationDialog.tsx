@@ -46,6 +46,10 @@ const MESSAGES: Record<ConfirmationType, { title: string; message: string }> = {
     title: ' Delete Template ',
     message: 'Delete this template? This cannot be undone.',
   },
+  delete_session: {
+    title: ' Delete Session ',
+    message: 'Delete this session? This cannot be undone.',
+  },
 };
 
 export function ConfirmationDialog(props: ConfirmationDialogProps) {

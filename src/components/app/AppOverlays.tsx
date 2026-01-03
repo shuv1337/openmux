@@ -8,6 +8,7 @@ import { useLayout } from '../../contexts';
 import { useSelection } from '../../contexts/SelectionContext';
 import { useAggregateView } from '../../contexts/AggregateViewContext';
 import type { ConfirmationType } from '../../core/types';
+import type { VimInputMode } from '../../core/vim-sequences';
 import { DEFAULT_COMMAND_PALETTE_COMMANDS, type CommandPaletteCommand } from '../../core/command-palette';
 import {
   StatusBar,
@@ -27,12 +28,18 @@ interface AppOverlaysProps {
   commandPaletteState: CommandPaletteState;
   setCommandPaletteState: SetStoreFunction<CommandPaletteState>;
   onCommandPaletteExecute: (command: CommandPaletteCommand) => void;
+  overlayVimMode: VimInputMode | null;
+  onCommandPaletteVimModeChange: (mode: VimInputMode) => void;
+  onSessionPickerVimModeChange: (mode: VimInputMode) => void;
+  onTemplateOverlayVimModeChange: (mode: VimInputMode) => void;
+  onAggregateVimModeChange: (mode: VimInputMode) => void;
   confirmationState: Accessor<{ visible: boolean; type: ConfirmationType }>;
   onConfirm: () => void;
   onCancel: () => void;
   onRequestApplyConfirm: (applyTemplate: () => Promise<void>) => void;
   onRequestOverwriteConfirm: (overwriteTemplate: () => Promise<void>) => void;
   onRequestDeleteConfirm: (deleteTemplate: () => Promise<void>) => void;
+  onRequestDeleteSessionConfirm: (deleteSession: () => Promise<void>) => void;
   onRequestQuit: () => void;
   onDetach: () => void;
   onRequestKillPty: (ptyId: string) => void;
@@ -45,9 +52,18 @@ export function AppOverlays(props: AppOverlaysProps) {
 
   return (
     <>
-      <StatusBar width={props.width} showCommandPalette={props.commandPaletteState.show} />
+      <StatusBar
+        width={props.width}
+        showCommandPalette={props.commandPaletteState.show}
+        overlayVimMode={props.overlayVimMode}
+      />
 
-      <SessionPicker width={props.width} height={props.height} />
+      <SessionPicker
+        width={props.width}
+        height={props.height}
+        onRequestDeleteConfirm={props.onRequestDeleteSessionConfirm}
+        onVimModeChange={props.onSessionPickerVimModeChange}
+      />
 
       <TemplateOverlay
         width={props.width}
@@ -55,6 +71,7 @@ export function AppOverlays(props: AppOverlaysProps) {
         onRequestApplyConfirm={props.onRequestApplyConfirm}
         onRequestOverwriteConfirm={props.onRequestOverwriteConfirm}
         onRequestDeleteConfirm={props.onRequestDeleteConfirm}
+        onVimModeChange={props.onTemplateOverlayVimModeChange}
       />
 
       <CommandPalette
@@ -64,6 +81,7 @@ export function AppOverlays(props: AppOverlaysProps) {
         state={props.commandPaletteState}
         setState={props.setCommandPaletteState}
         onExecute={props.onCommandPaletteExecute}
+        onVimModeChange={props.onCommandPaletteVimModeChange}
       />
 
       <SearchOverlay width={props.width} height={props.height} />
@@ -74,6 +92,7 @@ export function AppOverlays(props: AppOverlaysProps) {
         onRequestQuit={props.onRequestQuit}
         onDetach={props.onDetach}
         onRequestKillPty={props.onRequestKillPty}
+        onVimModeChange={props.onAggregateVimModeChange}
       />
 
       <ConfirmationDialog

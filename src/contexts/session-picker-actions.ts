@@ -38,6 +38,10 @@ export function createSessionPickerActions(dispatch: (action: SessionAction) => 
     dispatch({ type: 'NAVIGATE_DOWN' });
   };
 
+  const setSelectedIndex = (index: number) => {
+    dispatch({ type: 'SET_SELECTED_INDEX', index });
+  };
+
   return {
     togglePicker,
     closePicker,
@@ -47,5 +51,6 @@ export function createSessionPickerActions(dispatch: (action: SessionAction) => 
     updateRenameValue,
     navigateUp,
     navigateDown,
+    setSelectedIndex,
   };
 }

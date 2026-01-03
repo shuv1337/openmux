@@ -3,6 +3,7 @@
  */
 import type { TerminalState } from '../../core/types';
 import type { ITerminalEmulator } from '../../terminal/emulator-interface';
+import type { VimInputMode } from '../../core/vim-sequences';
 
 /**
  * A single search match in the terminal
@@ -46,6 +47,10 @@ export interface SearchState {
 export interface SearchContextValue {
   /** Current search state (null if not searching) */
   searchState: SearchState | null;
+  /** Current vim input mode for search overlay */
+  vimMode: VimInputMode;
+  /** Update vim input mode for search overlay */
+  setVimMode: (mode: VimInputMode) => void;
   /** Enter search mode for a pane */
   enterSearchMode: (ptyId: string) => Promise<void>;
   /** Exit search mode */

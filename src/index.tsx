@@ -17,50 +17,50 @@ async function main() {
     return;
   }
 
-  const { render, useRenderer } = await import('@opentui/solid');
-  const { ConsolePosition } = await import('@opentui/core');
-  const { App } = await import('./App');
-  const { detectHostCapabilities } = await import('./terminal');
-  const { onMount, onCleanup } = await import('solid-js');
-  const { createPasteInterceptingStdin } = await import('./terminal/paste-intercepting-stdin');
-  const { triggerClipboardPaste } = await import('./terminal/focused-pty-registry');
-
-  // Wrapper component that handles kitty keyboard setup after render
-  function AppWithSetup() {
-    const renderer = useRenderer();
-
-    const writeHostSequence = (sequence: string) => {
-      const stdout = (renderer as any).stdout ?? process.stdout;
-      const writeOut = (renderer as any).realStdoutWrite ?? stdout.write.bind(stdout);
-      writeOut.call(stdout, sequence);
-      if (stdout.isTTY) {
-        (stdout as any)._handle?.flush?.();
-      }
-    };
-
-    onMount(() => {
-      // Enable kitty keyboard protocol AFTER renderer setup
-      // Flag 1 = disambiguate escape codes (detect Alt+key without breaking regular input)
-      // Flag 2 = report key releases/repeats
-      // Flag 8 was too aggressive - it reports ALL keys as escape codes, breaking shift
-      // Must be done after createCliRenderer since setupTerminal() resets modes
-      // See: https://sw.kovidgoyal.net/kitty/keyboard-protocol/
-      renderer.enableKittyKeyboard(3);
-      // Use set mode to ensure report_events is enabled in Ghostty.
-      writeHostSequence('\x1b[=3;1u');
-      // Enable focus-in/out events from the host terminal.
-      writeHostSequence('\x1b[?1004h');
-    });
-
-    onCleanup(() => {
-      // Disable focus tracking so we don't pollute the parent shell.
-      writeHostSequence('\x1b[?1004l');
-    });
-
-    return <App />;
-  }
-
   try {
+    const { render, useRenderer } = await import('@opentui/solid');
+    const { ConsolePosition } = await import('@opentui/core');
+    const { App } = await import('./App');
+    const { detectHostCapabilities } = await import('./terminal');
+    const { onMount, onCleanup } = await import('solid-js');
+    const { createPasteInterceptingStdin } = await import('./terminal/paste-intercepting-stdin');
+    const { triggerClipboardPaste } = await import('./terminal/focused-pty-registry');
+
+    // Wrapper component that handles kitty keyboard setup after render
+    function AppWithSetup() {
+      const renderer = useRenderer();
+
+      const writeHostSequence = (sequence: string) => {
+        const stdout = (renderer as any).stdout ?? process.stdout;
+        const writeOut = (renderer as any).realStdoutWrite ?? stdout.write.bind(stdout);
+        writeOut.call(stdout, sequence);
+        if (stdout.isTTY) {
+          (stdout as any)._handle?.flush?.();
+        }
+      };
+
+      onMount(() => {
+        // Enable kitty keyboard protocol AFTER renderer setup
+        // Flag 1 = disambiguate escape codes (detect Alt+key without breaking regular input)
+        // Flag 2 = report key releases/repeats
+        // Flag 8 was too aggressive - it reports ALL keys as escape codes, breaking shift
+        // Must be done after createCliRenderer since setupTerminal() resets modes
+        // See: https://sw.kovidgoyal.net/kitty/keyboard-protocol/
+        renderer.enableKittyKeyboard(3);
+        // Use set mode to ensure report_events is enabled in Ghostty.
+        writeHostSequence('\x1b[=3;1u');
+        // Enable focus-in/out events from the host terminal.
+        writeHostSequence('\x1b[?1004h');
+      });
+
+      onCleanup(() => {
+        // Disable focus tracking so we don't pollute the parent shell.
+        writeHostSequence('\x1b[?1004l');
+      });
+
+      return <App />;
+    }
+
     // Prime host capabilities (including color query) before the renderer takes over stdin
     const hostCaps = await detectHostCapabilities();
     const useThreadEnv = (process.env.OPENMUX_RENDER_USE_THREAD ?? '').toLowerCase();
@@ -106,6 +106,19 @@ async function main() {
     });
   } catch (error) {
     console.error('Failed to start openmux:', error);
+    try {
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const home = process.env.HOME ?? process.env.USERPROFILE ?? process.cwd();
+      const base = process.env.XDG_CONFIG_HOME ?? path.join(home, '.config');
+      const dir = path.join(base, 'openmux');
+      const logPath = path.join(dir, 'startup-error.log');
+      const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(logPath, `${message}\n`, 'utf8');
+    } catch {
+      // Best-effort logging only.
+    }
     process.exit(1);
   }
 }

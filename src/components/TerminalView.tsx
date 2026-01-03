@@ -14,6 +14,7 @@ import {
   getEmulator,
   setPtyUpdateEnabled as setPtyUpdateEnabledBridge,
 } from '../effect/bridge';
+import { useTerminal } from '../contexts/TerminalContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { useSearch } from '../contexts/SearchContext';
 import {
@@ -89,6 +90,7 @@ interface TerminalViewProps {
  */
 export function TerminalView(props: TerminalViewProps) {
   const renderer = useRenderer();
+  const terminal = useTerminal();
   const kittyPaneKey = `kitty-pane-${nextKittyPaneId++}`;
   const hostBgColor = getHostBackgroundColor();
   // Get selection state - keep full context to access selectionVersion reactively
@@ -254,7 +256,11 @@ export function TerminalView(props: TerminalViewProps) {
           if (unsubscribe) {
             unsubscribe();
           }
-          unregisterVisiblePty(ptyId, emulator);
+          if (terminal.isPtyActive(ptyId)) {
+            unregisterVisiblePty(ptyId, emulator);
+          } else {
+            visiblePtyCounts.delete(ptyId);
+          }
           terminalState = null;
           emulator = null;
           executePrefetchFn = null;

@@ -8,6 +8,12 @@ import type { KeyboardEvent } from '../../effect/bridge';
 import type { ITerminalEmulator } from '../../terminal/emulator-interface';
 import { encodeKeyForEmulator } from '../../terminal/key-encoder';
 import { eventToCombo, matchKeybinding, type ResolvedKeybindings } from '../../core/keybindings';
+import type { VimInputMode } from '../../core/vim-sequences';
+
+type VimSequenceHandler = {
+  handleCombo: (combo: string) => { action: string | null; pending: boolean };
+  reset: () => void;
+};
 
 export interface AggregateKeyboardDeps {
   // State getters
@@ -18,6 +24,15 @@ export interface AggregateKeyboardDeps {
   getInSearchMode: () => boolean;
   getPrefixActive: () => boolean;
   getKeybindings: () => ResolvedKeybindings;
+  getMatchedCount: () => number;
+  getVimEnabled: () => boolean;
+  getVimMode: () => VimInputMode;
+  setVimMode: (mode: VimInputMode) => void;
+  getVimHandlers: () => {
+    list: VimSequenceHandler;
+    preview: VimSequenceHandler;
+    search: VimSequenceHandler;
+  };
   getEmulatorSync: (ptyId: string) => ITerminalEmulator | null;
 
   // State setters
@@ -25,6 +40,7 @@ export interface AggregateKeyboardDeps {
   toggleShowInactive: () => void;
   setInSearchMode: (value: boolean) => void;
   setPrefixActive: (value: boolean) => void;
+  setSelectedIndex: (index: number) => void;
 
   // Aggregate view actions
   closeAggregateView: () => void;
@@ -66,13 +82,19 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     getFilterQuery,
     getSearchState,
     getInSearchMode,
-  getPrefixActive,
-  getKeybindings,
-  getEmulatorSync,
+    getPrefixActive,
+    getKeybindings,
+    getMatchedCount,
+    getVimEnabled,
+    getVimMode,
+    setVimMode,
+    getVimHandlers,
+    getEmulatorSync,
     setFilterQuery,
     toggleShowInactive,
     setInSearchMode,
     setPrefixActive,
+    setSelectedIndex,
     closeAggregateView,
     navigateUp,
     navigateDown,
@@ -92,22 +114,11 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     startPrefixTimeout,
   } = deps;
 
-  /**
-   * Handle search mode keyboard input
-   * Returns true if key was handled
-   */
-  const handleSearchModeKeys = (event: KeyboardEvent): boolean => {
-    if (event.eventType === "release") {
-      return true;
-    }
+  const isBareEscape = (event: KeyboardEvent) =>
+    event.key === 'escape' && !event.ctrl && !event.alt && !event.meta && !event.shift;
 
-    const keybindings = getKeybindings();
-    const action = matchKeybinding(keybindings.aggregate.search, {
-      key: event.key,
-      ctrl: event.ctrl,
-      alt: event.alt,
-      shift: event.shift,
-    });
+  const handleSearchAction = (action: string | null): boolean => {
+    if (!action) return false;
 
     if (action === 'aggregate.search.cancel') {
       exitSearchMode(true);
@@ -121,7 +132,6 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
       return true;
     }
 
-    // Wait for searchState to be initialized before handling navigation/input
     const currentSearchState = getSearchState();
     if (!currentSearchState) {
       return true;
@@ -142,15 +152,78 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
       return true;
     }
 
-    // Single printable character - add to search query
+    return false;
+  };
+
+  const handleSearchInput = (event: KeyboardEvent): boolean => {
+    const currentSearchState = getSearchState();
+    if (!currentSearchState) {
+      return true;
+    }
+
     const searchCharCode = event.sequence?.charCodeAt(0) ?? 0;
     const isPrintable = event.sequence?.length === 1 && searchCharCode >= 32 && searchCharCode < 127;
-    if (isPrintable && !event.ctrl && !event.alt) {
+    if (isPrintable && !event.ctrl && !event.alt && !event.meta) {
       setSearchQuery(currentSearchState.query + event.sequence);
       return true;
     }
 
-    // Consume all other keys in search mode
+    return true;
+  };
+
+  /**
+   * Handle search mode keyboard input
+   * Returns true if key was handled
+   */
+  const handleSearchModeKeys = (event: KeyboardEvent): boolean => {
+    if (event.eventType === 'release') {
+      return true;
+    }
+
+    const keybindings = getKeybindings();
+    const keyEvent = {
+      key: event.key,
+      ctrl: event.ctrl,
+      alt: event.alt,
+      shift: event.shift,
+      meta: event.meta,
+    };
+
+    if (!getVimEnabled()) {
+      const action = matchKeybinding(keybindings.aggregate.search, keyEvent);
+      if (handleSearchAction(action)) return true;
+      return handleSearchInput(event);
+    }
+
+    if (getVimMode() === 'insert') {
+      if (isBareEscape(event)) {
+        setVimMode('normal');
+        getVimHandlers().search.reset();
+        return true;
+      }
+      const action = matchKeybinding(keybindings.aggregate.search, keyEvent);
+      if (handleSearchAction(action)) return true;
+      return handleSearchInput(event);
+    }
+
+    if (event.key === 'i' && !event.ctrl && !event.alt && !event.meta) {
+      setVimMode('insert');
+      getVimHandlers().search.reset();
+      return true;
+    }
+
+    const combo = eventToCombo(keyEvent);
+    const result = getVimHandlers().search.handleCombo(combo);
+    if (result.pending) return true;
+    if (handleSearchAction(result.action)) return true;
+
+    const isBackspace = event.key === 'backspace';
+    const shouldMatchBindings = !isBackspace && (event.ctrl || event.alt || event.meta || event.key.length > 1);
+    if (shouldMatchBindings && !isBareEscape(event)) {
+      const fallbackAction = matchKeybinding(keybindings.aggregate.search, keyEvent);
+      if (handleSearchAction(fallbackAction)) return true;
+    }
+
     return true;
   };
 
@@ -178,24 +251,9 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     return true;
   };
 
-  /**
-   * Handle preview mode keyboard input
-   * Returns true if key was handled
-   */
-  const handlePreviewModeKeys = (event: KeyboardEvent): boolean => {
-    if (event.eventType === "release") {
-      return forwardToPreviewPty(event);
-    }
+  const handlePreviewAction = (action: string | null): boolean => {
+    if (!action) return false;
 
-    const keybindings = getKeybindings();
-    const action = matchKeybinding(keybindings.aggregate.preview, {
-      key: event.key,
-      ctrl: event.ctrl,
-      alt: event.alt,
-      shift: event.shift,
-    });
-
-    // Search mode
     if (action === 'aggregate.preview.search') {
       handleEnterSearch();
       return true;
@@ -214,77 +272,178 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
       return true;
     }
 
-    // Forward key to PTY using Ghostty encoder for modifier-aware encoding
-    return forwardToPreviewPty(event);
+    return false;
+  };
+
+  /**
+   * Handle preview mode keyboard input
+   * Returns true if key was handled
+   */
+  const handlePreviewModeKeys = (event: KeyboardEvent): boolean => {
+    if (event.eventType === 'release') {
+      if (!getVimEnabled() || getVimMode() === 'insert') {
+        return forwardToPreviewPty(event);
+      }
+      return true;
+    }
+
+    const keybindings = getKeybindings();
+    const keyEvent = {
+      key: event.key,
+      ctrl: event.ctrl,
+      alt: event.alt,
+      shift: event.shift,
+      meta: event.meta,
+    };
+
+    if (!getVimEnabled()) {
+      const action = matchKeybinding(keybindings.aggregate.preview, keyEvent);
+      if (handlePreviewAction(action)) return true;
+      return forwardToPreviewPty(event);
+    }
+
+    if (getVimMode() === 'insert') {
+      if (isBareEscape(event)) {
+        const selectedPtyId = getSelectedPtyId();
+        const emulator = selectedPtyId ? getEmulatorSync(selectedPtyId) : null;
+        const alternateScreen = emulator?.getTerminalState()?.alternateScreen ?? false;
+        if (!alternateScreen) {
+          setVimMode('normal');
+          getVimHandlers().preview.reset();
+          return true;
+        }
+      }
+      const action = matchKeybinding(keybindings.aggregate.preview, keyEvent);
+      if (handlePreviewAction(action)) return true;
+      return forwardToPreviewPty(event);
+    }
+
+    if (event.key === 'i' && !event.ctrl && !event.alt && !event.meta) {
+      setVimMode('insert');
+      getVimHandlers().preview.reset();
+      return true;
+    }
+
+    const combo = eventToCombo(keyEvent);
+    const result = getVimHandlers().preview.handleCombo(combo);
+    if (result.pending) return true;
+    if (handlePreviewAction(result.action)) return true;
+
+    const shouldMatchBindings = event.ctrl || event.alt || event.meta || event.key.length > 1;
+    if (shouldMatchBindings && !isBareEscape(event)) {
+      const fallbackAction = matchKeybinding(keybindings.aggregate.preview, keyEvent);
+      if (handlePreviewAction(fallbackAction)) return true;
+    }
+
+    return true;
   };
 
   /**
    * Handle list mode keyboard input
    * Returns true if key was handled
    */
-  const handleListModeKeys = (event: KeyboardEvent): boolean => {
+  const handleListAction = (action: string | null): boolean => {
+    switch (action) {
+      case 'aggregate.list.down':
+        navigateDown();
+        return true;
+      case 'aggregate.list.up':
+        navigateUp();
+        return true;
+      case 'aggregate.list.top':
+        setSelectedIndex(0);
+        return true;
+      case 'aggregate.list.bottom': {
+        const count = getMatchedCount();
+        if (count > 0) {
+          setSelectedIndex(count - 1);
+        }
+        return true;
+      }
+      case 'aggregate.list.preview':
+        if (getSelectedPtyId()) {
+          enterPreviewMode();
+        }
+        return true;
+      case 'aggregate.list.jump':
+        handleJumpToPty();
+        return true;
+      case 'aggregate.list.toggle.scope':
+        toggleShowInactive();
+        return true;
+      case 'aggregate.list.delete':
+        setFilterQuery(getFilterQuery().slice(0, -1));
+        return true;
+      case 'aggregate.list.close':
+        closeAggregateView();
+        exitAggregateMode();
+        return true;
+      case 'aggregate.kill': {
+        const selectedPtyId = getSelectedPtyId();
+        if (selectedPtyId && onRequestKillPty) {
+          onRequestKillPty(selectedPtyId);
+        }
+        return true;
+      }
+      default:
+        return false;
+    }
+  };
+
+  const handleListInput = (event: KeyboardEvent): boolean => {
     const { key } = event;
+    if (key.length === 1 && !event.ctrl && !event.alt && !event.meta) {
+      setFilterQuery(getFilterQuery() + key);
+      return true;
+    }
+    return true;
+  };
+
+  const handleListModeKeys = (event: KeyboardEvent): boolean => {
     const keybindings = getKeybindings();
-    const action = matchKeybinding(keybindings.aggregate.list, {
+    const keyEvent = {
       key: event.key,
       ctrl: event.ctrl,
       alt: event.alt,
       shift: event.shift,
-    });
+      meta: event.meta,
+    };
+    const action = matchKeybinding(keybindings.aggregate.list, keyEvent);
 
-    if (action === 'aggregate.list.down') {
-      navigateDown();
-      return true;
+    if (!getVimEnabled()) {
+      if (handleListAction(action)) return true;
+      return handleListInput(event);
     }
 
-    if (action === 'aggregate.list.up') {
-      navigateUp();
-      return true;
-    }
-
-    if (action === 'aggregate.list.preview') {
-      if (getSelectedPtyId()) {
-        enterPreviewMode();
+    if (getVimMode() === 'insert') {
+      if (isBareEscape(event)) {
+        setVimMode('normal');
+        getVimHandlers().list.reset();
+        return true;
       }
+      if (handleListAction(action)) return true;
+      return handleListInput(event);
+    }
+
+    if (event.key === 'i' && !event.ctrl && !event.alt && !event.meta) {
+      setVimMode('insert');
+      getVimHandlers().list.reset();
       return true;
     }
 
-    if (action === 'aggregate.list.jump') {
-      handleJumpToPty();
-      return true;
+    const combo = eventToCombo(keyEvent);
+    const result = getVimHandlers().list.handleCombo(combo);
+    if (result.pending) return true;
+    if (handleListAction(result.action)) return true;
+
+    const isBackspace = event.key === 'backspace';
+    const shouldMatchBindings = !isBackspace && (event.ctrl || event.alt || event.meta || event.key.length > 1);
+    if (shouldMatchBindings && !isBareEscape(event)) {
+      const fallbackAction = matchKeybinding(keybindings.aggregate.list, keyEvent);
+      if (handleListAction(fallbackAction)) return true;
     }
 
-    if (action === 'aggregate.list.toggle.scope') {
-      toggleShowInactive();
-      return true;
-    }
-
-    if (action === 'aggregate.list.delete') {
-      setFilterQuery(getFilterQuery().slice(0, -1));
-      return true;
-    }
-
-    if (action === 'aggregate.list.close') {
-      closeAggregateView();
-      exitAggregateMode();
-      return true;
-    }
-
-    if (action === 'aggregate.kill') {
-      const selectedPtyId = getSelectedPtyId();
-      if (selectedPtyId && onRequestKillPty) {
-        onRequestKillPty(selectedPtyId);
-      }
-      return true;
-    }
-
-    // Single printable character - add to filter
-    if (key.length === 1 && !event.ctrl && !event.alt) {
-      setFilterQuery(getFilterQuery() + key);
-      return true;
-    }
-
-    return true; // Consume all keys while in aggregate view
+    return true;
   };
 
   /**
@@ -297,6 +456,7 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
       ctrl: event.ctrl,
       alt: event.alt,
       shift: event.shift,
+      meta: event.meta,
     });
 
     // Handle search mode first (when active in preview)
@@ -304,7 +464,7 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
       return handleSearchModeKeys(event);
     }
 
-    if (event.eventType === "release") {
+    if (event.eventType === 'release') {
       if (getPreviewMode()) {
         return handlePreviewModeKeys(event);
       }
@@ -326,6 +486,7 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
         ctrl: event.ctrl,
         alt: event.alt,
         shift: event.shift,
+        meta: event.meta,
       });
 
       if (prefixAction) {

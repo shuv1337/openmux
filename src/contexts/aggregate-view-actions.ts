@@ -88,6 +88,15 @@ export function createAggregateViewActions(
     }));
   };
 
+  const setSelectedIndex = (index: number) => {
+    const maxIndex = Math.max(0, state.matchedPtys.length - 1);
+    const clamped = Math.min(maxIndex, Math.max(0, index));
+    setState(produce((s) => {
+      s.selectedIndex = clamped;
+      s.selectedPtyId = s.matchedPtys[clamped]?.ptyId ?? null;
+    }));
+  };
+
   const selectPty = (ptyId: string) => {
     setState(produce((s) => {
       s.selectedPtyId = ptyId;
@@ -118,6 +127,7 @@ export function createAggregateViewActions(
     toggleShowInactive,
     navigateUp,
     navigateDown,
+    setSelectedIndex,
     selectPty,
     getSelectedPty,
     enterPreviewMode,

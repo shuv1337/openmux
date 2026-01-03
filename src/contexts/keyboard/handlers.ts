@@ -111,6 +111,9 @@ export function handleNormalModeAction(
     case 'command.palette.toggle':
       options.onToggleCommandPalette?.();
       return true;
+    case 'keyboard.vim.toggle':
+      options.onToggleVimMode?.();
+      return true;
     case 'mode.move':
       keyboard.enterMoveMode();
       return true;
@@ -230,6 +233,10 @@ export function handlePrefixModeAction(
       return true;
     case 'command.palette.toggle':
       options.onToggleCommandPalette?.();
+      exitPrefix();
+      return true;
+    case 'keyboard.vim.toggle':
+      options.onToggleVimMode?.();
       exitPrefix();
       return true;
     case 'mode.move':

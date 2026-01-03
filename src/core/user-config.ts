@@ -23,10 +23,18 @@ export interface SessionSettings {
   autoSaveIntervalMs: number;
 }
 
+export type KeyboardVimMode = 'off' | 'overlays';
+
+export interface KeyboardSettings {
+  vimMode: KeyboardVimMode;
+  vimSequenceTimeoutMs: number;
+}
+
 export interface UserConfig {
   layout: LayoutSettings;
   theme: Theme;
   session: SessionSettings;
+  keyboard: KeyboardSettings;
   keybindings: KeybindingsConfig;
 }
 
@@ -43,6 +51,10 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
   theme: DEFAULT_THEME,
   session: {
     autoSaveIntervalMs: DEFAULT_CONFIG.autoSaveInterval,
+  },
+  keyboard: {
+    vimMode: 'off',
+    vimSequenceTimeoutMs: 1000,
   },
   keybindings: DEFAULT_KEYBINDINGS,
 };
@@ -161,6 +173,8 @@ function mergeKeybindings(base: KeybindingsConfig, overrides?: Partial<Keybindin
 function mergeUserConfig(base: UserConfig, overrides?: Partial<UserConfig>): UserConfig {
   if (!overrides) return base;
 
+  const vimSequenceTimeoutMs = coerceNumber(overrides.keyboard?.vimSequenceTimeoutMs);
+
   return {
     layout: {
       windowGap: overrides.layout?.windowGap ?? base.layout.windowGap,
@@ -185,6 +199,10 @@ function mergeUserConfig(base: UserConfig, overrides?: Partial<UserConfig>): Use
     session: {
       autoSaveIntervalMs: overrides.session?.autoSaveIntervalMs ?? base.session.autoSaveIntervalMs,
     },
+    keyboard: {
+      vimMode: overrides.keyboard?.vimMode ?? base.keyboard.vimMode,
+      vimSequenceTimeoutMs: vimSequenceTimeoutMs ?? base.keyboard.vimSequenceTimeoutMs,
+    },
     keybindings: mergeKeybindings(base.keybindings, overrides.keybindings),
   };
 }
@@ -207,5 +225,53 @@ export function loadUserConfigSync(options?: { createIfMissing?: boolean }): Use
   } catch (error) {
     console.warn('[openmux] Failed to parse config, using defaults:', error);
     return applyEnvOverrides(DEFAULT_USER_CONFIG);
+  }
+}
+
+function updateTomlKeyInSection(
+  contents: string,
+  section: string,
+  key: string,
+  value: string
+): string {
+  const newline = contents.includes('\r\n') ? '\r\n' : '\n';
+  const lines = contents.split(/\r?\n/);
+  const header = `[${section}]`;
+  const sectionStart = lines.findIndex((line) => line.trim() === header);
+
+  if (sectionStart === -1) {
+    const prefix = contents.trim().length > 0 ? newline : '';
+    return `${contents.trimEnd()}${prefix}${header}${newline}${key} = ${value}${newline}`;
+  }
+
+  let sectionEnd = lines.length;
+  for (let i = sectionStart + 1; i < lines.length; i += 1) {
+    const trimmed = lines[i].trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      sectionEnd = i;
+      break;
+    }
+  }
+
+  const keyRegex = new RegExp(`^(\\s*${key}\\s*=\\s*)([^#]*)(\\s*#.*)?$`);
+  for (let i = sectionStart + 1; i < sectionEnd; i += 1) {
+    const match = lines[i].match(keyRegex);
+    if (match) {
+      lines[i] = `${match[1]}${value}${match[3] ?? ''}`;
+      return lines.join(newline);
+    }
+  }
+
+  lines.splice(sectionStart + 1, 0, `${key} = ${value}`);
+  return lines.join(newline);
+}
+
+export function setKeyboardVimMode(mode: KeyboardVimMode): void {
+  const configPath = getConfigPath();
+  loadUserConfigSync({ createIfMissing: true });
+  const contents = fs.readFileSync(configPath, 'utf8');
+  const next = updateTomlKeyInSection(contents, 'keyboard', 'vimMode', `"${mode}"`);
+  if (next !== contents) {
+    fs.writeFileSync(configPath, next, 'utf8');
   }
 }

@@ -26,6 +26,8 @@ import type { ConfirmationType } from './core/types';
 import { SessionBridge } from './components/SessionBridge';
 import { getFocusedPtyId } from './core/workspace-utils';
 import { DEFAULT_COMMAND_PALETTE_COMMANDS, type CommandPaletteCommand } from './core/command-palette';
+import { setKeyboardVimMode, type KeyboardVimMode } from './core/user-config';
+import { createVimSequenceHandler, type VimInputMode } from './core/vim-sequences';
 import { onShimDetached, shutdownShim } from './effect/bridge';
 import { disposeRuntime } from './effect/runtime';
 import {
@@ -42,6 +44,7 @@ import { setupKeyboardRouting } from './components/app/keyboard-routing';
 import { usePtyCreation } from './components/app/pty-creation';
 import { AppOverlays } from './components/app/AppOverlays';
 import { createTemplatePendingActions } from './components/app/template-pending-actions';
+import { createSessionPendingActions } from './components/app/session-pending-actions';
 import { createKittyGraphicsBridge } from './components/app/kitty-graphics-bridge';
 import { createCellMetricsGetter, createPixelResizeTracker } from './components/app/pixel-metrics';
 import { createExitHandlers } from './components/app/exit-handlers';
@@ -72,6 +75,7 @@ function AppContent() {
     writeToPTY,
     pasteToFocused,
     getFocusedEmulator,
+    isPtyActive,
   } = terminal;
   const session = useSession();
   const { togglePicker, toggleTemplateOverlay, state: sessionState, saveSession, suspendPersistence } = session;
@@ -91,10 +95,15 @@ function AppContent() {
   const FOCUS_OUT_SEQUENCE = '\x1b[O';
 
   const sendFocusEvent = (ptyId: string, focused: boolean) => {
+    if (!isPtyActive(ptyId)) return;
     void sendPtyFocusEvent(ptyId, focused);
   };
 
   const { commandPaletteState, setCommandPaletteState, toggleCommandPalette } = createCommandPaletteState();
+  const [commandPaletteVimMode, setCommandPaletteVimMode] = createSignal<VimInputMode>('normal');
+  const [sessionPickerVimMode, setSessionPickerVimMode] = createSignal<VimInputMode>('normal');
+  const [templateOverlayVimMode, setTemplateOverlayVimMode] = createSignal<VimInputMode>('normal');
+  const [aggregateVimMode, setAggregateVimMode] = createSignal<VimInputMode>('normal');
 
   const getCellMetrics = createCellMetricsGetter(renderer as any, width, height);
 
@@ -159,6 +168,7 @@ function AppContent() {
   });
 
   const templatePending = createTemplatePendingActions();
+  const sessionPending = createSessionPendingActions();
 
   const handleConfirmTemplateApply = templatePending.confirmApply;
   const handleCancelTemplateApply = templatePending.cancelApply;
@@ -166,6 +176,8 @@ function AppContent() {
   const handleCancelTemplateOverwrite = templatePending.cancelOverwrite;
   const handleConfirmTemplateDelete = templatePending.confirmDelete;
   const handleCancelTemplateDelete = templatePending.cancelDelete;
+  const handleConfirmSessionDelete = sessionPending.confirmDelete;
+  const handleCancelSessionDelete = sessionPending.cancelDelete;
 
   // Create confirmation handlers
   const confirmationHandlers = createConfirmationHandlers({
@@ -185,6 +197,8 @@ function AppContent() {
     onCancelOverwriteTemplate: handleCancelTemplateOverwrite,
     onConfirmDeleteTemplate: handleConfirmTemplateDelete,
     onCancelDeleteTemplate: handleCancelTemplateDelete,
+    onConfirmDeleteSession: handleConfirmSessionDelete,
+    onCancelDeleteSession: handleCancelSessionDelete,
   });
 
   // Create paste handler for bracketed paste from host terminal
@@ -304,6 +318,22 @@ function AppContent() {
     toggleTemplateOverlay();
   };
 
+  const handleCommandPaletteVimModeChange = (mode: VimInputMode) => {
+    setCommandPaletteVimMode(mode);
+  };
+
+  const handleSessionPickerVimModeChange = (mode: VimInputMode) => {
+    setSessionPickerVimMode(mode);
+  };
+
+  const handleTemplateOverlayVimModeChange = (mode: VimInputMode) => {
+    setTemplateOverlayVimMode(mode);
+  };
+
+  const handleAggregateVimModeChange = (mode: VimInputMode) => {
+    setAggregateVimMode(mode);
+  };
+
   const hasAnyPanes = () =>
     Object.values(layout.state.workspaces).some(
       (workspace) => workspace && (workspace.mainPane || workspace.stackPanes.length > 0)
@@ -324,10 +354,55 @@ function AppContent() {
     confirmationHandlers.handleRequestDeleteTemplate();
   };
 
+  const requestSessionDeleteConfirm = (deleteSession: () => Promise<void>) => {
+    sessionPending.setPendingDelete(() => deleteSession);
+    confirmationHandlers.handleRequestDeleteSession();
+  };
+
   // Toggle debug console
   const handleToggleConsole = () => {
     renderer.console.toggle();
   };
+
+  const handleToggleVimMode = () => {
+    const current = config.config().keyboard.vimMode;
+    const next: KeyboardVimMode = current === 'overlays' ? 'off' : 'overlays';
+    setKeyboardVimMode(next);
+    config.reloadConfig();
+  };
+
+  const getSearchVimMode = () => search.vimMode;
+  let searchVimHandler = createVimSequenceHandler({
+    timeoutMs: config.config().keyboard.vimSequenceTimeoutMs,
+    sequences: [
+      { keys: ['n'], action: 'search.next' },
+      { keys: ['shift+n'], action: 'search.prev' },
+      { keys: ['enter'], action: 'search.confirm' },
+      { keys: ['q'], action: 'search.cancel' },
+    ],
+  });
+
+  createEffect(() => {
+    const timeoutMs = config.config().keyboard.vimSequenceTimeoutMs;
+    searchVimHandler.reset();
+    searchVimHandler = createVimSequenceHandler({
+      timeoutMs,
+      sequences: [
+        { keys: ['n'], action: 'search.next' },
+        { keys: ['shift+n'], action: 'search.prev' },
+        { keys: ['enter'], action: 'search.confirm' },
+        { keys: ['q'], action: 'search.cancel' },
+      ],
+    });
+  });
+
+  createEffect(() => {
+    if (!search.searchState) return;
+    if (config.config().keyboard.vimMode === 'overlays') {
+      search.setVimMode('normal');
+    }
+    searchVimHandler.reset();
+  });
 
   // Search mode enter handler
   const handleEnterSearch = async () => {
@@ -366,12 +441,26 @@ function AppContent() {
         onToggleConsole: handleToggleConsole,
         onToggleAggregateView: handleToggleAggregateView,
         onToggleCommandPalette: toggleCommandPalette,
+        onToggleVimMode: handleToggleVimMode,
       }
     );
   };
 
   const handleCommandPaletteExecute = (command: CommandPaletteCommand) => {
     executeCommandAction(command.action);
+  };
+
+  const overlayVimMode = () => {
+    if (config.config().keyboard.vimMode !== 'overlays') return null;
+    if (confirmationState().visible) return null;
+    if (commandPaletteState.show) return commandPaletteVimMode();
+    if (session.showTemplateOverlay) return templateOverlayVimMode();
+    if (sessionState.showSessionPicker) return sessionPickerVimMode();
+    if (aggregateState.showAggregateView) return aggregateVimMode();
+    if (keyboardState.state.mode === 'search' && search.searchState) {
+      return search.vimMode;
+    }
+    return null;
   };
 
 
@@ -398,6 +487,7 @@ function AppContent() {
     onToggleConsole: handleToggleConsole,
     onToggleAggregateView: handleToggleAggregateView,
     onToggleCommandPalette: toggleCommandPalette,
+    onToggleVimMode: handleToggleVimMode,
   });
 
   // Update viewport when terminal resizes
@@ -470,6 +560,10 @@ function AppContent() {
     nextMatch,
     prevMatch,
     getSearchState: () => search.searchState,
+    getVimEnabled: () => config.config().keyboard.vimMode === 'overlays',
+    getSearchVimMode,
+    setSearchVimMode: search.setVimMode,
+    getSearchVimHandler: () => searchVimHandler,
     clearAllSelections,
     getFocusedEmulator,
     writeToFocused,
@@ -493,12 +587,18 @@ function AppContent() {
         commandPaletteState={commandPaletteState}
         setCommandPaletteState={setCommandPaletteState}
         onCommandPaletteExecute={handleCommandPaletteExecute}
+        overlayVimMode={overlayVimMode()}
+        onCommandPaletteVimModeChange={handleCommandPaletteVimModeChange}
+        onSessionPickerVimModeChange={handleSessionPickerVimModeChange}
+        onTemplateOverlayVimModeChange={handleTemplateOverlayVimModeChange}
+        onAggregateVimModeChange={handleAggregateVimModeChange}
         confirmationState={confirmationState}
         onConfirm={confirmationHandlers.handleConfirmAction}
         onCancel={confirmationHandlers.handleCancelConfirmation}
         onRequestApplyConfirm={requestTemplateApplyConfirm}
         onRequestOverwriteConfirm={requestTemplateOverwriteConfirm}
         onRequestDeleteConfirm={requestTemplateDeleteConfirm}
+        onRequestDeleteSessionConfirm={requestSessionDeleteConfirm}
         onRequestQuit={confirmationHandlers.handleRequestQuit}
         onDetach={handleDetach}
         onRequestKillPty={confirmationHandlers.handleRequestKillPty}

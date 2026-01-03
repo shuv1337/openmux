@@ -2,11 +2,12 @@
  * CommandPalette - modal overlay for command search and execution
  */
 
-import { Show, For, createMemo, createEffect } from 'solid-js';
+import { Show, For, createMemo, createEffect, createSignal } from 'solid-js';
 import { type SetStoreFunction } from 'solid-js/store';
 import { useConfig } from '../contexts/ConfigContext';
 import { useTheme } from '../contexts/ThemeContext';
 import {
+  eventToCombo,
   formatComboSet,
   formatKeyCombo,
   matchKeybinding,
@@ -18,6 +19,7 @@ import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyb
 import type { KeyboardEvent } from '../effect/bridge';
 import { RGBA } from '@opentui/core';
 import { filterCommands } from './command-palette-utils';
+import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
 
 export interface CommandPaletteState {
   show: boolean;
@@ -32,6 +34,7 @@ interface CommandPaletteProps {
   state: CommandPaletteState;
   setState: SetStoreFunction<CommandPaletteState>;
   onExecute: (command: CommandPaletteCommand) => void;
+  onVimModeChange?: (mode: VimInputMode) => void;
 }
 
 function getCombos(bindings: ResolvedKeybindingMap, action: string): string[] {
@@ -62,6 +65,19 @@ export function CommandPalette(props: CommandPaletteProps) {
   const accentColor = () => theme.searchAccentColor;
   const resultCount = () => filteredCommands().length;
   const showResults = () => resultCount() > 0;
+  const vimEnabled = () => config.config().keyboard.vimMode === 'overlays';
+  const [vimMode, setVimMode] = createSignal<VimInputMode>('normal');
+  let vimHandler = createVimSequenceHandler({
+    timeoutMs: config.config().keyboard.vimSequenceTimeoutMs,
+    sequences: [
+      { keys: ['j'], action: 'command.palette.down' },
+      { keys: ['k'], action: 'command.palette.up' },
+      { keys: ['g', 'g'], action: 'command.palette.top' },
+      { keys: ['shift+g'], action: 'command.palette.bottom' },
+      { keys: ['enter'], action: 'command.palette.confirm' },
+      { keys: ['q'], action: 'command.palette.close' },
+    ],
+  });
 
   const closePalette = () => {
     props.setState({ show: false, query: '', selectedIndex: 0 });
@@ -87,15 +103,10 @@ export function CommandPalette(props: CommandPaletteProps) {
     props.onExecute(command);
   };
 
-  const handleKeyDown = (event: KeyboardEvent) => {
-    const bindings = config.keybindings().commandPalette;
-    const action = matchKeybinding(bindings, {
-      key: event.key,
-      ctrl: event.ctrl,
-      alt: event.alt,
-      shift: event.shift,
-    });
+  const isBareEscape = (event: KeyboardEvent) =>
+    event.key === 'escape' && !event.ctrl && !event.alt && !event.meta && !event.shift;
 
+  const handleAction = (action: string | null): boolean => {
     switch (action) {
       case 'command.palette.close':
         closePalette();
@@ -112,16 +123,75 @@ export function CommandPalette(props: CommandPaletteProps) {
       case 'command.palette.delete':
         updateQuery(props.state.query.slice(0, -1));
         return true;
+      case 'command.palette.top':
+        props.setState('selectedIndex', 0);
+        return true;
+      case 'command.palette.bottom': {
+        const count = filteredCommands().length;
+        if (count > 0) {
+          props.setState('selectedIndex', count - 1);
+        }
+        return true;
+      }
       default:
-        break;
+        return false;
     }
+  };
 
+  const handleInput = (event: KeyboardEvent): boolean => {
     const input = event.sequence ?? (event.key.length === 1 ? event.key : '');
     const charCode = input.charCodeAt(0) ?? 0;
     const isPrintable = input.length === 1 && charCode >= 32 && charCode < 127;
-    if (isPrintable && !event.ctrl && !event.alt) {
+    if (isPrintable && !event.ctrl && !event.alt && !event.meta) {
       updateQuery(props.state.query + input);
       return true;
+    }
+    return true;
+  };
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    const bindings = config.keybindings().commandPalette;
+    const keyEvent = {
+      key: event.key,
+      ctrl: event.ctrl,
+      alt: event.alt,
+      shift: event.shift,
+      meta: event.meta,
+    };
+
+    if (!vimEnabled()) {
+      const action = matchKeybinding(bindings, keyEvent);
+      if (handleAction(action)) return true;
+      return handleInput(event);
+    }
+
+    if (vimMode() === 'insert') {
+      if (event.key === 'escape' && !event.ctrl && !event.alt && !event.meta) {
+        setVimMode('normal');
+        vimHandler.reset();
+        return true;
+      }
+      const action = matchKeybinding(bindings, keyEvent);
+      if (handleAction(action)) return true;
+      return handleInput(event);
+    }
+
+    if (event.key === 'i' && !event.ctrl && !event.alt && !event.meta) {
+      setVimMode('insert');
+      vimHandler.reset();
+      return true;
+    }
+
+    const combo = eventToCombo(keyEvent);
+    const result = vimHandler.handleCombo(combo);
+    if (result.pending) return true;
+    if (handleAction(result.action)) return true;
+
+    const isBackspace = event.key === 'backspace';
+    const shouldMatchBindings = !isBackspace && (event.ctrl || event.alt || event.meta || event.key.length > 1);
+    if (shouldMatchBindings && !isBareEscape(event)) {
+      const action = matchKeybinding(bindings, keyEvent);
+      if (handleAction(action)) return true;
     }
 
     return true;
@@ -131,6 +201,34 @@ export function CommandPalette(props: CommandPaletteProps) {
     overlay: 'commandPalette',
     isActive: () => props.state.show,
     handler: handleKeyDown,
+  });
+
+  createEffect(() => {
+    if (!props.state.show) return;
+    if (vimEnabled()) {
+      setVimMode('normal');
+    }
+    vimHandler.reset();
+  });
+
+  createEffect(() => {
+    props.onVimModeChange?.(vimMode());
+  });
+
+  createEffect(() => {
+    const timeoutMs = config.config().keyboard.vimSequenceTimeoutMs;
+    vimHandler.reset();
+    vimHandler = createVimSequenceHandler({
+      timeoutMs,
+      sequences: [
+        { keys: ['j'], action: 'command.palette.down' },
+        { keys: ['k'], action: 'command.palette.up' },
+        { keys: ['g', 'g'], action: 'command.palette.top' },
+        { keys: ['shift+g'], action: 'command.palette.bottom' },
+        { keys: ['enter'], action: 'command.palette.confirm' },
+        { keys: ['q'], action: 'command.palette.close' },
+      ],
+    });
   });
 
   createEffect(() => {
@@ -209,6 +307,10 @@ export function CommandPalette(props: CommandPaletteProps) {
   };
 
   const hintText = () => {
+    if (vimEnabled()) {
+      const modeHint = vimMode() === 'insert' ? 'esc:normal' : 'i:insert';
+      return `j/k:nav gg/G:jump enter:run q:close ${modeHint}`;
+    }
     const bindings = config.keybindings().commandPalette;
     const nav = formatComboSet([
       ...getCombos(bindings, 'command.palette.up'),

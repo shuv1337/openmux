@@ -2,18 +2,21 @@
  * SessionPicker - modal overlay for session selection and management
  */
 
-import { Show, For } from 'solid-js';
+import { Show, For, createEffect, createSignal } from 'solid-js';
 import { useSession, type SessionSummary } from '../contexts/SessionContext';
 import type { SessionMetadata } from '../core/types';
 import { useTheme } from '../contexts/ThemeContext';
 import { useConfig } from '../contexts/ConfigContext';
-import { formatComboSet, matchKeybinding, type ResolvedKeybindingMap } from '../core/keybindings';
+import { eventToCombo, formatComboSet, matchKeybinding, type ResolvedKeybindingMap } from '../core/keybindings';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
 import type { KeyboardEvent } from '../effect/bridge';
+import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
 
 interface SessionPickerProps {
   width: number;
   height: number;
+  onRequestDeleteConfirm: (deleteSession: () => Promise<void>) => void;
+  onVimModeChange?: (mode: VimInputMode) => void;
 }
 
 /**
@@ -40,6 +43,20 @@ export function SessionPicker(props: SessionPickerProps) {
   const theme = useTheme();
   const config = useConfig();
   const accentColor = () => theme.pane.focusedBorderColor;
+  const vimEnabled = () => config.config().keyboard.vimMode === 'overlays';
+  const [vimMode, setVimMode] = createSignal<VimInputMode>('normal');
+  let vimHandler = createVimSequenceHandler({
+    timeoutMs: config.config().keyboard.vimSequenceTimeoutMs,
+    sequences: [
+      { keys: ['j'], action: 'session.picker.down' },
+      { keys: ['k'], action: 'session.picker.up' },
+      { keys: ['g', 'g'], action: 'session.picker.top' },
+      { keys: ['shift+g'], action: 'session.picker.bottom' },
+      { keys: ['enter'], action: 'session.picker.select' },
+      { keys: ['d', 'd'], action: 'session.picker.delete' },
+      { keys: ['q'], action: 'session.picker.close' },
+    ],
+  });
   // Keep session context to access filteredSessions reactively (it's a getter)
   const session = useSession();
   const {
@@ -56,20 +73,101 @@ export function SessionPicker(props: SessionPickerProps) {
     updateRenameValue,
     navigateUp,
     navigateDown,
+    setSelectedIndex,
   } = session;
+
+  const handleAction = (action: string | null): boolean => {
+    switch (action) {
+      case 'session.picker.close':
+        closePicker();
+        saveSession();
+        return true;
+      case 'session.picker.down':
+        navigateDown();
+        return true;
+      case 'session.picker.up':
+        navigateUp();
+        return true;
+      case 'session.picker.select': {
+        const selected = session.filteredSessions[state.selectedIndex];
+        if (selected) {
+          if (selected.id === state.activeSessionId) {
+            closePicker();
+          } else {
+            switchSession(selected.id);
+          }
+        }
+        return true;
+      }
+      case 'session.picker.filter.delete':
+        setSearchQuery(state.searchQuery.slice(0, -1));
+        return true;
+      case 'session.picker.create':
+        createSession();
+        return true;
+      case 'session.picker.rename': {
+        const selected = session.filteredSessions[state.selectedIndex];
+        if (selected) {
+          startRename(selected.id, selected.name);
+        }
+        return true;
+      }
+      case 'session.picker.delete': {
+        const selected = session.filteredSessions[state.selectedIndex];
+        if (selected && session.filteredSessions.length > 1) {
+          props.onRequestDeleteConfirm(() => deleteSession(selected.id));
+        }
+        return true;
+      }
+      case 'session.picker.top':
+        setSelectedIndex(0);
+        return true;
+      case 'session.picker.bottom': {
+        const count = session.filteredSessions.length;
+        if (count > 0) {
+          setSelectedIndex(count - 1);
+        }
+        return true;
+      }
+      default:
+        return false;
+    }
+  };
+
+  const handleRenameInput = (event: KeyboardEvent): boolean => {
+    const { key } = event;
+    if (key.length === 1 && !event.ctrl && !event.alt) {
+      updateRenameValue(state.renameValue + key);
+      return true;
+    }
+    return true;
+  };
+
+  const handleListInput = (event: KeyboardEvent): boolean => {
+    const { key } = event;
+    if (key.length === 1 && !event.ctrl && !event.alt) {
+      setSearchQuery(state.searchQuery + key);
+      return true;
+    }
+    return false;
+  };
+
+  const isBareEscape = (event: KeyboardEvent) =>
+    event.key === 'escape' && !event.ctrl && !event.alt && !event.meta && !event.shift;
 
   // Handle keyboard input when picker is open
   const handleKeyDown = (event: KeyboardEvent) => {
     const { key } = event;
     const bindings = config.keybindings().sessionPicker;
-    const action = matchKeybinding(state.isRenaming ? bindings.rename : bindings.list, {
+    const keyEvent = {
       key,
       ctrl: event.ctrl,
       alt: event.alt,
       shift: event.shift,
-    });
+      meta: event.meta,
+    };
+    const action = matchKeybinding(state.isRenaming ? bindings.rename : bindings.list, keyEvent);
 
-    // If renaming, handle rename-specific keys
     if (state.isRenaming) {
       if (action === 'session.picker.rename.cancel') {
         cancelRename();
@@ -85,77 +183,43 @@ export function SessionPicker(props: SessionPickerProps) {
         updateRenameValue(state.renameValue.slice(0, -1));
         return true;
       }
-      // Single printable character
-      if (key.length === 1 && !event.ctrl && !event.alt && !action) {
-        updateRenameValue(state.renameValue + key);
-        return true;
-      }
-      return true; // Consume all keys while renaming
+      return handleRenameInput(event);
     }
 
-    switch (action) {
-      case 'session.picker.close':
-        closePicker();
-        // Save session when closing picker
-        saveSession();
-        return true;
-
-      case 'session.picker.down':
-        navigateDown();
-        return true;
-
-      case 'session.picker.up':
-        navigateUp();
-        return true;
-
-      case 'session.picker.select': {
-        const selected = session.filteredSessions[state.selectedIndex];
-        if (selected) {
-          // If selecting the already-active session, just close the picker
-          if (selected.id === state.activeSessionId) {
-            closePicker();
-          } else {
-            switchSession(selected.id);
-          }
-        }
-        return true;
-      }
-
-      case 'session.picker.filter.delete':
-        // Remove last character from search
-        setSearchQuery(state.searchQuery.slice(0, -1));
-        return true;
-
-      case 'session.picker.create':
-        createSession();
-        return true;
-
-      case 'session.picker.rename': {
-        const selected = session.filteredSessions[state.selectedIndex];
-        if (selected) {
-          startRename(selected.id, selected.name);
-        }
-        return true;
-      }
-
-      case 'session.picker.delete': {
-        const selected = session.filteredSessions[state.selectedIndex];
-        if (selected && session.filteredSessions.length > 1) {
-          deleteSession(selected.id);
-        }
-        return true;
-      }
-
-      default:
-        break;
+    if (!vimEnabled()) {
+      if (handleAction(action)) return true;
+      return handleListInput(event);
     }
 
-    // Single printable character - add to search
-    if (key.length === 1 && !event.ctrl && !event.alt) {
-      setSearchQuery(state.searchQuery + key);
+    if (vimMode() === 'insert') {
+      if (key === 'escape' && !event.ctrl && !event.alt && !event.meta) {
+        setVimMode('normal');
+        vimHandler.reset();
+        return true;
+      }
+      if (handleAction(action)) return true;
+      return handleListInput(event);
+    }
+
+    if (key === 'i' && !event.ctrl && !event.alt && !event.meta) {
+      setVimMode('insert');
+      vimHandler.reset();
       return true;
     }
-    return false;
+
+    const combo = eventToCombo(keyEvent);
+    const result = vimHandler.handleCombo(combo);
+    if (result.pending) return true;
+    if (handleAction(result.action)) return true;
+
+    const isBackspace = key === 'backspace';
+    const shouldMatchBindings = !isBackspace && (event.ctrl || event.alt || event.meta || key.length > 1);
+    if (shouldMatchBindings && !isBareEscape(event)) {
+      const fallbackAction = matchKeybinding(bindings.list, keyEvent);
+      if (handleAction(fallbackAction)) return true;
+    }
+
+    return true;
   };
 
   const buildHintText = () => {
@@ -165,6 +229,16 @@ export function SessionPicker(props: SessionPickerProps) {
       const cancel = formatComboSet(getCombos(bindings, 'session.picker.rename.cancel'));
       const remove = formatComboSet(getCombos(bindings, 'session.picker.rename.delete'));
       return `type:rename ${confirm}:confirm ${cancel}:cancel ${remove}:delete`;
+    }
+
+    if (vimEnabled()) {
+      const bindings = config.keybindings().sessionPicker.list;
+      const create = formatComboSet(getCombos(bindings, 'session.picker.create'));
+      const rename = formatComboSet(getCombos(bindings, 'session.picker.rename'));
+      const remove = formatComboSet(getCombos(bindings, 'session.picker.delete'));
+      const modeHint = vimMode() === 'insert' ? 'esc:normal' : 'i:filter';
+      const deleteHint = remove ? `dd/${remove}:del` : 'dd:del';
+      return `j/k:nav gg/G:jump enter:select ${create}:new ${rename}:rename ${deleteHint} q:close ${modeHint}`;
     }
 
     const bindings = config.keybindings().sessionPicker.list;
@@ -184,6 +258,35 @@ export function SessionPicker(props: SessionPickerProps) {
     overlay: 'sessionPicker',
     isActive: () => state.showSessionPicker,
     handler: handleKeyDown,
+  });
+
+  createEffect(() => {
+    if (!state.showSessionPicker) return;
+    if (vimEnabled()) {
+      setVimMode('normal');
+    }
+    vimHandler.reset();
+  });
+
+  createEffect(() => {
+    props.onVimModeChange?.(vimMode());
+  });
+
+  createEffect(() => {
+    const timeoutMs = config.config().keyboard.vimSequenceTimeoutMs;
+    vimHandler.reset();
+    vimHandler = createVimSequenceHandler({
+      timeoutMs,
+      sequences: [
+        { keys: ['j'], action: 'session.picker.down' },
+        { keys: ['k'], action: 'session.picker.up' },
+        { keys: ['g', 'g'], action: 'session.picker.top' },
+        { keys: ['shift+g'], action: 'session.picker.bottom' },
+        { keys: ['enter'], action: 'session.picker.select' },
+        { keys: ['d', 'd'], action: 'session.picker.delete' },
+        { keys: ['q'], action: 'session.picker.close' },
+      ],
+    });
   });
 
   // Calculate overlay dimensions

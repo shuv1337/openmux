@@ -89,6 +89,8 @@ interface SessionContextValue {
   navigateUp: () => void;
   /** Navigate down in picker */
   navigateDown: () => void;
+  /** Jump to a specific index in picker */
+  setSelectedIndex: (index: number) => void;
   /** Show template overlay */
   showTemplateOverlay: boolean;
   /** Templates list */
@@ -182,6 +184,7 @@ export function SessionProvider(props: SessionProviderProps) {
     updateRenameValue,
     navigateUp,
     navigateDown,
+    setSelectedIndex,
   } = createSessionPickerActions(dispatch);
 
   // Refresh helpers
@@ -407,6 +410,7 @@ export function SessionProvider(props: SessionProviderProps) {
     updateRenameValue,
     navigateUp,
     navigateDown,
+    setSelectedIndex,
     get showTemplateOverlay() { return showTemplateOverlay(); },
     get templates() { return templates(); },
     openTemplateOverlay,

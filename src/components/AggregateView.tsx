@@ -3,7 +3,7 @@
  * Shows a filterable card-style list of PTYs on the left and interactive terminal on the right.
  *
  * Modes:
- * - List mode: Navigate PTY list with j/k, Enter to enter preview mode
+ * - List mode: Navigate PTY list (arrow keys; vim mode adds j/k), Enter to enter preview mode
  * - Preview mode: Interact with the terminal, Prefix+Esc to return to list
  */
 
@@ -33,6 +33,7 @@ import {
   getFilterText,
   calculateFooterWidths,
 } from './aggregate';
+import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
 
 interface AggregateViewProps {
   width: number;
@@ -40,6 +41,7 @@ interface AggregateViewProps {
   onRequestQuit?: () => void;
   onDetach?: () => void;
   onRequestKillPty?: (ptyId: string) => void;
+  onVimModeChange?: (mode: VimInputMode) => void;
 }
 
 export function AggregateView(props: AggregateViewProps) {
@@ -51,6 +53,7 @@ export function AggregateView(props: AggregateViewProps) {
     toggleShowInactive,
     navigateUp,
     navigateDown,
+    setSelectedIndex,
     enterPreviewMode,
     exitPreviewMode,
     selectPty,
@@ -64,6 +67,38 @@ export function AggregateView(props: AggregateViewProps) {
   // Keep search context to access searchState reactively (it's a getter)
   const search = useSearch();
   const { enterSearchMode, exitSearchMode, setSearchQuery, nextMatch, prevMatch } = search;
+  const vimEnabled = () => config.config().keyboard.vimMode === 'overlays';
+  const [vimMode, setVimMode] = createSignal<VimInputMode>('normal');
+  const buildVimHandlers = (timeoutMs: number) => ({
+    list: createVimSequenceHandler({
+      timeoutMs,
+      sequences: [
+        { keys: ['j'], action: 'aggregate.list.down' },
+        { keys: ['k'], action: 'aggregate.list.up' },
+        { keys: ['g', 'g'], action: 'aggregate.list.top' },
+        { keys: ['shift+g'], action: 'aggregate.list.bottom' },
+        { keys: ['enter'], action: 'aggregate.list.preview' },
+        { keys: ['q'], action: 'aggregate.list.close' },
+      ],
+    }),
+    preview: createVimSequenceHandler({
+      timeoutMs,
+      sequences: [
+        { keys: ['q'], action: 'aggregate.preview.exit' },
+      ],
+    }),
+    search: createVimSequenceHandler({
+      timeoutMs,
+      sequences: [
+        { keys: ['n'], action: 'aggregate.search.next' },
+        { keys: ['shift+n'], action: 'aggregate.search.prev' },
+        { keys: ['enter'], action: 'aggregate.search.confirm' },
+        { keys: ['q'], action: 'aggregate.search.cancel' },
+      ],
+    }),
+  });
+  let vimHandlers = buildVimHandlers(config.config().keyboard.vimSequenceTimeoutMs);
+  const getVimHandlers = () => vimHandlers;
 
   // Track prefix mode for prefix+esc to exit interactive mode
   const [prefixActive, setPrefixActive] = createSignal(false);
@@ -110,6 +145,37 @@ export function AggregateView(props: AggregateViewProps) {
     if (prefixTimeout) {
       clearTimeout(prefixTimeout);
     }
+  });
+
+  createEffect(() => {
+    const timeoutMs = config.config().keyboard.vimSequenceTimeoutMs;
+    vimHandlers.list.reset();
+    vimHandlers.preview.reset();
+    vimHandlers.search.reset();
+    vimHandlers = buildVimHandlers(timeoutMs);
+  });
+
+  createEffect(() => {
+    if (!state.showAggregateView) return;
+    if (vimEnabled()) {
+      setVimMode('normal');
+    }
+    vimHandlers.list.reset();
+    vimHandlers.preview.reset();
+    vimHandlers.search.reset();
+  });
+
+  createEffect(() => {
+    if (!state.showAggregateView || !vimEnabled()) return;
+    if (inSearchMode()) {
+      setVimMode('normal');
+      return;
+    }
+    setVimMode(state.previewMode ? 'insert' : 'normal');
+  });
+
+  createEffect(() => {
+    props.onVimModeChange?.(vimMode());
   });
 
   createEffect(() => {
@@ -227,11 +293,17 @@ export function AggregateView(props: AggregateViewProps) {
     getInSearchMode: inSearchMode,
     getPrefixActive: prefixActive,
     getKeybindings: () => config.keybindings(),
+    getMatchedCount: () => state.matchedPtys.length,
+    getVimEnabled: vimEnabled,
+    getVimMode: vimMode,
+    setVimMode,
+    getVimHandlers,
     getEmulatorSync: getAggregateEmulatorSync,
     setFilterQuery,
     toggleShowInactive,
     setInSearchMode,
     setPrefixActive,
+    setSelectedIndex,
     closeAggregateView,
     navigateUp,
     navigateDown,
@@ -286,7 +358,14 @@ export function AggregateView(props: AggregateViewProps) {
   const hostBgColor = getHostBackgroundColor();
 
   // Build hints text based on mode
-  const hintsText = () => getHintsText(inSearchMode(), state.previewMode, config.keybindings(), state.showInactive);
+  const hintsText = () => getHintsText(
+    inSearchMode(),
+    state.previewMode,
+    config.keybindings(),
+    state.showInactive,
+    vimEnabled(),
+    vimMode()
+  );
 
   // Build search/filter text
   const filterText = () => getFilterText(state.filterQuery);

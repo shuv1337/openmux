@@ -19,6 +19,7 @@ import { Effect, Stream, Duration } from 'effect';
 import { getEmulator, getTerminalState, getScrollState } from '../effect/bridge';
 import { useTerminal } from './TerminalContext';
 import { runStream } from '../effect/stream-utils';
+import type { VimInputMode } from '../core/vim-sequences';
 
 // Import extracted search utilities
 import type { SearchState, SearchContextValue } from './search/types';
@@ -49,6 +50,7 @@ export function SearchProvider(props: SearchProviderProps) {
 
   // Store search state - Solid signals are synchronous, so no need for separate ref
   const [searchState, setSearchState] = createSignal<SearchState | null>(null);
+  const [vimMode, setVimMode] = createSignal<VimInputMode>('normal');
 
   // Version counter to trigger re-renders when search state changes
   const [searchVersion, setSearchVersion] = createSignal(0);
@@ -123,6 +125,7 @@ export function SearchProvider(props: SearchProviderProps) {
 
   // Enter search mode
   const enterSearchMode = async (ptyId: string) => {
+    setVimMode('normal');
     // Get emulator and terminal state
     const emulator = await getEmulator(ptyId);
     const terminalState = await getTerminalState(ptyId);
@@ -149,6 +152,8 @@ export function SearchProvider(props: SearchProviderProps) {
   const exitSearchMode = (restorePosition = false) => {
     const state = searchState();
     if (!state) return;
+
+    setVimMode('normal');
 
     // Restore original scroll position if requested (on Escape)
     if (restorePosition && state.originalScrollOffset !== undefined) {
@@ -256,6 +261,8 @@ export function SearchProvider(props: SearchProviderProps) {
 
   const value: SearchContextValue = {
     get searchState() { return searchState(); },
+    get vimMode() { return vimMode(); },
+    setVimMode,
     enterSearchMode,
     exitSearchMode,
     setSearchQuery,

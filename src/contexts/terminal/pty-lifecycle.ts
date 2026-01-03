@@ -111,7 +111,8 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
    * Cleans up subscriptions, caches, and mappings, then closes the pane
    */
   const handlePtyExit = (ptyId: string, paneId: string): void => {
-    cleanupPty(ptyId, { paneId, closePane: true, destroy: true });
+    // Pty service already destroys sessions on exit; avoid double-destroy.
+    cleanupPty(ptyId, { paneId, closePane: true, destroy: false });
   };
 
   /**

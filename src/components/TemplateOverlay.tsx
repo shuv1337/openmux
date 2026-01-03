@@ -9,10 +9,11 @@ import { useConfig } from '../contexts/ConfigContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTerminal } from '../contexts/TerminalContext';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
-import { formatComboSet, type ResolvedKeybindingMap } from '../core/keybindings';
+import { eventToCombo, formatComboSet, matchKeybinding, type ResolvedKeybindingMap } from '../core/keybindings';
 import type { TemplateSession } from '../effect/models';
+import type { KeyboardEvent } from '../effect/bridge';
 import { normalizeTemplateId } from '../core/template-utils';
-import { createTemplateOverlayKeyHandler, type TemplateTabMode } from './template-overlay/keyboard';
+import type { TemplateTabMode } from './template-overlay/keyboard';
 import {
   abbreviatePath,
   fitLabel,
@@ -25,6 +26,7 @@ import {
   getTemplateStats,
   type SaveSummaryLine,
 } from './template-overlay/summary';
+import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
 
 interface TemplateOverlayProps {
   width: number;
@@ -32,6 +34,7 @@ interface TemplateOverlayProps {
   onRequestApplyConfirm: (applyTemplate: () => Promise<void>) => void;
   onRequestOverwriteConfirm: (overwriteTemplate: () => Promise<void>) => void;
   onRequestDeleteConfirm: (deleteTemplate: () => Promise<void>) => void;
+  onVimModeChange?: (mode: VimInputMode) => void;
 }
 
 function getCombos(bindings: ResolvedKeybindingMap, action: string): string[] {
@@ -45,6 +48,20 @@ export function TemplateOverlay(props: TemplateOverlayProps) {
   const layout = useLayout();
   const terminal = useTerminal();
   const accentColor = () => theme.pane.focusedBorderColor;
+  const vimEnabled = () => config.config().keyboard.vimMode === 'overlays';
+  const [vimMode, setVimMode] = createSignal<VimInputMode>('normal');
+  let vimHandler = createVimSequenceHandler({
+    timeoutMs: config.config().keyboard.vimSequenceTimeoutMs,
+    sequences: [
+      { keys: ['j'], action: 'template.list.down' },
+      { keys: ['k'], action: 'template.list.up' },
+      { keys: ['g', 'g'], action: 'template.list.top' },
+      { keys: ['shift+g'], action: 'template.list.bottom' },
+      { keys: ['enter'], action: 'template.enter' },
+      { keys: ['d', 'd'], action: 'template.delete' },
+      { keys: ['q'], action: 'template.close' },
+    ],
+  });
 
   const [tab, setTab] = createSignal<TemplateTabMode>('apply');
   const [selectedIndex, setSelectedIndex] = createSignal(0);
@@ -219,28 +236,172 @@ export function TemplateOverlay(props: TemplateOverlayProps) {
     });
   };
 
-  const handleKeyDown = createTemplateOverlayKeyHandler({
-    tab,
-    setTab,
-    getTemplateCount: () => templates().length,
-    setSelectedIndex,
-    onApply: () => {
-      void applySelectedTemplate();
-    },
-    onDelete: requestDeleteSelectedTemplate,
-    onClose: () => session.closeTemplateOverlay(),
-    onSave: () => {
-      void saveTemplate();
-    },
-    setSaveName,
-    applyBindings: config.keybindings().templateOverlay.apply,
-    saveBindings: config.keybindings().templateOverlay.save,
-  });
+  const handleAction = (action: string | null): boolean => {
+    if (!action) return false;
+
+    if (action === 'template.close') {
+      session.closeTemplateOverlay();
+      return true;
+    }
+
+    if (action === 'template.tab.save') {
+      setTab('save');
+      return true;
+    }
+
+    if (action === 'template.tab.apply') {
+      setTab('apply');
+      return true;
+    }
+
+    if (tab() === 'apply') {
+      const count = templates().length;
+      switch (action) {
+        case 'template.list.down':
+          if (count > 0) {
+            setSelectedIndex((value) => Math.min(count - 1, value + 1));
+          }
+          return true;
+        case 'template.list.up':
+          if (count > 0) {
+            setSelectedIndex((value) => Math.max(0, value - 1));
+          }
+          return true;
+        case 'template.list.top':
+          setSelectedIndex(0);
+          return true;
+        case 'template.list.bottom':
+          if (count > 0) {
+            setSelectedIndex(count - 1);
+          }
+          return true;
+        case 'template.delete':
+          requestDeleteSelectedTemplate();
+          return true;
+        case 'template.apply':
+        case 'template.enter':
+          void applySelectedTemplate();
+          return true;
+        default:
+          break;
+      }
+    }
+
+    if (tab() === 'save') {
+      switch (action) {
+        case 'template.save.delete':
+          setSaveName((value) => value.slice(0, -1));
+          return true;
+        case 'template.save':
+        case 'template.enter':
+          void saveTemplate();
+          return true;
+        default:
+          break;
+      }
+    }
+
+    return false;
+  };
+
+  const handleInput = (event: KeyboardEvent): boolean => {
+    if (tab() !== 'save') return true;
+    const input = event.sequence ?? (event.key.length === 1 ? event.key : '');
+    const charCode = input.charCodeAt(0) ?? 0;
+    const isPrintable = input.length === 1 && charCode >= 32 && charCode < 127;
+    if (isPrintable && !event.ctrl && !event.alt && !event.meta) {
+      setSaveName((value) => value + input);
+      return true;
+    }
+    return true;
+  };
+
+  const isBareEscape = (event: KeyboardEvent) =>
+    event.key === 'escape' && !event.ctrl && !event.alt && !event.meta && !event.shift;
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    const bindings = tab() === 'apply'
+      ? config.keybindings().templateOverlay.apply
+      : config.keybindings().templateOverlay.save;
+    const keyEvent = {
+      key: event.key,
+      ctrl: event.ctrl,
+      alt: event.alt,
+      shift: event.shift,
+      meta: event.meta,
+    };
+
+    if (!vimEnabled()) {
+      const action = matchKeybinding(bindings, keyEvent);
+      if (handleAction(action)) return true;
+      return handleInput(event);
+    }
+
+    if (vimMode() === 'insert') {
+      if (event.key === 'escape' && !event.ctrl && !event.alt && !event.meta) {
+        setVimMode('normal');
+        vimHandler.reset();
+        return true;
+      }
+      const action = matchKeybinding(bindings, keyEvent);
+      if (handleAction(action)) return true;
+      return handleInput(event);
+    }
+
+    if (event.key === 'i' && !event.ctrl && !event.alt && !event.meta) {
+      setVimMode('insert');
+      vimHandler.reset();
+      return true;
+    }
+
+    const combo = eventToCombo(keyEvent);
+    const result = vimHandler.handleCombo(combo);
+    if (result.pending) return true;
+    if (handleAction(result.action)) return true;
+
+    const isBackspace = event.key === 'backspace';
+    const shouldMatchBindings = !isBackspace && (event.ctrl || event.alt || event.meta || event.key.length > 1);
+    if (shouldMatchBindings && !isBareEscape(event)) {
+      const action = matchKeybinding(bindings, keyEvent);
+      if (handleAction(action)) return true;
+    }
+
+    return true;
+  };
 
   useOverlayKeyboardHandler({
     overlay: 'templateOverlay',
     isActive: () => session.showTemplateOverlay,
     handler: handleKeyDown,
+  });
+
+  createEffect(() => {
+    if (!session.showTemplateOverlay) return;
+    if (vimEnabled()) {
+      setVimMode('normal');
+    }
+    vimHandler.reset();
+  });
+
+  createEffect(() => {
+    props.onVimModeChange?.(vimMode());
+  });
+
+  createEffect(() => {
+    const timeoutMs = config.config().keyboard.vimSequenceTimeoutMs;
+    vimHandler.reset();
+    vimHandler = createVimSequenceHandler({
+      timeoutMs,
+      sequences: [
+        { keys: ['j'], action: 'template.list.down' },
+        { keys: ['k'], action: 'template.list.up' },
+        { keys: ['g', 'g'], action: 'template.list.top' },
+        { keys: ['shift+g'], action: 'template.list.bottom' },
+        { keys: ['enter'], action: 'template.enter' },
+        { keys: ['d', 'd'], action: 'template.delete' },
+        { keys: ['q'], action: 'template.close' },
+      ],
+    });
   });
 
   const overlayWidth = () => Math.min(72, props.width - 4);
@@ -362,6 +523,10 @@ export function TemplateOverlay(props: TemplateOverlayProps) {
   );
 
   const applyHints = () => {
+    if (vimEnabled()) {
+      const modeHint = vimMode() === 'insert' ? 'esc:normal' : 'i:insert';
+      return `j/k:nav gg/G:jump enter:apply dd:del tab:save q:close ${modeHint}`;
+    }
     const bindings = config.keybindings().templateOverlay.apply;
     const nav = formatComboSet([
       ...getCombos(bindings, 'template.list.up'),
@@ -375,6 +540,10 @@ export function TemplateOverlay(props: TemplateOverlayProps) {
   };
 
   const saveHints = () => {
+    if (vimEnabled()) {
+      const modeHint = vimMode() === 'insert' ? 'esc:normal' : 'i:insert';
+      return `enter:save tab:apply q:close ${modeHint}`;
+    }
     const bindings = config.keybindings().templateOverlay.save;
     const apply = formatComboSet(getCombos(bindings, 'template.tab.apply'));
     const save = formatComboSet(getCombos(bindings, 'template.save'));
@@ -383,6 +552,9 @@ export function TemplateOverlay(props: TemplateOverlayProps) {
   };
 
   const emptyApplyHints = () => {
+    if (vimEnabled()) {
+      return 'tab:save q:close';
+    }
     const bindings = config.keybindings().templateOverlay.apply;
     const save = formatComboSet(getCombos(bindings, 'template.tab.save'));
     const close = formatComboSet(getCombos(bindings, 'template.close'));

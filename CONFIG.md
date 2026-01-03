@@ -49,6 +49,10 @@ searchAccentColor = "#FFAA00"
 [session]
 autoSaveIntervalMs = 30_000
 
+[keyboard]
+vimMode = "off"
+vimSequenceTimeoutMs = 1_000
+
 [keybindings]
 prefixKey = "ctrl+b"
 prefixTimeoutMs = 2_000
@@ -134,8 +138,6 @@ prefixTimeoutMs = 2_000
   [keybindings.commandPalette]
   down = "command.palette.down"
   up = "command.palette.up"
-  "ctrl+j" = "command.palette.down"
-  "ctrl+k" = "command.palette.up"
   enter = "command.palette.confirm"
   escape = "command.palette.close"
   backspace = "command.palette.delete"
@@ -144,9 +146,7 @@ prefixTimeoutMs = 2_000
 escape = "template.close"
 tab = "template.tab.save"
 down = "template.list.down"
-j = "template.list.down"
 up = "template.list.up"
-k = "template.list.up"
 enter = "template.apply"
 "ctrl+x" = "template.delete"
 "ctrl+d" = "template.delete"
@@ -159,9 +159,7 @@ backspace = "template.save.delete"
 
 [keybindings.aggregate.list]
 down = "aggregate.list.down"
-j = "aggregate.list.down"
 up = "aggregate.list.up"
-k = "aggregate.list.up"
 enter = "aggregate.list.preview"
 tab = "aggregate.list.jump"
 "alt+escape" = "aggregate.list.close"

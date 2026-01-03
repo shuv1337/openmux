@@ -4,6 +4,7 @@
  */
 
 import { formatComboSet, type ResolvedKeybindingMap, type ResolvedKeybindings } from '../../core/keybindings';
+import type { VimInputMode } from '../../core/vim-sequences';
 
 // Re-export borderStyleMap from Pane for convenience
 export { borderStyleMap } from '../Pane';
@@ -86,9 +87,16 @@ export function getHintsText(
   inSearchMode: boolean,
   previewMode: boolean,
   keybindings: ResolvedKeybindings,
-  showInactive: boolean
+  showInactive: boolean,
+  vimEnabled: boolean,
+  vimMode: VimInputMode
 ): string {
   const aggregateBindings = keybindings.aggregate;
+
+  if (vimEnabled && inSearchMode) {
+    const modeHint = vimMode === 'insert' ? 'esc:normal' : 'i:insert';
+    return `n/N:next/prev enter:confirm q:cancel ${modeHint}`;
+  }
 
   if (inSearchMode) {
     const confirm = formatComboSet(getCombos(aggregateBindings.search, 'aggregate.search.confirm'));
@@ -103,6 +111,15 @@ export function getHintsText(
     const search = formatComboSet(getCombos(aggregateBindings.preview, 'aggregate.preview.search'));
     const kill = formatComboSet(getCombos(aggregateBindings.preview, 'aggregate.kill'));
     return `${back}:back ${search}:search ${kill}:kill`;
+  }
+
+  if (vimEnabled) {
+    const jump = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.list.jump'));
+    const toggleScope = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.list.toggle.scope'));
+    const kill = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.kill'));
+    const scopeLabel = showInactive ? 'all' : 'active';
+    const modeHint = vimMode === 'insert' ? 'esc:normal' : 'i:filter';
+    return `j/k:nav gg/G:jump enter:preview ${jump}:jump ${toggleScope}:scope(${scopeLabel}) ${kill}:kill q:close ${modeHint}`;
   }
 
   const navCombos = [

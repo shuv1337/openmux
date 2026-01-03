@@ -8,10 +8,12 @@ import { useLayout } from '../contexts/LayoutContext';
 import { useKeyboardState } from '../contexts/KeyboardContext';
 import { useSession, useSessionState } from '../contexts/SessionContext';
 import type { KeyMode, WorkspaceId, LayoutMode } from '../core/types';
+import type { VimInputMode } from '../core/vim-sequences';
 
 interface StatusBarProps {
   width: number;
   showCommandPalette?: boolean;
+  overlayVimMode?: VimInputMode | null;
 }
 
 export function StatusBar(props: StatusBarProps) {
@@ -53,6 +55,11 @@ export function StatusBar(props: StatusBarProps) {
       {/* Right section: Mode and layout mode */}
       <box style={{ flexDirection: 'row', gap: 1 }}>
         <ModeIndicator mode={kbState.mode} />
+        <Show when={props.overlayVimMode}>
+          <text fg={props.overlayVimMode === 'insert' ? '#33CC66' : '#00AAFF'}>
+            {props.overlayVimMode === 'insert' ? '[INSERT]' : '[NORMAL]'}
+          </text>
+        </Show>
         <Show when={props.showCommandPalette}>
           <text fg={commandColor()}>[COMMAND]</text>
         </Show>

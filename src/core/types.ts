@@ -226,7 +226,8 @@ export type ConfirmationType =
   | 'kill_pty'
   | 'apply_template'
   | 'overwrite_template'
-  | 'delete_template';
+  | 'delete_template'
+  | 'delete_session';
 
 /**
  * Keyboard state

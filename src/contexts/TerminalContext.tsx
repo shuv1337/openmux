@@ -101,6 +101,8 @@ interface TerminalContextValue {
   isInitialized: boolean;
   /** Find which session owns a PTY (returns sessionId and paneId, or null if not found) */
   findSessionForPty: (ptyId: string) => { sessionId: string; paneId: string } | null;
+  /** Check if a PTY is currently tracked */
+  isPtyActive: (ptyId: string) => boolean;
 }
 
 const TerminalContext = createContext<TerminalContextValue | null>(null);
@@ -190,6 +192,9 @@ export function TerminalProvider(props: TerminalProviderProps) {
     ptyToSessionMap,
     getFocusedPtyId,
   });
+
+  const isPtyActive = (ptyId: string): boolean =>
+    ptyToPaneMap.has(ptyId) || ptyToSessionMap.has(ptyId);
 
   // Initialize ghostty-vt and detect host terminal capabilities on mount
   onMount(() => {
@@ -435,6 +440,7 @@ export function TerminalProvider(props: TerminalProviderProps) {
     getTerminalStateSync: cacheAccessors.getTerminalStateSync,
     get isInitialized() { return isInitialized(); },
     findSessionForPty: cacheAccessors.findSessionForPty,
+    isPtyActive,
   };
 
   return (

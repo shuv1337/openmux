@@ -8,6 +8,12 @@ import { routeKeyboardEventSync } from '../../effect/bridge';
 import type { ResolvedKeybindingMap } from '../../core/keybindings';
 import type { ITerminalEmulator } from '../../terminal/emulator-interface';
 import type { SearchState } from '../../contexts/search/types';
+import type { VimInputMode } from '../../core/vim-sequences';
+
+type VimSequenceHandler = {
+  handleCombo: (combo: string) => { action: string | null; pending: boolean };
+  reset: () => void;
+};
 
 export function setupKeyboardRouting(params: {
   config: { keybindings: () => { search: ResolvedKeybindingMap } };
@@ -21,6 +27,10 @@ export function setupKeyboardRouting(params: {
   nextMatch: () => void;
   prevMatch: () => void;
   getSearchState: () => SearchState | null;
+  getVimEnabled: () => boolean;
+  getSearchVimMode: () => VimInputMode;
+  setSearchVimMode: (mode: VimInputMode) => void;
+  getSearchVimHandler: () => VimSequenceHandler;
   clearAllSelections: () => void;
   getFocusedEmulator: () => ITerminalEmulator | null;
   writeToFocused: (data: string) => void;
@@ -35,6 +45,10 @@ export function setupKeyboardRouting(params: {
     nextMatch,
     prevMatch,
     getSearchState,
+    getVimEnabled,
+    getSearchVimMode,
+    setSearchVimMode,
+    getSearchVimHandler,
     clearAllSelections,
     getFocusedEmulator,
     writeToFocused,
@@ -77,6 +91,10 @@ export function setupKeyboardRouting(params: {
           prevMatch,
           getSearchState,
           keybindings: config.keybindings().search,
+          vimEnabled: getVimEnabled,
+          getVimMode: getSearchVimMode,
+          setVimMode: setSearchVimMode,
+          getVimHandler: getSearchVimHandler,
         });
         return;
       }
