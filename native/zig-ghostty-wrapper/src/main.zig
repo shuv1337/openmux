@@ -77,5 +77,5 @@ comptime {
 }
 
 test {
-    _ = @import("tests.zig");
+    _ = @import("tests/main.zig");
 }

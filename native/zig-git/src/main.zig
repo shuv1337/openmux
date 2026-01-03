@@ -136,5 +136,5 @@ pub export fn omx_git_status_cancel(request_id: c_int) void {
 }
 
 test {
-    _ = @import("tests.zig");
+    _ = @import("tests/main.zig");
 }
