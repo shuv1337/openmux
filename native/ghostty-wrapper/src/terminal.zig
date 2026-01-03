@@ -632,7 +632,7 @@ pub fn newWithConfig(
     };
 
     // Initialize response buffer
-    wrapper.response_buffer = .{};
+    wrapper.response_buffer = std.ArrayList(u8).empty;
 
     // Initialize handler with references to terminal and response buffer
     wrapper.handler = ResponseHandler.init(alloc, &wrapper.terminal, &wrapper.response_buffer);
