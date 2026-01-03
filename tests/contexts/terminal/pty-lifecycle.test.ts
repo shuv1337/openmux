@@ -57,7 +57,8 @@ describe("createPtyLifecycleHandlers", () => {
     handlers.handlePtyExit("pty-1", "pane-1");
 
     expect(closePaneById).toHaveBeenCalledWith("pane-1");
-    expect(vi.mocked(destroyPty)).toHaveBeenCalledWith("pty-1");
+    expect(vi.mocked(clearPtyCaches)).toHaveBeenCalledWith("pty-1", ptyCaches);
+    expect(vi.mocked(destroyPty)).not.toHaveBeenCalled();
   });
 
   test("creates an exit subscription before deferring cache wiring", async () => {

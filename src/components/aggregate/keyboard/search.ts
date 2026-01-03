@@ -1,0 +1,114 @@
+import type { KeyboardEvent } from '../../../effect/bridge';
+import { eventToCombo, matchKeybinding } from '../../../core/keybindings';
+import type { AggregateKeyboardDeps } from './types';
+import { isBareEscape } from './helpers';
+
+export function createAggregateSearchHandler(deps: AggregateKeyboardDeps) {
+  const handleSearchAction = (action: string | null): boolean => {
+    if (!action) return false;
+
+    if (action === 'aggregate.search.cancel') {
+      deps.exitSearchMode(true);
+      deps.setInSearchMode(false);
+      return true;
+    }
+
+    if (action === 'aggregate.search.confirm') {
+      deps.exitSearchMode(false);
+      deps.setInSearchMode(false);
+      return true;
+    }
+
+    const currentSearchState = deps.getSearchState();
+    if (!currentSearchState) {
+      return true;
+    }
+
+    if (action === 'aggregate.search.next') {
+      deps.nextMatch();
+      return true;
+    }
+
+    if (action === 'aggregate.search.prev') {
+      deps.prevMatch();
+      return true;
+    }
+
+    if (action === 'aggregate.search.delete') {
+      deps.setSearchQuery(currentSearchState.query.slice(0, -1));
+      return true;
+    }
+
+    return false;
+  };
+
+  const handleSearchInput = (event: KeyboardEvent): boolean => {
+    const currentSearchState = deps.getSearchState();
+    if (!currentSearchState) {
+      return true;
+    }
+
+    const searchCharCode = event.sequence?.charCodeAt(0) ?? 0;
+    const isPrintable = event.sequence?.length === 1 && searchCharCode >= 32 && searchCharCode < 127;
+    if (isPrintable && !event.ctrl && !event.alt && !event.meta) {
+      deps.setSearchQuery(currentSearchState.query + event.sequence);
+      return true;
+    }
+
+    return true;
+  };
+
+  const handleSearchModeKeys = (event: KeyboardEvent): boolean => {
+    if (event.eventType === 'release') {
+      return true;
+    }
+
+    const keybindings = deps.getKeybindings();
+    const keyEvent = {
+      key: event.key,
+      ctrl: event.ctrl,
+      alt: event.alt,
+      shift: event.shift,
+      meta: event.meta,
+    };
+
+    if (!deps.getVimEnabled()) {
+      const action = matchKeybinding(keybindings.aggregate.search, keyEvent);
+      if (handleSearchAction(action)) return true;
+      return handleSearchInput(event);
+    }
+
+    if (deps.getVimMode() === 'insert') {
+      if (isBareEscape(event)) {
+        deps.setVimMode('normal');
+        deps.getVimHandlers().search.reset();
+        return true;
+      }
+      const action = matchKeybinding(keybindings.aggregate.search, keyEvent);
+      if (handleSearchAction(action)) return true;
+      return handleSearchInput(event);
+    }
+
+    if (event.key === 'i' && !event.ctrl && !event.alt && !event.meta) {
+      deps.setVimMode('insert');
+      deps.getVimHandlers().search.reset();
+      return true;
+    }
+
+    const combo = eventToCombo(keyEvent);
+    const result = deps.getVimHandlers().search.handleCombo(combo);
+    if (result.pending) return true;
+    if (handleSearchAction(result.action)) return true;
+
+    const isBackspace = event.key === 'backspace';
+    const shouldMatchBindings = !isBackspace && (event.ctrl || event.alt || event.meta || event.key.length > 1);
+    if (shouldMatchBindings && !isBareEscape(event)) {
+      const fallbackAction = matchKeybinding(keybindings.aggregate.search, keyEvent);
+      if (handleSearchAction(fallbackAction)) return true;
+    }
+
+    return true;
+  };
+
+  return { handleSearchModeKeys };
+}

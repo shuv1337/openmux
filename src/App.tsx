@@ -2,7 +2,7 @@
  * Main App component for openmux
  */
 
-import { createSignal, createEffect, onCleanup, on, onMount } from 'solid-js';
+import { createSignal, createEffect, onCleanup } from 'solid-js';
 import { useTerminalDimensions, useRenderer } from '@opentui/solid';
 import {
   ConfigProvider,
@@ -27,7 +27,7 @@ import { SessionBridge } from './components/SessionBridge';
 import { getFocusedPtyId } from './core/workspace-utils';
 import { DEFAULT_COMMAND_PALETTE_COMMANDS, type CommandPaletteCommand } from './core/command-palette';
 import { setKeyboardVimMode, type KeyboardVimMode } from './core/user-config';
-import { createVimSequenceHandler, type VimInputMode } from './core/vim-sequences';
+import { type VimInputMode } from './core/vim-sequences';
 import { onShimDetached, shutdownShim } from './effect/bridge';
 import { disposeRuntime } from './effect/runtime';
 import {
@@ -35,11 +35,10 @@ import {
   createPaneResizeHandlers,
   createPasteHandler,
 } from './components/app';
-import { setFocusedPty, setClipboardPasteHandler } from './terminal/focused-pty-registry';
-import { readFromClipboard, sendPtyFocusEvent } from './effect/bridge';
+import { setClipboardPasteHandler } from './terminal/focused-pty-registry';
+import { readFromClipboard } from './effect/bridge';
 import { handleNormalModeAction } from './contexts/keyboard/handlers';
 import { createCommandPaletteState } from './components/app/command-palette-state';
-import { deferNextTick } from './core/scheduling';
 import { setupKeyboardRouting } from './components/app/keyboard-routing';
 import { usePtyCreation } from './components/app/pty-creation';
 import { AppOverlays } from './components/app/AppOverlays';
@@ -49,6 +48,11 @@ import { createKittyGraphicsBridge } from './components/app/kitty-graphics-bridg
 import { createCellMetricsGetter, createPixelResizeTracker } from './components/app/pixel-metrics';
 import { createExitHandlers } from './components/app/exit-handlers';
 import { setupClipboardAndShimBridge } from './components/app/clipboard-bridge';
+import { setupFocusedPtyRegistry, setupHostFocusTracking } from './components/app/focus-tracking';
+import { setupOverlayClipRects } from './components/app/overlay-clips';
+import { createSearchVimState } from './components/app/search-vim';
+import { createOverlayVimMode } from './components/app/overlay-vim-mode';
+import { setupAppLayoutEffects } from './components/app/layout-effects';
 import {
   getCommandPaletteRect,
   getConfirmationRect,
@@ -57,7 +61,6 @@ import {
   getSessionPickerRect,
   getTemplateOverlayRect,
 } from './components/app/overlay-rects';
-import type { Rectangle } from './core/types';
 
 function AppContent() {
   const config = useConfig();
@@ -88,16 +91,6 @@ function AppContent() {
   const keyboardState = useKeyboardState();
   const { enterConfirmMode, exitConfirmMode, exitSearchMode: keyboardExitSearchMode } = keyboardState;
   const renderer = useRenderer();
-
-  const [isHostFocused, setIsHostFocused] = createSignal<boolean | null>(null);
-
-  const FOCUS_IN_SEQUENCE = '\x1b[I';
-  const FOCUS_OUT_SEQUENCE = '\x1b[O';
-
-  const sendFocusEvent = (ptyId: string, focused: boolean) => {
-    if (!isPtyActive(ptyId)) return;
-    void sendPtyFocusEvent(ptyId, focused);
-  };
 
   const { commandPaletteState, setCommandPaletteState, toggleCommandPalette } = createCommandPaletteState();
   const [commandPaletteVimMode, setCommandPaletteVimMode] = createSignal<VimInputMode>('normal');
@@ -146,25 +139,25 @@ function AppContent() {
   // Track pending kill PTY ID for aggregate view kill confirmation
   const [pendingKillPtyId, setPendingKillPtyId] = createSignal<string | null>(null);
 
-  createEffect(() => {
-    const w = width();
-    const h = height();
-    const rects: Rectangle[] = [];
-    const pushRect = (rect: Rectangle | null) => {
-      if (rect && rect.width > 0 && rect.height > 0) {
-        rects.push(rect);
-      }
-    };
-
-    pushRect(getSessionPickerRect(w, h, sessionState.showSessionPicker, session.filteredSessions.length));
-    pushRect(getTemplateOverlayRect(w, h, session.showTemplateOverlay, session.templates.length, layout.state.workspaces));
-    pushRect(getCommandPaletteRect(w, h, commandPaletteState, DEFAULT_COMMAND_PALETTE_COMMANDS));
-    pushRect(getSearchOverlayRect(w, h, Boolean(search.searchState)));
-    pushRect(getConfirmationRect(w, h, confirmationState().visible));
-    pushRect(getCopyNotificationRect(w, h, selection.copyNotification, aggregateState, layout.panes));
-
-    kittyRenderer.setClipRects(rects);
-    kittyRenderer.setVisibleLayers(aggregateState.showAggregateView ? ['overlay'] : ['base']);
+  setupOverlayClipRects({
+    getWidth: width,
+    getHeight: height,
+    sessionState,
+    session,
+    layout,
+    search,
+    selection,
+    aggregateState,
+    commandPaletteState,
+    commandPaletteCommands: DEFAULT_COMMAND_PALETTE_COMMANDS,
+    confirmationVisible: () => confirmationState().visible,
+    kittyRenderer,
+    getSessionPickerRect,
+    getTemplateOverlayRect,
+    getCommandPaletteRect,
+    getSearchOverlayRect,
+    getConfirmationRect,
+    getCopyNotificationRect,
   });
 
   const templatePending = createTemplatePendingActions();
@@ -218,79 +211,11 @@ function AppContent() {
     handleShimDetached: exitHandlers.handleShimDetached,
   });
 
-  onMount(() => {
-    let focusBuffer = '';
-    const maxFocusBuffer = 8;
-
-    const handleFocusSequence = (sequence: string) => {
-      if (!sequence) return false;
-
-      if (sequence === FOCUS_IN_SEQUENCE) {
-        setIsHostFocused(true);
-        return true;
-      }
-      if (sequence === FOCUS_OUT_SEQUENCE) {
-        setIsHostFocused(false);
-        return true;
-      }
-
-      focusBuffer = `${focusBuffer}${sequence}`;
-      const lastIn = focusBuffer.lastIndexOf(FOCUS_IN_SEQUENCE);
-      const lastOut = focusBuffer.lastIndexOf(FOCUS_OUT_SEQUENCE);
-
-      if (lastIn !== -1 || lastOut !== -1) {
-        setIsHostFocused(lastIn > lastOut);
-        focusBuffer = focusBuffer.slice(-2);
-        return false;
-      }
-
-      if (focusBuffer.length > maxFocusBuffer) {
-        focusBuffer = focusBuffer.slice(-maxFocusBuffer);
-      }
-
-      return false;
-    };
-
-    const rendererAny = renderer as any;
-    if (typeof rendererAny.prependInputHandler === 'function') {
-      rendererAny.prependInputHandler(handleFocusSequence);
-    }
-
-    onCleanup(() => {
-      if (typeof rendererAny.removeInputHandler === 'function') {
-        rendererAny.removeInputHandler(handleFocusSequence);
-      }
-    });
-  });
-
-  // Keep the focused PTY registry in sync with the current workspace focus
-  createEffect(() => {
-    const focusedPtyId = getFocusedPtyId(layout.activeWorkspace);
-    setFocusedPty(focusedPtyId ?? null);
-  });
-
-  let lastEffectiveFocusedPtyId: string | undefined;
-  createEffect(() => {
-    const focusedPtyId = getFocusedPtyId(layout.activeWorkspace);
-    const hostFocused = isHostFocused();
-    if (hostFocused === null) {
-      return;
-    }
-
-    const effectiveFocusedPtyId = hostFocused ? focusedPtyId : undefined;
-
-    if (effectiveFocusedPtyId === lastEffectiveFocusedPtyId) {
-      return;
-    }
-
-    if (lastEffectiveFocusedPtyId) {
-      sendFocusEvent(lastEffectiveFocusedPtyId, false);
-    }
-    if (effectiveFocusedPtyId) {
-      sendFocusEvent(effectiveFocusedPtyId, true);
-    }
-
-    lastEffectiveFocusedPtyId = effectiveFocusedPtyId;
+  setupFocusedPtyRegistry(() => getFocusedPtyId(layout.activeWorkspace));
+  setupHostFocusTracking({
+    renderer,
+    isPtyActive,
+    getFocusedPtyId: () => getFocusedPtyId(layout.activeWorkspace),
   });
 
   const { handleNewPane, handleSplitPane } = usePtyCreation({
@@ -371,38 +296,7 @@ function AppContent() {
     config.reloadConfig();
   };
 
-  const getSearchVimMode = () => search.vimMode;
-  let searchVimHandler = createVimSequenceHandler({
-    timeoutMs: config.config().keyboard.vimSequenceTimeoutMs,
-    sequences: [
-      { keys: ['n'], action: 'search.next' },
-      { keys: ['shift+n'], action: 'search.prev' },
-      { keys: ['enter'], action: 'search.confirm' },
-      { keys: ['q'], action: 'search.cancel' },
-    ],
-  });
-
-  createEffect(() => {
-    const timeoutMs = config.config().keyboard.vimSequenceTimeoutMs;
-    searchVimHandler.reset();
-    searchVimHandler = createVimSequenceHandler({
-      timeoutMs,
-      sequences: [
-        { keys: ['n'], action: 'search.next' },
-        { keys: ['shift+n'], action: 'search.prev' },
-        { keys: ['enter'], action: 'search.confirm' },
-        { keys: ['q'], action: 'search.cancel' },
-      ],
-    });
-  });
-
-  createEffect(() => {
-    if (!search.searchState) return;
-    if (config.config().keyboard.vimMode === 'overlays') {
-      search.setVimMode('normal');
-    }
-    searchVimHandler.reset();
-  });
+  const searchVimState = createSearchVimState({ config, search });
 
   // Search mode enter handler
   const handleEnterSearch = async () => {
@@ -450,18 +344,20 @@ function AppContent() {
     executeCommandAction(command.action);
   };
 
-  const overlayVimMode = () => {
-    if (config.config().keyboard.vimMode !== 'overlays') return null;
-    if (confirmationState().visible) return null;
-    if (commandPaletteState.show) return commandPaletteVimMode();
-    if (session.showTemplateOverlay) return templateOverlayVimMode();
-    if (sessionState.showSessionPicker) return sessionPickerVimMode();
-    if (aggregateState.showAggregateView) return aggregateVimMode();
-    if (keyboardState.state.mode === 'search' && search.searchState) {
-      return search.vimMode;
-    }
-    return null;
-  };
+  const overlayVimMode = createOverlayVimMode({
+    config,
+    confirmationVisible: () => confirmationState().visible,
+    commandPaletteState,
+    session,
+    sessionState,
+    aggregateState,
+    keyboardState,
+    search,
+    commandPaletteVimMode,
+    sessionPickerVimMode,
+    templateOverlayVimMode,
+    aggregateVimMode,
+  });
 
 
   // Handle bracketed paste from host terminal (Cmd+V sends this)
@@ -490,66 +386,19 @@ function AppContent() {
     onToggleVimMode: handleToggleVimMode,
   });
 
-  // Update viewport when terminal resizes
-  createEffect(() => {
-    const w = width();
-    const h = height();
-    if (w > 0 && h > 0) {
-      // Reserve 1 row for status bar
-      setViewport({ x: 0, y: 0, width: w, height: h - 1 });
-    }
+  setupAppLayoutEffects({
+    width,
+    height,
+    setViewport,
+    sessionState,
+    hasAnyPanes,
+    newPane,
+    ensurePixelResize,
+    layout,
+    terminal,
+    paneResizeHandlers,
+    aggregateState,
   });
-
-  // Create first pane only if session loaded with no panes
-  // Using on() for explicit dependency - only runs when sessionState.initialized changes
-  createEffect(
-    on(
-      () => sessionState.initialized,
-      (initialized) => {
-        // Wait for session initialization
-        if (!initialized) return;
-
-        // Only create a pane if no panes exist after session load
-        if (!hasAnyPanes()) {
-          newPane('shell');
-        }
-        deferNextTick(() => {
-          ensurePixelResize();
-        });
-      },
-      { defer: true } // Skip initial run, wait for initialized to become true
-    )
-  );
-
-  // Resize PTYs and update positions when pane geometry or terminal size changes
-  // Use layoutGeometryVersion (geometry changes) and terminal dimensions instead of panes
-  // This avoids re-running on non-geometry changes like ptyId/title updates
-  createEffect(() => {
-    if (!terminal.isInitialized) return;
-    // Track geometry changes (layout mode, stacked focus, zoom) and viewport resize
-    layout.layoutGeometryVersion;
-    const _width = width();
-    const _height = height();
-    if (_width <= 0 || _height <= 0) return;
-    // Schedule batched resize to avoid blocking animations
-    paneResizeHandlers.scheduleResizeAllPanes();
-  });
-
-  // Restore PTY sizes when aggregate view closes
-  // The preview resizes PTYs to preview dimensions, so we need to restore pane dimensions
-  // Using on() for explicit dependency - only runs when showAggregateView changes
-  createEffect(
-    on(
-      () => aggregateState.showAggregateView,
-      (isOpen, wasOpen) => {
-        // Only trigger resize when closing (was open, now closed)
-        if (wasOpen && !isOpen && terminal.isInitialized) {
-          paneResizeHandlers.restorePaneSizes();
-        }
-      },
-      { defer: true } // Skip initial run - we only care about transitions
-    )
-  );
 
   setupKeyboardRouting({
     config,
@@ -561,9 +410,9 @@ function AppContent() {
     prevMatch,
     getSearchState: () => search.searchState,
     getVimEnabled: () => config.config().keyboard.vimMode === 'overlays',
-    getSearchVimMode,
-    setSearchVimMode: search.setVimMode,
-    getSearchVimHandler: () => searchVimHandler,
+    getSearchVimMode: searchVimState.getSearchVimMode,
+    setSearchVimMode: searchVimState.setSearchVimMode,
+    getSearchVimHandler: searchVimState.getSearchVimHandler,
     clearAllSelections,
     getFocusedEmulator,
     writeToFocused,

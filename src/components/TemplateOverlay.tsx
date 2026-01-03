@@ -2,31 +2,24 @@
  * TemplateOverlay - modal overlay for applying and saving layout templates
  */
 
-import { Show, For, createEffect, createMemo, createSignal } from 'solid-js';
+import { createEffect, createMemo, createSignal } from 'solid-js';
 import { useSession } from '../contexts/SessionContext';
 import { useLayout } from '../contexts/LayoutContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTerminal } from '../contexts/TerminalContext';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
-import { eventToCombo, formatComboSet, matchKeybinding, type ResolvedKeybindingMap } from '../core/keybindings';
-import type { TemplateSession } from '../effect/models';
+import { eventToCombo, matchKeybinding } from '../core/keybindings';
 import type { KeyboardEvent } from '../effect/bridge';
 import { normalizeTemplateId } from '../core/template-utils';
 import type { TemplateTabMode } from './template-overlay/keyboard';
-import {
-  abbreviatePath,
-  fitLabel,
-  formatRelativeTime,
-  truncate,
-} from './template-overlay/formatting';
+import { abbreviatePath } from './template-overlay/formatting';
 import {
   buildSaveSummaryLines,
   buildTemplateSummary,
-  getTemplateStats,
-  type SaveSummaryLine,
 } from './template-overlay/summary';
 import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
+import { TemplateOverlayView } from './template-overlay/TemplateOverlayView';
 
 interface TemplateOverlayProps {
   width: number;
@@ -35,10 +28,6 @@ interface TemplateOverlayProps {
   onRequestOverwriteConfirm: (overwriteTemplate: () => Promise<void>) => void;
   onRequestDeleteConfirm: (deleteTemplate: () => Promise<void>) => void;
   onVimModeChange?: (mode: VimInputMode) => void;
-}
-
-function getCombos(bindings: ResolvedKeybindingMap, action: string): string[] {
-  return bindings.byAction.get(action) ?? [];
 }
 
 export function TemplateOverlay(props: TemplateOverlayProps) {
@@ -409,7 +398,7 @@ export function TemplateOverlay(props: TemplateOverlayProps) {
   const saveIndentWidth = saveIndent.length;
   const listRows = () => Math.max(1, Math.min(templates().length, maxListRows()));
   const maxSaveSummaryLines = () => Math.max(0, props.height - 13);
-  const saveSummaryLines = createMemo<SaveSummaryLine[]>(() => {
+  const saveSummaryLines = createMemo(() => {
     const summary = currentSummary();
     return buildSaveSummaryLines({
       summary,
@@ -460,202 +449,30 @@ export function TemplateOverlay(props: TemplateOverlayProps) {
     });
     return Math.max(1, maxLen);
   });
-
-  const renderSaveLine = (line: SaveSummaryLine) => {
-    const maxWidth = Math.max(1, overlayWidth() - 4);
-    if (line.type === 'text') {
-      return (
-        <box style={{ flexDirection: 'row', height: 1 }}>
-          <text fg="#888888">
-            {truncate(`${saveIndent}${line.value}`, maxWidth)}
-          </text>
-        </box>
-      );
-    }
-
-    const prefix = `${saveIndent}${line.prefix}`;
-    const suffix = ` [${line.cwdTail}]`;
-    const available = maxWidth - prefix.length - suffix.length;
-    if (available <= 0) {
-      const fallback = `${prefix}${line.label}${suffix}`;
-      return (
-        <box style={{ flexDirection: 'row', height: 1 }}>
-          <text fg="#888888">{truncate(fallback, maxWidth)}</text>
-        </box>
-      );
-    }
-
-    const labelWidth = Math.min(paneLabelWidth(), available);
-    const labelText = fitLabel(line.label, labelWidth);
-    return (
-      <box style={{ flexDirection: 'row', height: 1 }}>
-        <text fg="#888888">{prefix}</text>
-        <text fg={line.hasProcess ? '#CCCCCC' : '#888888'}>{labelText}</text>
-        <text fg="#888888">{suffix}</text>
-      </box>
-    );
-  };
-
-  const renderTemplateRow = (template: TemplateSession, index: number) => {
-    const selected = index === selectedIndex();
-    const maxWidth = Math.max(1, overlayWidth() - 4);
-    const stats = getTemplateStats(template);
-    const ws = `${stats.workspaceCount}ws`.padEnd(4);
-    const panes = `${stats.paneCount}p`.padEnd(3);
-    const timeWidth = Math.min(12, Math.max(8, maxWidth - 20));
-    const time = truncate(formatRelativeTime(template.createdAt), timeWidth);
-    const nameWidth = Math.max(1, Math.min(24, maxWidth - (12 + timeWidth)));
-    const name = truncate(template.name, nameWidth);
-    const line = `  ${name} ${ws} ${panes} ${time}`;
-    const color = selected ? '#FFFFFF' : '#CCCCCC';
-    const bg = selected ? '#334455' : undefined;
-    return (
-      <text fg={color} bg={bg}>
-        {truncate(line, maxWidth)}
-      </text>
-    );
-  };
-
-  const renderTab = (label: string, active: boolean) => (
-    <text fg={active ? '#FFFFFF' : '#888888'} bg={active ? '#334455' : undefined}>
-      {` ${label} `}
-    </text>
-  );
-
-  const applyHints = () => {
-    if (vimEnabled()) {
-      const modeHint = vimMode() === 'insert' ? 'esc:normal' : 'i:insert';
-      return `j/k:nav gg/G:jump enter:apply dd:del tab:save q:close ${modeHint}`;
-    }
-    const bindings = config.keybindings().templateOverlay.apply;
-    const nav = formatComboSet([
-      ...getCombos(bindings, 'template.list.up'),
-      ...getCombos(bindings, 'template.list.down'),
-    ]);
-    const apply = formatComboSet(getCombos(bindings, 'template.apply'));
-    const remove = formatComboSet(getCombos(bindings, 'template.delete'));
-    const save = formatComboSet(getCombos(bindings, 'template.tab.save'));
-    const close = formatComboSet(getCombos(bindings, 'template.close'));
-    return `${nav}:nav ${apply}:apply ${remove}:delete ${save}:save ${close}:close`;
-  };
-
-  const saveHints = () => {
-    if (vimEnabled()) {
-      const modeHint = vimMode() === 'insert' ? 'esc:normal' : 'i:insert';
-      return `enter:save tab:apply q:close ${modeHint}`;
-    }
-    const bindings = config.keybindings().templateOverlay.save;
-    const apply = formatComboSet(getCombos(bindings, 'template.tab.apply'));
-    const save = formatComboSet(getCombos(bindings, 'template.save'));
-    const close = formatComboSet(getCombos(bindings, 'template.close'));
-    return `${apply}:apply ${save}:save ${close}:close`;
-  };
-
-  const emptyApplyHints = () => {
-    if (vimEnabled()) {
-      return 'tab:save q:close';
-    }
-    const bindings = config.keybindings().templateOverlay.apply;
-    const save = formatComboSet(getCombos(bindings, 'template.tab.save'));
-    const close = formatComboSet(getCombos(bindings, 'template.close'));
-    return `${save}:save ${close}:close`;
-  };
-
   return (
-    <Show when={session.showTemplateOverlay}>
-      <box
-        style={{
-          position: 'absolute',
-          left: overlayX(),
-          top: overlayY(),
-          width: overlayWidth(),
-          height: overlayHeight(),
-          border: true,
-          borderStyle: 'rounded',
-          borderColor: accentColor(),
-          paddingLeft: 1,
-          paddingRight: 1,
-          zIndex: 120,
-        }}
-        backgroundColor="#1a1a1a"
-        title=" Templates "
-        titleAlignment="center"
-      >
-        <box style={{ flexDirection: 'column' }}>
-          <box style={{ flexDirection: 'row', height: 1 }}>
-            {renderTab('Apply', tab() === 'apply')}
-            <text fg="#444444">{'  '}</text>
-            {renderTab('Save', tab() === 'save')}
-          </box>
-
-          <box style={{ height: 1 }}>
-            <text fg="#444444">{'─'.repeat(overlayWidth() - 4)}</text>
-          </box>
-
-          <Show
-            when={tab() === 'apply'}
-            fallback={
-              <box style={{ flexDirection: 'column' }}>
-                <box style={{ height: 1, flexDirection: 'row' }}>
-                  <text fg="#888888">{saveIndent}Name: </text>
-                  <text fg="#FFFFFF">
-                    {truncate(
-                      `${saveName()}_`,
-                      Math.max(1, overlayWidth() - 4 - saveIndentWidth - 'Name: '.length)
-                    )}
-                  </text>
-                </box>
-                <For each={visibleSaveSummaryLines()}>
-                  {(line) => (
-                    renderSaveLine(line)
-                  )}
-                </For>
-                <Show when={saveSummaryTruncated()}>
-                  <box style={{ height: 1 }}>
-                    <text fg="#666666">...</text>
-                  </box>
-                </Show>
-                <box style={{ height: 1 }}>
-                  <text fg="#444444">{'─'.repeat(overlayWidth() - 4)}</text>
-                </box>
-                <box style={{ height: 1 }}>
-                  <text fg="#666666">
-                    {error() ?? saveHints()}
-                  </text>
-                </box>
-              </box>
-            }
-          >
-            <Show
-              when={templates().length > 0}
-              fallback={
-                <box style={{ height: 1 }}>
-                  <text fg="#666666">  No templates saved</text>
-                </box>
-              }
-            >
-              <For each={visibleTemplates()}>
-                {(template, index) => (
-                  <box style={{ height: 1 }}>
-                    {renderTemplateRow(template, index() + listOffset())}
-                  </box>
-                )}
-              </For>
-            </Show>
-
-            <box style={{ height: 1 }}>
-              <text fg="#444444">{'─'.repeat(overlayWidth() - 4)}</text>
-            </box>
-            <box style={{ height: 1 }}>
-              <text fg="#666666">
-                {templates().length === 0
-                  ? emptyApplyHints()
-                  : applyHints()}
-              </text>
-            </box>
-          </Show>
-        </box>
-      </box>
-    </Show>
+    <TemplateOverlayView
+      show={session.showTemplateOverlay}
+      tab={tab()}
+      overlayWidth={overlayWidth()}
+      overlayHeight={overlayHeight()}
+      overlayX={overlayX()}
+      overlayY={overlayY()}
+      accentColor={accentColor()}
+      templates={templates()}
+      visibleTemplates={visibleTemplates()}
+      listOffset={listOffset()}
+      selectedIndex={selectedIndex()}
+      saveIndent={saveIndent}
+      saveIndentWidth={saveIndentWidth}
+      saveName={saveName()}
+      error={error()}
+      paneLabelWidth={paneLabelWidth()}
+      visibleSaveSummaryLines={visibleSaveSummaryLines()}
+      saveSummaryTruncated={saveSummaryTruncated()}
+      vimEnabled={vimEnabled()}
+      vimMode={vimMode()}
+      applyBindings={config.keybindings().templateOverlay.apply}
+      saveBindings={config.keybindings().templateOverlay.save}
+    />
   );
 }
