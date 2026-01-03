@@ -1,0 +1,264 @@
+import { Buffer } from 'buffer';
+
+import type { TerminalScrollState, UnifiedTerminalUpdate } from '../../core/types';
+import type { SerializedDirtyUpdate } from '../../terminal/emulator-interface';
+import { getFocusedPtyId } from '../../terminal/focused-pty-registry';
+import { getHostFocusState } from '../../terminal/host-focus';
+import { sendDesktopNotification, sendMacOsNotification } from '../../terminal/desktop-notifications';
+import { unpackDirtyUpdate } from '../../terminal/cell-serialization';
+import type { DesktopNotification } from '../../terminal/command-parser';
+import { bufferToArrayBuffer } from './utils';
+import {
+  handlePtyExit,
+  handlePtyLifecycle,
+  handlePtyTitle,
+  handlePtyKittyTransmit,
+  handlePtyKittyUpdate,
+  handleUnifiedUpdate,
+} from './state';
+import type { ShimHeader } from '../protocol';
+
+export type FrameHandlerDeps = {
+  onResponse: (header: ShimHeader, payloads: Buffer[]) => boolean;
+  onDetached: () => void;
+};
+
+function buildPackedUpdate(header: ShimHeader, payloads: Buffer[]): SerializedDirtyUpdate | null {
+  const packedMeta = header.packed as {
+    cursor: { x: number; y: number; visible: boolean };
+    cols: number;
+    rows: number;
+    scrollbackLength: number;
+    isFull: boolean;
+    alternateScreen: boolean;
+    mouseTracking: boolean;
+    cursorKeyMode: number;
+    kittyKeyboardFlags?: number;
+    inBandResize: boolean;
+  } | undefined;
+
+  if (!packedMeta) {
+    return null;
+  }
+
+  const dirtyRowIndices = new Uint16Array(bufferToArrayBuffer(payloads[0] ?? Buffer.alloc(0)));
+  const dirtyRowData = bufferToArrayBuffer(payloads[1] ?? Buffer.alloc(0));
+  const fullStateBuffer = payloads[2] ? bufferToArrayBuffer(payloads[2]) : undefined;
+
+  return {
+    dirtyRowIndices,
+    dirtyRowData,
+    fullStateData: fullStateBuffer,
+    cursor: packedMeta.cursor,
+    cols: packedMeta.cols,
+    rows: packedMeta.rows,
+    scrollbackLength: packedMeta.scrollbackLength,
+    isFull: packedMeta.isFull,
+    alternateScreen: packedMeta.alternateScreen,
+    mouseTracking: packedMeta.mouseTracking,
+    cursorKeyMode: packedMeta.cursorKeyMode as 0 | 1,
+    kittyKeyboardFlags: packedMeta.kittyKeyboardFlags ?? 0,
+    inBandResize: packedMeta.inBandResize,
+  };
+}
+
+function readBoolEnv(name: string): boolean {
+  const raw = (process.env[name] ?? '').toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'on';
+}
+
+export function handlePtyNotification(
+  params: {
+    notification: DesktopNotification;
+    subtitle?: string;
+    ptyId?: string;
+    hostFocused: boolean | null;
+    focusedPtyId: string | null;
+    allowFocusedPaneOsc: boolean;
+  },
+  deps: {
+    sendMacOsNotification: (args: { title: string; subtitle?: string; body: string }) => boolean;
+    sendDesktopNotification: (args: { notification: DesktopNotification; subtitle?: string }) => boolean;
+  }
+): void {
+  const {
+    notification,
+    subtitle,
+    ptyId,
+    hostFocused,
+    focusedPtyId,
+    allowFocusedPaneOsc,
+  } = params;
+  const isUnfocusedPane = Boolean(ptyId && focusedPtyId && ptyId !== focusedPtyId);
+  const shouldUseMacOs = hostFocused === true && (isUnfocusedPane || !allowFocusedPaneOsc);
+
+  if (shouldUseMacOs) {
+    const sent = deps.sendMacOsNotification({
+      title: notification.title,
+      subtitle,
+      body: notification.body,
+    });
+    if (sent) {
+      return;
+    }
+  }
+
+  deps.sendDesktopNotification({ notification, subtitle });
+}
+
+export function createFrameHandler(deps: FrameHandlerDeps): (header: ShimHeader, payloads: Buffer[]) => void {
+  return (header, payloads) => {
+    if (deps.onResponse(header, payloads)) {
+      return;
+    }
+
+    if (header.type === 'ptyUpdate') {
+      const ptyId = header.ptyId as string;
+      const packed = buildPackedUpdate(header, payloads);
+      if (!packed) {
+        return;
+      }
+
+      const scrollStateHeader = header.scrollState as { viewportOffset: number; isAtBottom: boolean } | undefined;
+      const scrollState: TerminalScrollState = {
+        viewportOffset: scrollStateHeader?.viewportOffset ?? 0,
+        scrollbackLength: packed.scrollbackLength,
+        isAtBottom: scrollStateHeader?.isAtBottom ?? true,
+      };
+
+      const dirtyUpdate = unpackDirtyUpdate(packed, scrollState);
+      const unifiedUpdate: UnifiedTerminalUpdate = {
+        terminalUpdate: dirtyUpdate,
+        scrollState,
+      };
+
+      handleUnifiedUpdate(ptyId, unifiedUpdate);
+      return;
+    }
+
+    if (header.type === 'ptyExit') {
+      const ptyId = header.ptyId as string;
+      const exitCode = header.exitCode as number;
+      handlePtyExit(ptyId, exitCode);
+      return;
+    }
+
+    if (header.type === 'ptyKitty') {
+      const ptyId = header.ptyId as string;
+      const kitty = header.kitty as {
+        images?: Array<{
+          id: number;
+          number: number;
+          width: number;
+          height: number;
+          dataLength: number;
+          format: number;
+          compression: number;
+          implicitId: boolean;
+          transmitTime: string;
+        }>;
+        placements?: Array<{
+          imageId: number;
+          placementId: number;
+          placementTag: number;
+          screenX: number;
+          screenY: number;
+          xOffset: number;
+          yOffset: number;
+          sourceX: number;
+          sourceY: number;
+          sourceWidth: number;
+          sourceHeight: number;
+          columns: number;
+          rows: number;
+          z: number;
+        }>;
+        removedImageIds?: number[];
+        imageDataIds?: number[];
+        alternateScreen?: boolean;
+      } | undefined;
+
+      if (!kitty) return;
+
+      const imageDataIds = kitty.imageDataIds ?? [];
+      const imageData = new Map<number, Uint8Array>();
+      for (let i = 0; i < imageDataIds.length; i++) {
+        const payload = payloads[i];
+        if (!payload) continue;
+        imageData.set(imageDataIds[i], payload);
+      }
+
+      const images = (kitty.images ?? []).map((info) => ({
+        id: info.id,
+        number: info.number,
+        width: info.width,
+        height: info.height,
+        dataLength: info.dataLength,
+        format: info.format,
+        compression: info.compression,
+        implicitId: info.implicitId,
+        transmitTime: BigInt(info.transmitTime),
+      }));
+
+      handlePtyKittyUpdate(ptyId, {
+        images,
+        placements: kitty.placements ?? [],
+        removedImageIds: kitty.removedImageIds ?? [],
+        imageData,
+        alternateScreen: kitty.alternateScreen ?? false,
+      });
+      return;
+    }
+
+    if (header.type === 'ptyKittyTransmit') {
+      const ptyId = header.ptyId as string;
+      const payload = payloads[0];
+      if (!payload) return;
+      handlePtyKittyTransmit(ptyId, payload.toString('utf8'));
+      return;
+    }
+
+    if (header.type === 'ptyTitle') {
+      const ptyId = header.ptyId as string;
+      const title = (header.title as string) ?? '';
+      handlePtyTitle(ptyId, title);
+      return;
+    }
+
+    if (header.type === 'ptyNotification') {
+      const notification = header.notification as DesktopNotification | undefined;
+      if (!notification) return;
+      const subtitle = typeof header.subtitle === 'string' ? header.subtitle : undefined;
+      const ptyId = header.ptyId as string | undefined;
+      const hostFocused = getHostFocusState();
+      const focusedPtyId = getFocusedPtyId();
+      const allowFocusedPaneOsc = readBoolEnv('OPENMUX_ALLOW_FOCUSED_PANE_OSC');
+      handlePtyNotification(
+        {
+          notification,
+          subtitle,
+          ptyId,
+          hostFocused,
+          focusedPtyId,
+          allowFocusedPaneOsc,
+        },
+        {
+          sendMacOsNotification,
+          sendDesktopNotification,
+        }
+      );
+      return;
+    }
+
+    if (header.type === 'ptyLifecycle') {
+      const ptyId = header.ptyId as string;
+      const eventType = header.event as 'created' | 'destroyed';
+      handlePtyLifecycle(ptyId, eventType);
+      return;
+    }
+
+    if (header.type === 'detached') {
+      deps.onDetached();
+    }
+  };
+}
