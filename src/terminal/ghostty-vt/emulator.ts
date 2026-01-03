@@ -37,7 +37,14 @@ import { fetchScrollbackLine } from "./scrollback";
 import { drainTerminalResponses } from "./responses";
 import { getCursorSnapshot } from "./cursor";
 
-const SCROLLBACK_LIMIT = 2000;
+const DEFAULT_SCROLLBACK_LIMIT = 2000;
+const SCROLLBACK_LIMIT = (() => {
+  const raw = process.env.SCROLLBACK_LIMIT;
+  if (!raw) return DEFAULT_SCROLLBACK_LIMIT;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_SCROLLBACK_LIMIT;
+  return parsed;
+})();
 
 export class GhosttyVTEmulator implements ITerminalEmulator {
   private terminal: GhosttyVtTerminal;

@@ -12,6 +12,58 @@ const TerminalWrapper = state.TerminalWrapper;
 const ResponseHandler = state.ResponseHandler;
 const ResponseStream = state.ResponseStream;
 
+fn resolveScrollbackMaxSize(limit_lines: usize) usize {
+    // Use an unlimited byte budget and enforce scrollback in lines.
+    if (limit_lines == 0) return std.math.maxInt(usize);
+    return std.math.maxInt(usize);
+}
+
+fn trimScrollbackLines(wrapper: *TerminalWrapper) void {
+    const limit = wrapper.scrollback_limit_lines;
+    if (limit == 0) return;
+    if (wrapper.terminal.screens.active_key == .alternate) return;
+
+    const pages = &wrapper.terminal.screens.active.pages;
+    const rows: usize = @intCast(pages.rows);
+    if (pages.total_rows <= rows) return;
+
+    const scrollback_len = pages.total_rows - rows;
+    if (scrollback_len <= limit) return;
+
+    const extra = scrollback_len - limit;
+    if (extra == 0) return;
+
+    if (comptime @hasField(@TypeOf(wrapper.terminal.screens.active.*), "kitty_images")) {
+        const storage = &wrapper.terminal.screens.active.kitty_images;
+        if (storage.placements.count() > 0) {
+            var it = storage.placements.iterator();
+            while (it.next()) |entry| {
+                switch (entry.value_ptr.location) {
+                    .pin => |pin_ptr| {
+                        const pt = pages.pointFromPin(.history, pin_ptr.*) orelse continue;
+                        const coord = pt.coord();
+                        if (coord.y < extra) {
+                            entry.value_ptr.deinit(wrapper.terminal.screens.active);
+                            storage.placements.removeByPtr(entry.key_ptr);
+                            storage.dirty = true;
+                        }
+                    },
+                    .virtual => {},
+                }
+            }
+        }
+    }
+
+    pages.eraseRows(
+        .{ .history = .{} },
+        .{ .history = .{ .y = @intCast(extra - 1) } },
+    );
+
+    if (comptime @hasField(@TypeOf(wrapper.terminal.screens.active.*), "kitty_images")) {
+        wrapper.terminal.screens.active.kitty_images.dirty = true;
+    }
+}
+
 pub fn new(cols: c_int, rows: c_int) callconv(.c) ?*anyopaque {
     return newWithConfig(cols, rows, null);
 }
@@ -29,10 +81,11 @@ pub fn newWithConfig(
     const wrapper = alloc.create(TerminalWrapper) catch return null;
 
     // Parse config or use defaults
-    const scrollback_limit: usize = if (config_) |cfg|
-        if (cfg.scrollback_limit == 0) std.math.maxInt(usize) else cfg.scrollback_limit
+    const scrollback_limit_lines: usize = if (config_) |cfg|
+        cfg.scrollback_limit
     else
         10_000;
+    const scrollback_limit = resolveScrollbackMaxSize(scrollback_limit_lines);
 
     // Setup terminal colors
     var colors = Terminal.Colors.default;
@@ -100,6 +153,7 @@ pub fn newWithConfig(
         .stream = wrapper.stream,
         .render_state = RenderState.empty,
         .response_buffer = wrapper.response_buffer,
+        .scrollback_limit_lines = scrollback_limit_lines,
     };
 
     // NOTE: linefeed mode must be FALSE to match native terminal behavior
@@ -127,6 +181,12 @@ pub fn free(ptr: ?*anyopaque) callconv(.c) void {
 pub fn resize(ptr: ?*anyopaque, cols: c_int, rows: c_int) callconv(.c) void {
     const wrapper: *TerminalWrapper = @ptrCast(@alignCast(ptr orelse return));
     wrapper.terminal.resize(wrapper.alloc, @intCast(cols), @intCast(rows)) catch return;
+    if (wrapper.terminal.screens.get(.primary)) |primary| {
+        primary.pages.explicit_max_size = resolveScrollbackMaxSize(
+            wrapper.scrollback_limit_lines,
+        );
+    }
+    trimScrollbackLines(wrapper);
 }
 
 pub fn setPixelSize(ptr: ?*anyopaque, width_px: c_int, height_px: c_int) callconv(.c) void {
@@ -146,4 +206,5 @@ pub fn setPixelSize(ptr: ?*anyopaque, width_px: c_int, height_px: c_int) callcon
 pub fn write(ptr: ?*anyopaque, data: [*]const u8, len: usize) callconv(.c) void {
     const wrapper: *TerminalWrapper = @ptrCast(@alignCast(ptr orelse return));
     wrapper.stream.nextSlice(data[0..len]) catch return;
+    trimScrollbackLines(wrapper);
 }

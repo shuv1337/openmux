@@ -111,9 +111,10 @@ export function updatePtyState(params: {
   }
 
   const nextPlacements = emulator.getKittyPlacements?.() ?? [];
-  const allowReuseFallback = !imagesChanged && screenState.placements.length > 0;
+  // Only reuse placements during an alt/main screen transition. When scrollback
+  // trims, Ghostty returns no placements; reusing them keeps stale images pinned.
   const shouldReusePlacements =
-    (allowPlacementReuse || allowReuseFallback) &&
+    allowPlacementReuse &&
     nextPlacements.length === 0 &&
     nextImages.size > 0;
   if (shouldReusePlacements) {
@@ -127,7 +128,6 @@ export function updatePtyState(params: {
     screen: isAlternateScreen ? 'alt' : 'main',
     dirty,
     allowReuse: allowPlacementReuse,
-    allowReuseFallback,
     imagesChanged,
     reused: shouldReusePlacements,
     images: nextImages.size,

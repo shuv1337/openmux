@@ -157,6 +157,67 @@ describe('KittyGraphicsRenderer (basic)', () => {
     expect(joined).not.toContain('d=I');
   });
 
+  it('clears placements when emulator stops reporting them', () => {
+    const renderer = new KittyGraphicsRenderer();
+    const output: string[] = [];
+    const renderTarget = defaultRenderTarget(output);
+
+    let dirty = true;
+    let includePlacements = true;
+    const imageInfo = createImageInfo(3, 3n);
+    const placement = createPlacement(3);
+    const emulator = {
+      getKittyImagesDirty: () => dirty,
+      clearKittyImagesDirty: () => {
+        dirty = false;
+      },
+      getKittyImageIds: () => [3],
+      getKittyImageInfo: () => imageInfo,
+      getKittyImageData: () => new Uint8Array([255, 255, 0]),
+      getKittyPlacements: () => (includePlacements ? [placement] : []),
+      isAlternateScreen: () => false,
+    } as ITerminalEmulator;
+
+    renderer.updatePane('pane-3', {
+      ptyId: 'pty-3',
+      emulator,
+      offsetX: 0,
+      offsetY: 0,
+      width: 10,
+      height: 10,
+      cols: 10,
+      rows: 10,
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAlternateScreen: false,
+    });
+
+    renderer.flush(renderTarget);
+    output.length = 0;
+
+    dirty = true;
+    includePlacements = false;
+    renderer.updatePane('pane-3', {
+      ptyId: 'pty-3',
+      emulator,
+      offsetX: 0,
+      offsetY: 0,
+      width: 10,
+      height: 10,
+      cols: 10,
+      rows: 10,
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAlternateScreen: false,
+    });
+    renderer.flush(renderTarget);
+
+    const joined = output.join('');
+    expect(joined).toContain('a=d');
+    expect(joined).toContain('d=i');
+    expect(joined).not.toContain('d=I');
+  });
+
   it('clears host images when a PTY is destroyed', () => {
     const broker = new KittyTransmitBroker();
     broker.setWriter(() => {});

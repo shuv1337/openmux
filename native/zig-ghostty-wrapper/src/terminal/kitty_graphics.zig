@@ -106,7 +106,11 @@ pub fn getKittyPlacementCount(ptr: ?*anyopaque) callconv(.c) c_int {
     var it = storage.placements.iterator();
     while (it.next()) |entry| {
         switch (entry.value_ptr.location) {
-            .pin => count += 1,
+            .pin => |pin| {
+                // Pins moved to top-left after scrollback pruning are invalid for placements.
+                if (pin.garbage) continue;
+                count += 1;
+            },
             .virtual => {},
         }
     }
@@ -131,6 +135,8 @@ pub fn getKittyPlacements(
             .pin => |p| p,
             .virtual => continue,
         };
+        // Pins moved to top-left after scrollback pruning are invalid for placements.
+        if (pin.garbage) continue;
 
         if (idx >= buf_size) return -1;
 

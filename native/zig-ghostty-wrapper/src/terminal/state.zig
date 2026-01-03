@@ -20,4 +20,6 @@ pub const TerminalWrapper = struct {
     response_buffer: std.ArrayList(u8),
     /// Track alternate screen state to detect screen switches
     last_screen_is_alternate: bool = false,
+    /// Desired scrollback limit in lines (0 = unlimited)
+    scrollback_limit_lines: usize = 0,
 };
