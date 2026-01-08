@@ -193,12 +193,13 @@ class GhosttyKeyEncoder {
     const mods = resolveMods(event);
     const utf8 = getPrintableSequence(event.sequence);
     const unshifted = resolveUnshiftedCodepoint(event);
+    const consumedMods = resolveConsumedMods(event, utf8);
     const action = resolveAction(event);
 
     ghostty.symbols.ghostty_key_event_set_action(this.event, action);
     ghostty.symbols.ghostty_key_event_set_key(this.event, key);
     ghostty.symbols.ghostty_key_event_set_mods(this.event, mods);
-    ghostty.symbols.ghostty_key_event_set_consumed_mods(this.event, 0);
+    ghostty.symbols.ghostty_key_event_set_consumed_mods(this.event, consumedMods);
     ghostty.symbols.ghostty_key_event_set_composing(this.event, false);
 
     if (utf8) {
@@ -290,6 +291,35 @@ function resolveMods(event: KeyboardEvent): number {
   if (event.ctrl) mods |= MOD_CTRL;
   if (event.alt) mods |= MOD_ALT;
   return mods;
+}
+
+function resolveConsumedMods(event: KeyboardEvent, utf8: string): number {
+  if (!utf8) return 0;
+
+  let consumed = 0;
+  if (event.shift && didShiftProduceText(event, utf8)) {
+    consumed |= MOD_SHIFT;
+  }
+  return consumed;
+}
+
+function didShiftProduceText(event: KeyboardEvent, utf8: string): boolean {
+  const codepoint = utf8.codePointAt(0) ?? 0;
+  if (!codepoint) return false;
+
+  const unshifted = resolveUnshiftedCodepoint(event);
+  if (unshifted > 0) {
+    return unshifted !== codepoint;
+  }
+
+  if (utf8.length === 1) {
+    if (utf8 >= "A" && utf8 <= "Z") return true;
+    if (Object.prototype.hasOwnProperty.call(SHIFTED_SYMBOLS, utf8)) return true;
+  }
+
+  const lower = utf8.toLowerCase();
+  const upper = utf8.toUpperCase();
+  return utf8 !== lower && lower !== upper;
 }
 
 function resolveAction(event: KeyboardEvent): number {
