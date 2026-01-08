@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.90](https://github.com/monotykamary/openmux/compare/v0.2.89...v0.2.90) (2026-01-08)
+
+
+### Bug Fixes
+
+* ignore ConEmu OSC 9 notifications ([699c10c](https://github.com/monotykamary/openmux/commit/699c10ccd0cade7041f4129a7ff1c0d684dff73d))
+* **terminal:** consume shift for printable text ([891816e](https://github.com/monotykamary/openmux/commit/891816eb08c541bcadefc6509ad1b59ab5a29f9f))
+
 ### [0.2.89](https://github.com/monotykamary/openmux/compare/v0.2.88...v0.2.89) (2026-01-06)
 
 ### [0.2.88](https://github.com/monotykamary/openmux/compare/v0.2.87...v0.2.88) (2026-01-03)
