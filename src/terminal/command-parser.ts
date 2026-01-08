@@ -42,6 +42,35 @@ function decodeCommand(encoded: string): string {
   return decodeOscText(encoded);
 }
 
+function isConEmuOsc9Payload(payload: string): boolean {
+  if (!payload) return false;
+  const first = payload[0];
+
+  // ConEmu wait input blocks all OSC 9;5 notifications.
+  if (first === '5') return true;
+  if (payload.length < 2 || payload[1] !== ';') return false;
+
+  switch (first) {
+    case '1':
+    case '2':
+    case '3':
+    case '6':
+      return true;
+    case '4': {
+      if (payload.length < 3) return false;
+      const state = payload[2];
+      if (state === '0' || state === '3') return true;
+      if (state === '1' || state === '2' || state === '4') {
+        if (payload.length === 3) return true;
+        return payload[3] === ';';
+      }
+      return false;
+    }
+    default:
+      return false;
+  }
+}
+
 function splitNotificationPayload(payload: string): { title: string; body: string } | null {
   const trimmed = payload.trim();
   if (!trimmed) return null;
@@ -62,6 +91,7 @@ function splitNotificationPayload(payload: string): { title: string; body: strin
 
 function parseDesktopNotification(code: number, oscText: string): DesktopNotification | null {
   if (code === NOTIFY_CODE) {
+    if (isConEmuOsc9Payload(oscText)) return null;
     const decoded = decodeOscText(oscText);
     const payload = splitNotificationPayload(decoded);
     if (!payload) return null;
