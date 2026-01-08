@@ -112,6 +112,25 @@ export function PtyCard(props: PtyCardProps) {
   // For second line: branch on left
   const line2Content = () => line2BranchContent().slice(0, availableWidth());
 
+  const renderDiffStats = () => {
+    const stats = diffStats();
+    if (!stats) return null;
+    return (
+      <>
+        <text fg={fgColor()}>{line1Padding()}</text>
+        <text fg={addedColor()}>{stats.added}</text>
+        <text fg={dimColor()}>,</text>
+        <text fg={removedColor()}>{stats.removed}</text>
+        {stats.binary ? (
+          <>
+            <text fg={dimColor()}>,</text>
+            <text fg={binaryColor()}>{stats.binary}</text>
+          </>
+        ) : null}
+      </>
+    );
+  };
+
   return (
     <box
       style={{ flexDirection: 'column', height: 2 }}
@@ -121,20 +140,7 @@ export function PtyCard(props: PtyCardProps) {
       {/* Line 1: number + dirname (process) + diff stats */}
       <box style={{ height: 1, flexDirection: 'row' }}>
         <text fg={fgColor()}>{line1Content()}</text>
-        {diffStats() && (
-          <>
-            <text fg={fgColor()}>{line1Padding()}</text>
-            <text fg={addedColor()}>{diffStats()!.added}</text>
-            <text fg={dimColor()}>,</text>
-            <text fg={removedColor()}>{diffStats()!.removed}</text>
-            {diffStats()!.binary && (
-              <>
-                <text fg={dimColor()}>,</text>
-                <text fg={binaryColor()}>{diffStats()!.binary}</text>
-              </>
-            )}
-          </>
-        )}
+        {renderDiffStats()}
       </box>
       {/* Line 2: branch name */}
       <box style={{ height: 1 }}>
