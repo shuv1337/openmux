@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.92](https://github.com/monotykamary/openmux/compare/v0.2.91...v0.2.92) (2026-01-09)
+
+
+### Features
+
+* **cli:** add --help and --version flags ([f17bdf9](https://github.com/monotykamary/openmux/commit/f17bdf9290b5005bfa7e82ee5049ad65e837c647))
+* **scrollback:** add archive-backed scrollback with indicator ([9679cca](https://github.com/monotykamary/openmux/commit/9679ccaab0aff34a9a43b3503a5ee6bf875cc21d))
+* **status-bar:** check npm for updates ([f7efdef](https://github.com/monotykamary/openmux/commit/f7efdef42103141ec72f3d7207666cb35099bffd))
+* **status-bar:** reorder update indicator ([2019ffd](https://github.com/monotykamary/openmux/commit/2019ffd1e7e08439c51be7ba582798c8e805fa91))
+
+
+### Tests
+
+* **update:** cover npm update check ([d8d1efb](https://github.com/monotykamary/openmux/commit/d8d1efbadd6d050fe46afb071e75150d3e1c46ac))
+
 ### [0.2.91](https://github.com/monotykamary/openmux/compare/v0.2.90...v0.2.91) (2026-01-09)
 
 
