@@ -29,6 +29,7 @@ interface AppOverlaysProps {
   setCommandPaletteState: SetStoreFunction<CommandPaletteState>;
   onCommandPaletteExecute: (command: CommandPaletteCommand) => void;
   overlayVimMode: VimInputMode | null;
+  updateLabel: string | null;
   onCommandPaletteVimModeChange: (mode: VimInputMode) => void;
   onSessionPickerVimModeChange: (mode: VimInputMode) => void;
   onTemplateOverlayVimModeChange: (mode: VimInputMode) => void;
@@ -56,6 +57,7 @@ export function AppOverlays(props: AppOverlaysProps) {
         width={props.width}
         showCommandPalette={props.commandPaletteState.show}
         overlayVimMode={props.overlayVimMode}
+        updateLabel={props.updateLabel}
       />
 
       <SessionPicker
