@@ -7,6 +7,8 @@ import type { TerminalState, UnifiedTerminalUpdate } from "../../../core/types"
 import type { ITerminalEmulator } from "../../../terminal/emulator-interface"
 import type { TerminalQueryPassthrough } from "../../../terminal/terminal-query-passthrough"
 import type { PtyId } from "../../types"
+import type { ScrollbackArchive } from "../../../terminal/scrollback-archive"
+import type { ScrollbackArchiver } from "./scrollback-archiver"
 
 /**
  * Internal PTY session representation
@@ -15,6 +17,12 @@ export interface InternalPtySession {
   id: PtyId
   pty: IPty
   emulator: ITerminalEmulator
+  /** Live emulator (no archive, direct ghostty-vt access) */
+  liveEmulator: ITerminalEmulator
+  /** Disk-backed scrollback archive */
+  scrollbackArchive: ScrollbackArchive
+  /** Archiver for spilling scrollback to disk */
+  scrollbackArchiver: ScrollbackArchiver
   queryPassthrough: TerminalQueryPassthrough
   kittyRelayDispose?: () => void
   cols: number
@@ -44,5 +52,7 @@ export interface InternalPtySession {
     viewportOffset: number
     /** Track last scrollback length to detect when new content is added */
     lastScrollbackLength: number
+    /** Track last at-bottom state to clear caches on return */
+    lastIsAtBottom: boolean
   }
 }

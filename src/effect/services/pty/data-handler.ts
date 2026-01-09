@@ -31,6 +31,20 @@ const FOCUS_TRACKING_DISABLE_C1 = "\x9b?1004l"
 const FOCUS_IN_SEQUENCE = "\x1b[I"
 const FOCUS_OUT_SEQUENCE = "\x1b[O"
 const FOCUS_TRACKING_PROBE_LEN = 16
+const SCROLLBACK_CLEAR_PROBE_LEN = 128
+const SCROLLBACK_CLEAR_REGEX = /\x1b\[([0-9;]*)J/g
+const SCROLLBACK_CLEAR_C1_REGEX = /\x9b([0-9;]*)J/g
+
+function hasScrollbackEraseSequence(text: string, regex: RegExp): boolean {
+  regex.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(text)) !== null) {
+    const params = match[1] ?? ""
+    const parts = params.split(";").filter(Boolean)
+    if (parts.includes("3")) return true
+  }
+  return false
+}
 
 /**
  * Creates the PTY data handler that processes incoming data
@@ -52,6 +66,7 @@ export function createDataHandler(options: DataHandlerOptions) {
   }
   let kittyProbeBuffer = ""
   let focusProbeBuffer = ""
+  let scrollbackClearBuffer = ""
 
   const analyzeKitty = (data: string): { hasKittyApc: boolean; hasKittyQuery: boolean } => {
     if (data.length === 0) return { hasKittyApc: false, hasKittyQuery: false }
@@ -98,6 +113,26 @@ export function createDataHandler(options: DataHandlerOptions) {
     focusProbeBuffer = combined.slice(-FOCUS_TRACKING_PROBE_LEN)
   }
 
+  const shouldClearScrollback = (data: string): boolean => {
+    if (data.length === 0) return false
+    let combined = scrollbackClearBuffer + data
+    if (combined.length > 2048) {
+      combined = combined.slice(-2048)
+    }
+    scrollbackClearBuffer = combined.slice(-SCROLLBACK_CLEAR_PROBE_LEN)
+
+    return hasScrollbackEraseSequence(combined, SCROLLBACK_CLEAR_REGEX) ||
+      hasScrollbackEraseSequence(combined, SCROLLBACK_CLEAR_C1_REGEX)
+  }
+
+  const resetScrollbackState = () => {
+    session.scrollbackArchive.reset()
+    session.scrollbackArchiver.reset()
+    session.scrollState.viewportOffset = 0
+    session.scrollState.lastScrollbackLength = 0
+    session.scrollState.lastIsAtBottom = true
+  }
+
   const flushPendingResponses = () => {
     while (state.pendingResponses.length > 0) {
       const next = state.pendingResponses[0]
@@ -108,6 +143,7 @@ export function createDataHandler(options: DataHandlerOptions) {
       }
     }
   }
+
 
   const drainPending = (options?: { force?: boolean }) => {
     session.pendingNotify = false
@@ -133,6 +169,9 @@ export function createDataHandler(options: DataHandlerOptions) {
       while (state.pendingSegments.length > 0) {
         const segment = state.pendingSegments.shift() ?? ""
         if (segment.length === 0) continue
+        if (shouldClearScrollback(segment)) {
+          resetScrollbackState()
+        }
         session.emulator.write(segment)
         wrote = true
         segmentsProcessed += 1
@@ -164,6 +203,9 @@ export function createDataHandler(options: DataHandlerOptions) {
       }
 
       if (batch.length > 0) {
+        if (shouldClearScrollback(batch)) {
+          resetScrollbackState()
+        }
         session.emulator.write(batch)
         wrote = true
       }
@@ -177,6 +219,10 @@ export function createDataHandler(options: DataHandlerOptions) {
           session.pty.write(response)
         }
       }
+    }
+
+    if (wrote) {
+      session.scrollbackArchiver.schedule()
     }
 
     if (segmentsProcessed > 0) {

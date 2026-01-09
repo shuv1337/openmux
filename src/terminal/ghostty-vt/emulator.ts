@@ -36,15 +36,9 @@ import { mapKittyImageInfo, mapKittyPlacements } from "./kitty";
 import { fetchScrollbackLine } from "./scrollback";
 import { drainTerminalResponses } from "./responses";
 import { getCursorSnapshot } from "./cursor";
+import { HOT_SCROLLBACK_LIMIT } from "../scrollback-config";
 
-const DEFAULT_SCROLLBACK_LIMIT = 2000;
-const SCROLLBACK_LIMIT = (() => {
-  const raw = process.env.SCROLLBACK_LIMIT;
-  if (!raw) return DEFAULT_SCROLLBACK_LIMIT;
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_SCROLLBACK_LIMIT;
-  return parsed;
-})();
+const SCROLLBACK_LIMIT = HOT_SCROLLBACK_LIMIT;
 
 export class GhosttyVTEmulator implements ITerminalEmulator {
   private terminal: GhosttyVtTerminal;
@@ -77,7 +71,7 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
 
     const palette = colors.palette.slice(0, 16);
     this.terminal = new GhosttyVtTerminal(cols, rows, {
-      scrollbackLimit: SCROLLBACK_LIMIT,
+      scrollbackLimit: 0,
       fgColor: colors.foreground,
       bgColor: colors.background,
       palette,
@@ -195,7 +189,7 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
   // ==========================================================================
 
   getScrollbackLength(): number {
-    return this.scrollState.scrollbackLength;
+    return this.terminal.getScrollbackLength();
   }
 
   getScrollbackLine(offset: number): TerminalCell[] | null {
@@ -225,6 +219,18 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
       this.modes,
       this.cachedState?.cursor
     );
+  }
+
+  trimScrollback(lines: number): void {
+    if (this._disposed) return;
+    if (lines <= 0) return;
+    this.terminal.trimScrollback(lines);
+    this.scrollbackCache.clear();
+    this.scrollbackSnapshotDirty = true;
+    this.scrollState = {
+      ...this.scrollState,
+      scrollbackLength: this.terminal.getScrollbackLength(),
+    };
   }
 
   getTerminalState(): TerminalState {

@@ -2,8 +2,10 @@
  * PTY Session Factory - creates new PTY sessions with all required components
  */
 import { Effect } from "effect"
+import path from "node:path"
 import { spawnAsync } from "../../../../native/zig-pty/ts/index"
 import { createGhosttyVTEmulator } from "../../../terminal/ghostty-vt/emulator"
+import { ArchivedTerminalEmulator } from "../../../terminal/archived-emulator"
 import { TerminalQueryPassthrough } from "../../../terminal/terminal-query-passthrough"
 import { createSyncModeParser } from "../../../terminal/sync-mode-parser"
 import { getCapabilityEnvironment } from "../../../terminal/capabilities"
@@ -20,6 +22,10 @@ import { notifySubscribers } from "./notification"
 import { createDataHandler } from "./data-handler"
 import { setupQueryPassthrough } from "./query-setup"
 import { prepareShellIntegration } from "./shell-integration"
+import { ScrollbackArchive } from "../../../terminal/scrollback-archive"
+import type { ScrollbackArchiveManager } from "../../../terminal/scrollback-archive"
+import { ScrollbackArchiver } from "./scrollback-archiver"
+import { getConfigDir } from "../../../core/user-config"
 
 const DEFAULT_CELL_WIDTH = 8
 const DEFAULT_CELL_HEIGHT = 16
@@ -27,6 +33,8 @@ const DEFAULT_CELL_HEIGHT = 16
 export interface SessionFactoryDeps {
   colors: TerminalColors
   defaultShell: string
+  scrollbackArchiveManager: ScrollbackArchiveManager
+  scrollbackArchiveRoot?: string
   onLifecycleEvent: (event: { type: 'created' | 'destroyed'; ptyId: PtyId }) => Effect.Effect<void>
   onTitleChange: (ptyId: PtyId, title: string) => void
   onExit?: (ptyId: PtyId, exitCode: number) => void
@@ -65,12 +73,21 @@ export function createSession(
     const shellName = shell.split('/').pop() ?? ''
 
     // Create native emulator (libghostty-vt)
-    const emulator = yield* Effect.try({
+    const liveEmulator = yield* Effect.try({
       try: () => createGhosttyVTEmulator(cols, rows, deps.colors),
       catch: (error) =>
         PtySpawnError.make({ shell, cwd, cause: error }),
     })
-    emulator.setUpdateEnabled?.(false)
+    liveEmulator.setUpdateEnabled?.(false)
+
+    const scrollbackRoot = deps.scrollbackArchiveRoot ??
+      process.env.OPENMUX_SCROLLBACK_ARCHIVE_DIR ??
+      path.join(getConfigDir(), "scrollback")
+    const scrollbackArchive = new ScrollbackArchive({
+      rootDir: path.join(scrollbackRoot, String(id)),
+      manager: deps.scrollbackArchiveManager,
+    })
+    const emulator = new ArchivedTerminalEmulator(liveEmulator, scrollbackArchive)
 
     // Create terminal query passthrough for handling terminal queries
     const queryPassthrough = new TerminalQueryPassthrough()
@@ -116,6 +133,9 @@ export function createSession(
       id,
       pty,
       emulator,
+      liveEmulator,
+      scrollbackArchive,
+      scrollbackArchiver: null as unknown as ScrollbackArchiver,
       queryPassthrough,
       kittyRelayDispose: undefined,
       cols,
@@ -136,8 +156,10 @@ export function createSession(
       focusTrackingEnabled: false,
       focusState: false,
       pendingNotify: false,
-      scrollState: { viewportOffset: 0, lastScrollbackLength: 0 },
+      scrollState: { viewportOffset: 0, lastScrollbackLength: 0, lastIsAtBottom: true },
     }
+
+    session.scrollbackArchiver = new ScrollbackArchiver(session, liveEmulator)
 
     // Subscribe to emulator title changes and propagate to subscribers
     emulator.onTitleChange((title: string) => {

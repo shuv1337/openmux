@@ -7,7 +7,7 @@ import { Effect } from "effect"
 import { runEffect, runEffectIgnore } from "../runtime"
 import { Pty } from "../services"
 import { PtyId, Cols, Rows } from "../types"
-import type { TerminalState, UnifiedTerminalUpdate } from "../../core/types"
+import type { TerminalState, TerminalScrollState, UnifiedTerminalUpdate } from "../../core/types"
 import type { ITerminalEmulator } from "../../terminal/emulator-interface"
 import { deferMacrotask } from "../../core/scheduling"
 
@@ -207,7 +207,7 @@ export async function onPtyExit(
  */
 export async function getScrollState(
   ptyId: string
-): Promise<{ viewportOffset: number; scrollbackLength: number; isAtBottom: boolean } | null> {
+): Promise<TerminalScrollState | null> {
   try {
     return await runEffect(
       Effect.gen(function* () {

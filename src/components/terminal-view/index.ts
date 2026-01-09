@@ -12,6 +12,7 @@ export {
 
 export {
   renderScrollbar,
+  renderScrollDepth,
   type ScrollbarOptions,
 } from './scrollbar'
 

@@ -4,6 +4,7 @@
 
 import type { TerminalScrollState, UnifiedTerminalUpdate } from "../../../core/types"
 import type { InternalPtySession } from "./types"
+import { HOT_SCROLLBACK_LIMIT } from "../../../terminal/scrollback-config"
 
 /**
  * Get current scroll state from a session.
@@ -12,6 +13,7 @@ import type { InternalPtySession } from "./types"
  */
 export function getCurrentScrollState(session: InternalPtySession): TerminalScrollState {
   const scrollbackLength = session.emulator.getScrollbackLength()
+  const liveScrollbackLength = session.liveEmulator.getScrollbackLength()
 
   // SCROLL POSITION FIX: When new content is added (scrollback grows) and user
   // is scrolled back, adjust viewportOffset by the delta to maintain the same
@@ -26,11 +28,21 @@ export function getCurrentScrollState(session: InternalPtySession): TerminalScro
 
   // Update last scrollback length for next comparison
   session.scrollState.lastScrollbackLength = scrollbackLength
+  if (session.scrollState.viewportOffset > scrollbackLength) {
+    session.scrollState.viewportOffset = scrollbackLength
+  }
+
+  const isAtBottom = session.scrollState.viewportOffset === 0
+  if (isAtBottom && !session.scrollState.lastIsAtBottom) {
+    session.scrollbackArchive.clearCache()
+  }
+  session.scrollState.lastIsAtBottom = isAtBottom
 
   return {
     viewportOffset: session.scrollState.viewportOffset,
     scrollbackLength,
-    isAtBottom: session.scrollState.viewportOffset === 0,
+    isAtBottom,
+    isAtScrollbackLimit: liveScrollbackLength >= HOT_SCROLLBACK_LIMIT,
   }
 }
 

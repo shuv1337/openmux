@@ -9,6 +9,7 @@ import { Cols, Rows } from "../../types"
 import { PtySession } from "../../models"
 import type { InternalPtySession } from "./types"
 import { notifySubscribers, notifyScrollSubscribers } from "./notification"
+import { HOT_SCROLLBACK_LIMIT } from "../../../terminal/scrollback-config"
 import type { SubscriptionRegistry } from "./subscription-manager"
 import { tracePtyEvent, tracePtyChunk } from "../../../terminal/pty-trace"
 
@@ -162,11 +163,13 @@ export function createOperations(deps: OperationsDeps) {
   const getScrollState = Effect.fn("Pty.getScrollState")(function* (id: PtyId) {
     const session = yield* getSessionOrFail(id)
     const scrollbackLength = session.emulator.getScrollbackLength()
+    const isAtScrollbackLimit = session.liveEmulator.getScrollbackLength() >= HOT_SCROLLBACK_LIMIT
 
     return {
       viewportOffset: session.scrollState.viewportOffset,
       scrollbackLength,
       isAtBottom: session.scrollState.viewportOffset === 0,
+      isAtScrollbackLimit,
     }
   })
 

@@ -3,9 +3,13 @@
  * Wraps zig-pty with native libghostty-vt parsing.
  */
 import { Context, Effect, Layer, Ref, HashMap, Option, Runtime } from "effect"
+import path from "node:path"
 import type { TerminalState, UnifiedTerminalUpdate } from "../../core/types"
 import type { ITerminalEmulator } from "../../terminal/emulator-interface"
 import { getHostColors, getDefaultColors } from "../../terminal/terminal-colors"
+import { ScrollbackArchiveManager } from "../../terminal/scrollback-archive"
+import { SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL } from "../../terminal/scrollback-config"
+import { getConfigDir } from "../../core/user-config"
 import type { PtySpawnError, PtyCwdError } from "../errors";
 import { PtyNotFoundError } from "../errors"
 import { PtyId, Cols, Rows, makePtyId } from "../types"
@@ -95,7 +99,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
 
     /** Get scroll state */
     readonly getScrollState: (id: PtyId) => Effect.Effect<
-      { viewportOffset: number; scrollbackLength: number; isAtBottom: boolean },
+      { viewportOffset: number; scrollbackLength: number; isAtBottom: boolean; isAtScrollbackLimit?: boolean },
       PtyNotFoundError
     >
 
@@ -173,6 +177,11 @@ export class Pty extends Context.Tag("@openmux/Pty")<
       // Effect-based subscription registries with synchronous cleanup support
       const lifecycleRegistry = yield* makeSubscriptionRegistry<LifecycleEvent>()
       const globalTitleRegistry = yield* makeSubscriptionRegistry<TitleChangeEvent>()
+      const scrollbackArchiveManager = new ScrollbackArchiveManager(
+        SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL
+      )
+      const scrollbackArchiveRoot = process.env.OPENMUX_SCROLLBACK_ARCHIVE_DIR ??
+        path.join(getConfigDir(), "scrollback")
 
       // Helper to get a session or fail
       const getSessionOrFail = (id: PtyId) =>
@@ -212,6 +221,8 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           {
             colors,
             defaultShell: config.defaultShell,
+            scrollbackArchiveManager,
+            scrollbackArchiveRoot,
             onLifecycleEvent: (event) => lifecycleRegistry.notify(event),
             onTitleChange: (ptyId, title) => globalTitleRegistry.notifySync({ ptyId, title }),
             onExit: handleExit,

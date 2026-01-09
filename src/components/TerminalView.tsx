@@ -16,6 +16,7 @@ import {
 import { useTerminal } from '../contexts/TerminalContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { useSearch } from '../contexts/SearchContext';
+import { useTheme } from '../contexts/ThemeContext';
 import {
   BLACK,
   getCachedRGBA,
@@ -29,6 +30,7 @@ import { getHostBackgroundColor } from '../effect/bridge';
 import {
   renderRow,
   renderScrollbar,
+  renderScrollDepth,
   fetchRowsForRendering,
   calculatePrefetchRequest,
   guardScrollbackRender,
@@ -43,6 +45,18 @@ import {
 } from './terminal-view/visibility';
 
 let nextKittyPaneId = 0;
+
+const HEX_COLOR_RE = /^#?([0-9a-fA-F]{6})$/;
+
+function resolveThemeColor(
+  value: string,
+  fallback: ReturnType<typeof getCachedRGBA>
+) {
+  const match = HEX_COLOR_RE.exec(value);
+  if (!match) return fallback;
+  const parsed = parseInt(match[1], 16);
+  return getCachedRGBA((parsed >> 16) & 0xFF, (parsed >> 8) & 0xFF, parsed & 0xFF);
+}
 
 interface TerminalViewProps {
   ptyId: string;
@@ -63,6 +77,7 @@ interface TerminalViewProps {
 export function TerminalView(props: TerminalViewProps) {
   const renderer = useRenderer();
   const terminal = useTerminal();
+  const theme = useTheme();
   const kittyPaneKey = `kitty-pane-${nextKittyPaneId++}`;
   const hostBgColor = getHostBackgroundColor();
   // Get selection state - keep full context to access selectionVersion reactively
@@ -405,6 +420,20 @@ export function TerminalView(props: TerminalViewProps) {
         offsetX,
         offsetY,
       }, fallbackFg);
+      const scrollLabelColor = resolveThemeColor(
+        isFocused ? theme.pane.focusedBorderColor : theme.pane.borderColor,
+        getCachedRGBA(160, 160, 160)
+      );
+      renderScrollDepth(buffer, {
+        viewportOffset: renderViewportOffset,
+        scrollbackLength: renderScrollbackLength,
+        rows,
+        cols,
+        width,
+        offsetX,
+        offsetY,
+        labelFg: scrollLabelColor,
+      });
     }
 
     kittyRenderer?.updatePane(kittyPaneKey, {

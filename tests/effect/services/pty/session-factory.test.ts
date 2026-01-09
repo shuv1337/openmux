@@ -2,19 +2,39 @@
  * Tests for PTY session factory exit hooks.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import { Effect } from "effect"
 import type { TerminalColors } from "../../../../src/terminal/terminal-colors"
 import { Cols, Rows } from "../../../../src/effect/types"
-import { createSession } from "../../../../src/effect/services/pty/session-factory"
+import { ScrollbackArchiveManager } from "../../../../src/terminal/scrollback-archive"
 import { spawnAsync } from "../../../../native/zig-pty/ts/index"
-import { createGhosttyVTEmulator } from "../../../../src/terminal/ghostty-vt/emulator"
+
+const { mockCreateGhosttyVTEmulator, mockGhosttySymbols } = vi.hoisted(() => ({
+  mockCreateGhosttyVTEmulator: vi.fn(),
+  mockGhosttySymbols: new Proxy(
+    {},
+    {
+      get: () => vi.fn(),
+    }
+  ),
+}))
+
+let createSession: typeof import("../../../../src/effect/services/pty/session-factory").createSession
 
 vi.mock("../../../../native/zig-pty/ts/index", () => ({
   spawnAsync: vi.fn(),
 }))
 
 vi.mock("../../../../src/terminal/ghostty-vt/emulator", () => ({
-  createGhosttyVTEmulator: vi.fn(),
+  createGhosttyVTEmulator: mockCreateGhosttyVTEmulator,
+}))
+
+vi.mock("../../../../src/terminal/ghostty-vt/ffi", () => ({
+  ghostty: {
+    symbols: mockGhosttySymbols,
+  },
 }))
 
 vi.mock("../../../../src/terminal/capabilities", () => ({
@@ -34,6 +54,10 @@ vi.mock("../../../../src/effect/services/pty/query-setup", () => ({
 }))
 
 describe("createSession", () => {
+  beforeEach(async () => {
+    ;({ createSession } = await import("../../../../src/effect/services/pty/session-factory"))
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -71,8 +95,10 @@ describe("createSession", () => {
       getTitle: vi.fn(() => ""),
     }
 
-    vi.mocked(createGhosttyVTEmulator).mockReturnValue(
-      emulator as ReturnType<typeof createGhosttyVTEmulator>
+    mockCreateGhosttyVTEmulator.mockReturnValue(emulator)
+
+    const scrollbackArchiveRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "openmux-scrollback-")
     )
 
     const onExit = vi.fn()
@@ -81,6 +107,8 @@ describe("createSession", () => {
         {
           colors: {} as TerminalColors,
           defaultShell: "/bin/sh",
+          scrollbackArchiveManager: new ScrollbackArchiveManager(1024 * 1024),
+          scrollbackArchiveRoot,
           onLifecycleEvent: vi.fn(() => Effect.void),
           onTitleChange: vi.fn(),
           onExit,
@@ -129,8 +157,10 @@ describe("createSession", () => {
       getTitle: vi.fn(() => ""),
     }
 
-    vi.mocked(createGhosttyVTEmulator).mockReturnValue(
-      emulator as ReturnType<typeof createGhosttyVTEmulator>
+    mockCreateGhosttyVTEmulator.mockReturnValue(emulator)
+
+    const scrollbackArchiveRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "openmux-scrollback-")
     )
 
     const { session } = await Effect.runPromise(
@@ -138,6 +168,8 @@ describe("createSession", () => {
         {
           colors: {} as TerminalColors,
           defaultShell: "/bin/sh",
+          scrollbackArchiveManager: new ScrollbackArchiveManager(1024 * 1024),
+          scrollbackArchiveRoot,
           onLifecycleEvent: vi.fn(() => Effect.void),
           onTitleChange: vi.fn(),
         },

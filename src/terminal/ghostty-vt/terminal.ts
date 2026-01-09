@@ -198,6 +198,11 @@ export class GhosttyVtTerminal {
     return this.parseCells(this.lineBuffer, count);
   }
 
+  trimScrollback(lines: number): void {
+    if (lines <= 0) return;
+    ghostty.symbols.ghostty_terminal_trim_scrollback(this.handle, lines);
+  }
+
   isRowWrapped(row: number): boolean {
     return ghostty.symbols.ghostty_terminal_is_row_wrapped(this.handle, row);
   }

@@ -227,6 +227,12 @@ uint8_t ghostty_terminal_get_kitty_keyboard_flags(GhosttyTerminal term);
 int ghostty_terminal_get_scrollback_length(GhosttyTerminal term);
 
 /**
+ * Trim oldest scrollback lines.
+ * @param lines Number of lines to remove from the top of scrollback
+ */
+void ghostty_terminal_trim_scrollback(GhosttyTerminal term, uint32_t lines);
+
+/**
  * Get a line from the scrollback buffer.
  * @param offset 0 = oldest line, (length-1) = most recent scrollback line
  * @param out_buffer Buffer to write cells to

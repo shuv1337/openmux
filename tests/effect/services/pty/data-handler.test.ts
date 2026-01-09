@@ -13,6 +13,14 @@ function createSession() {
     drainResponses: vi.fn(() => [] as string[]),
     isDisposed: false,
   }
+  const liveEmulator = {
+    write: vi.fn(),
+    drainResponses: vi.fn(() => [] as string[]),
+    isDisposed: false,
+    isAlternateScreen: vi.fn(() => false),
+    getScrollbackLength: vi.fn(() => 0),
+    getScrollbackLine: vi.fn(() => null),
+  }
 
   const pty = {
     write: vi.fn(),
@@ -27,6 +35,15 @@ function createSession() {
     id: "pty-test" as InternalPtySession["id"],
     pty: pty as unknown as InternalPtySession["pty"],
     emulator: emulator as unknown as InternalPtySession["emulator"],
+    liveEmulator: liveEmulator as unknown as InternalPtySession["liveEmulator"],
+    scrollbackArchive: {
+      reset: vi.fn(),
+      clearCache: vi.fn(),
+    } as unknown as InternalPtySession["scrollbackArchive"],
+    scrollbackArchiver: {
+      schedule: vi.fn(),
+      reset: vi.fn(),
+    } as unknown as InternalPtySession["scrollbackArchiver"],
     queryPassthrough,
     cols: 80,
     rows: 24,
@@ -49,10 +66,11 @@ function createSession() {
     scrollState: {
       viewportOffset: 0,
       lastScrollbackLength: 0,
+      lastIsAtBottom: true,
     },
   }
 
-  return { session, emulator, pty }
+  return { session, emulator, liveEmulator, pty }
 }
 
 describe("createDataHandler", () => {

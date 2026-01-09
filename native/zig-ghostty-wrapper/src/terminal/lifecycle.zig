@@ -18,9 +18,8 @@ fn resolveScrollbackMaxSize(limit_lines: usize) usize {
     return std.math.maxInt(usize);
 }
 
-fn trimScrollbackLines(wrapper: *TerminalWrapper) void {
-    const limit = wrapper.scrollback_limit_lines;
-    if (limit == 0) return;
+fn pruneScrollbackLines(wrapper: *TerminalWrapper, extra: usize) void {
+    if (extra == 0) return;
     if (wrapper.terminal.screens.active_key == .alternate) return;
 
     const pages = &wrapper.terminal.screens.active.pages;
@@ -28,10 +27,10 @@ fn trimScrollbackLines(wrapper: *TerminalWrapper) void {
     if (pages.total_rows <= rows) return;
 
     const scrollback_len = pages.total_rows - rows;
-    if (scrollback_len <= limit) return;
+    if (scrollback_len == 0) return;
 
-    const extra = scrollback_len - limit;
-    if (extra == 0) return;
+    const trim = if (extra > scrollback_len) scrollback_len else extra;
+    if (trim == 0) return;
 
     if (comptime @hasField(@TypeOf(wrapper.terminal.screens.active.*), "kitty_images")) {
         const storage = &wrapper.terminal.screens.active.kitty_images;
@@ -42,7 +41,7 @@ fn trimScrollbackLines(wrapper: *TerminalWrapper) void {
                     .pin => |pin_ptr| {
                         const pt = pages.pointFromPin(.history, pin_ptr.*) orelse continue;
                         const coord = pt.coord();
-                        if (coord.y < extra) {
+                        if (coord.y < trim) {
                             entry.value_ptr.deinit(wrapper.terminal.screens.active);
                             storage.placements.removeByPtr(entry.key_ptr);
                             storage.dirty = true;
@@ -56,12 +55,27 @@ fn trimScrollbackLines(wrapper: *TerminalWrapper) void {
 
     pages.eraseRows(
         .{ .history = .{} },
-        .{ .history = .{ .y = @intCast(extra - 1) } },
+        .{ .history = .{ .y = @intCast(trim - 1) } },
     );
 
     if (comptime @hasField(@TypeOf(wrapper.terminal.screens.active.*), "kitty_images")) {
         wrapper.terminal.screens.active.kitty_images.dirty = true;
     }
+}
+
+fn trimScrollbackLines(wrapper: *TerminalWrapper) void {
+    const limit = wrapper.scrollback_limit_lines;
+    if (limit == 0) return;
+
+    const pages = &wrapper.terminal.screens.active.pages;
+    const rows: usize = @intCast(pages.rows);
+    if (pages.total_rows <= rows) return;
+
+    const scrollback_len = pages.total_rows - rows;
+    if (scrollback_len <= limit) return;
+
+    const extra = scrollback_len - limit;
+    pruneScrollbackLines(wrapper, extra);
 }
 
 pub fn new(cols: c_int, rows: c_int) callconv(.c) ?*anyopaque {
@@ -207,4 +221,9 @@ pub fn write(ptr: ?*anyopaque, data: [*]const u8, len: usize) callconv(.c) void 
     const wrapper: *TerminalWrapper = @ptrCast(@alignCast(ptr orelse return));
     wrapper.stream.nextSlice(data[0..len]) catch return;
     trimScrollbackLines(wrapper);
+}
+
+pub fn trimScrollback(ptr: ?*anyopaque, lines: c_uint) callconv(.c) void {
+    const wrapper: *TerminalWrapper = @ptrCast(@alignCast(ptr orelse return));
+    pruneScrollbackLines(wrapper, @intCast(lines));
 }

@@ -33,6 +33,7 @@ pub const free = lifecycle.free;
 pub const resize = lifecycle.resize;
 pub const setPixelSize = lifecycle.setPixelSize;
 pub const write = lifecycle.write;
+pub const trimScrollback = lifecycle.trimScrollback;
 
 pub const renderStateUpdate = render_state.renderStateUpdate;
 pub const renderStateGetCols = render_state.renderStateGetCols;

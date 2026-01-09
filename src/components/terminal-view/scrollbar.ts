@@ -1,13 +1,15 @@
 /**
  * Scrollbar Rendering - renders the scrollbar overlay for terminal
  */
-import type { RGBA, OptimizedBuffer } from '@opentui/core'
+import { RGBA, type OptimizedBuffer } from '@opentui/core'
 import type { TerminalCell } from '../../core/types'
 import {
   getCachedRGBA,
   SCROLLBAR_TRACK,
   SCROLLBAR_THUMB,
 } from '../../terminal/rendering'
+
+const TRANSPARENT_BG = RGBA.fromInts(0, 0, 0, 0)
 
 export interface ScrollbarOptions {
   viewportOffset: number
@@ -17,6 +19,8 @@ export interface ScrollbarOptions {
   width: number
   offsetX: number
   offsetY: number
+  labelFg?: RGBA
+  labelBg?: RGBA
 }
 
 /**
@@ -37,7 +41,12 @@ export function renderScrollbar(
   }
 
   const totalLines = scrollbackLength + rows
-  const thumbHeight = Math.max(1, Math.floor(rows * rows / totalLines))
+  const minThumbHeight = Math.max(2, Math.floor(rows * 0.05))
+  const idealThumbHeight = Math.floor(rows * rows / totalLines)
+  const thumbHeight = Math.min(
+    rows,
+    Math.max(minThumbHeight, Math.max(1, idealThumbHeight))
+  )
   const scrollRange = rows - thumbHeight
   // Position: 0 at top (fully scrolled back), scrollRange at bottom (at live terminal)
   const thumbPosition = Math.floor((1 - viewportOffset / scrollbackLength) * scrollRange)
@@ -64,4 +73,37 @@ export function renderScrollbar(
       0
     )
   }
+}
+
+export function renderScrollDepth(
+  buffer: OptimizedBuffer,
+  options: ScrollbarOptions
+): void {
+  const { viewportOffset, scrollbackLength, width, offsetX, offsetY, labelFg, labelBg } = options
+
+  if (viewportOffset === 0 || scrollbackLength === 0) return
+
+  const label = ` ${formatLineCount(viewportOffset)}/${formatLineCount(scrollbackLength)} `
+  const innerWidth = width
+  const borderY = offsetY - 1
+  if (innerWidth <= 0 || borderY < 0 || label.length > innerWidth) return
+
+  const rightInset = 1
+  const startX = offsetX + Math.max(0, innerWidth - label.length - rightInset)
+  const fg = labelFg ?? getCachedRGBA(160, 160, 160)
+  const bg = labelBg ?? TRANSPARENT_BG
+
+  for (let i = 0; i < label.length; i++) {
+    buffer.setCell(startX + i, borderY, label[i], fg, bg, 0)
+  }
+}
+
+function formatLineCount(value: number): string {
+  if (value < 1000) return String(value)
+  if (value < 1_000_000) {
+    const short = value < 10_000 ? (value / 1000).toFixed(1) : Math.round(value / 1000)
+    return `${short}k`
+  }
+  const short = value < 10_000_000 ? (value / 1_000_000).toFixed(1) : Math.round(value / 1_000_000)
+  return `${short}m`
 }
