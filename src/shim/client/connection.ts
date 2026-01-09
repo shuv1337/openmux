@@ -1,7 +1,7 @@
 import net from 'net';
 import fs from 'fs/promises';
 import { spawn } from 'child_process';
-import { Buffer } from 'buffer';
+import type { Buffer } from 'buffer';
 
 import { getHostColors } from '../../terminal/terminal-colors';
 import { encodeFrame, FrameReader, SHIM_SOCKET_DIR, SHIM_SOCKET_PATH, type ShimHeader } from '../protocol';

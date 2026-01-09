@@ -1,9 +1,9 @@
-import net from 'net';
+import type net from 'net';
 import { Effect, Stream } from 'effect';
-import { Buffer } from 'buffer';
+import type { Buffer } from 'buffer';
 
 import type { ShimHeader } from '../protocol';
-import { FrameReader } from '../protocol';
+import type { FrameReader } from '../protocol';
 
 type FrameHandler = (header: ShimHeader, payloads: Buffer[]) => void;
 
