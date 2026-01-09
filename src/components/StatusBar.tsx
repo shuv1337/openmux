@@ -24,6 +24,13 @@ export function StatusBar(props: StatusBarProps) {
   const sessionState = useSessionState();
   const commandColor = () => theme.searchAccentColor;
   const sessionColor = () => theme.pane.focusedBorderColor;
+  const updateLabel = () => {
+    const flag = (process.env.OPENMUX_UPDATE_AVAILABLE ?? '').toLowerCase();
+    const hasUpdate = flag === '1' || flag === 'true' || flag === 'yes';
+    if (!hasUpdate) return null;
+    const version = process.env.OPENMUX_UPDATE_VERSION?.trim();
+    return version ? `[UPDATE! ${version}]` : '[UPDATE!]';
+  };
 
   // Truncate session name if too long
   const displaySessionName = () => {
@@ -68,6 +75,9 @@ export function StatusBar(props: StatusBarProps) {
         </Show>
         <Show when={session.showTemplateOverlay}>
           <text fg={sessionColor()}>[TEMPLATES]</text>
+        </Show>
+        <Show when={updateLabel()}>
+          <text fg="#33CC66">{updateLabel()}</text>
         </Show>
         <Show when={layout.activeWorkspace.zoomed}>
           <text fg="#666666">[ZOOMED]</text>
