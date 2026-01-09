@@ -3,7 +3,7 @@
  * Converts GhosttyCell format to our internal TerminalCell format.
  */
 
-import { CellFlags, type GhosttyCell } from '../ghostty-vt';
+import { CellFlags, type GhosttyCell } from '../ghostty-vt/types';
 import type { TerminalCell } from '../../core/types';
 import type { TerminalColors } from '../terminal-colors';
 import { extractRgb } from '../terminal-colors';
