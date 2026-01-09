@@ -1,6 +1,6 @@
 import { createEffect } from 'solid-js';
 import { createVimSequenceHandler, type VimInputMode } from '../../core/vim-sequences';
-import type { SearchContextValue } from '../../contexts/search/types';
+import type { SearchContextValue, SearchState } from '../../contexts/search/types';
 import type { useConfig } from '../../contexts/ConfigContext';
 
 const SEARCH_VIM_SEQUENCES = [
@@ -34,12 +34,19 @@ export function createSearchVimState(params: {
     });
   });
 
-  createEffect(() => {
-    if (!search.searchState) return;
-    if (config.config().keyboard.vimMode === 'overlays') {
-      search.setVimMode('normal');
+  createEffect((prevState: SearchState | null | undefined) => {
+    const currentState = search.searchState;
+    const hadSearch = Boolean(prevState);
+    const hasSearch = Boolean(currentState);
+
+    if (hasSearch && !hadSearch) {
+      if (config.config().keyboard.vimMode === 'overlays') {
+        search.setVimMode('normal');
+      }
+      searchVimHandler.reset();
     }
-    searchVimHandler.reset();
+
+    return currentState;
   });
 
   return {
