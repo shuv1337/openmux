@@ -26,7 +26,9 @@ export class ScrollbackArchiver {
       return
     }
     this.scheduled = true
-    deferMacrotask(() => this.run())
+    deferMacrotask(() => {
+      void this.run()
+    })
   }
 
   reset(): void {
@@ -34,7 +36,7 @@ export class ScrollbackArchiver {
     this.scheduled = false
   }
 
-  private run(): void {
+  private async run(): Promise<void> {
     this.scheduled = false
     if (this.running) {
       this.pending = true
@@ -55,7 +57,7 @@ export class ScrollbackArchiver {
         const lines = this.captureLines(batchSize)
         if (lines.length === 0) break
 
-        this.session.scrollbackArchive.appendLines(lines)
+        await this.session.scrollbackArchive.appendLines(lines)
 
         if ("trimScrollback" in this.liveEmulator) {
           const trimmer = this.liveEmulator as ITerminalEmulator & {
@@ -71,6 +73,8 @@ export class ScrollbackArchiver {
       if (this.liveEmulator.getScrollbackLength() > HOT_SCROLLBACK_LIMIT) {
         this.pending = true
       }
+    } catch {
+      // Best-effort: ignore archive errors to avoid blocking PTY flow.
     } finally {
       this.running = false
       if (this.pending) {

@@ -3,6 +3,7 @@
  */
 
 import fs from "node:fs"
+import fsp from "node:fs/promises"
 import path from "node:path"
 import type { TerminalCell } from "../core/types"
 import { packRow, unpackRow, CELL_SIZE } from "./cell-serialization"
@@ -48,6 +49,8 @@ export class ScrollbackArchive {
   private totalLines = 0
   private totalBytes = 0
   private nextChunkId = 1
+  private appendQueue: Promise<void> = Promise.resolve()
+  private generation = 0
 
   constructor(options: {
     rootDir: string
@@ -87,19 +90,23 @@ export class ScrollbackArchive {
   }
 
   reset(): void {
-    for (const chunk of this.chunks) {
-      try {
-        fs.unlinkSync(chunk.path)
-      } catch {
-        // Ignore cleanup errors.
-      }
-    }
+    const chunksToDelete = this.chunks
+    this.generation += 1
     this.chunks = []
     this.totalLines = 0
     this.totalBytes = 0
     this.nextChunkId = 1
     this.cache.clear()
-    this.flushMeta()
+    void this.enqueue(async () => {
+      for (const chunk of chunksToDelete) {
+        try {
+          await fsp.unlink(chunk.path)
+        } catch {
+          // Ignore cleanup errors.
+        }
+      }
+      await this.flushMeta()
+    })
   }
 
   dispose(): void {
@@ -107,8 +114,15 @@ export class ScrollbackArchive {
     this.manager?.unregister(this)
   }
 
-  appendLines(lines: TerminalCell[][]): void {
+  appendLines(lines: TerminalCell[][]): Promise<void> {
+    if (lines.length === 0) return Promise.resolve()
+    const generation = this.generation
+    return this.enqueue(() => this.appendLinesInternal(lines, generation))
+  }
+
+  private async appendLinesInternal(lines: TerminalCell[][], generation: number): Promise<void> {
     if (lines.length === 0) return
+    if (generation !== this.generation) return
 
     this.ensureDir()
 
@@ -116,12 +130,14 @@ export class ScrollbackArchive {
     let buffered: Buffer[] = []
     let bufferedBytes = 0
 
-    const flushBuffer = () => {
-      if (!currentChunk || buffered.length === 0) return
+    const flushBuffer = async (): Promise<boolean> => {
+      if (!currentChunk || buffered.length === 0) return true
       const payload = buffered.length === 1 ? buffered[0] : Buffer.concat(buffered, bufferedBytes)
-      fs.appendFileSync(currentChunk.path, payload)
+      await fsp.appendFile(currentChunk.path, payload)
+      if (generation !== this.generation) return false
       buffered = []
       bufferedBytes = 0
+      return true
     }
 
     for (const line of lines) {
@@ -134,7 +150,8 @@ export class ScrollbackArchive {
         currentChunk.cols !== cols ||
         currentChunk.lineCount >= this.chunkMaxLines
       ) {
-        flushBuffer()
+        const flushed = await flushBuffer()
+        if (flushed === false) return
         currentChunk = this.createChunk(cols, rowBytes)
         this.chunks.push(currentChunk)
       }
@@ -148,8 +165,10 @@ export class ScrollbackArchive {
       this.totalBytes += rowBytes
     }
 
-    flushBuffer()
-    this.flushMeta()
+    const flushed = await flushBuffer()
+    if (flushed === false || generation !== this.generation) return
+    await this.flushMeta()
+    if (generation !== this.generation) return
     this.enforceLimit()
     this.manager?.enforceGlobalLimit()
   }
@@ -183,17 +202,26 @@ export class ScrollbackArchive {
     const chunk = this.chunks.shift()
     if (!chunk) return null
 
-    try {
-      fs.unlinkSync(chunk.path)
-    } catch {
-      // Ignore cleanup errors.
-    }
-
     this.totalLines -= chunk.lineCount
     this.totalBytes -= chunk.bytes
     this.cache.clear()
-    this.flushMeta()
+    void this.enqueue(async () => {
+      try {
+        await fsp.unlink(chunk.path)
+      } catch {
+        // Ignore cleanup errors.
+      }
+      await this.flushMeta()
+    })
     return { linesRemoved: chunk.lineCount, bytesRemoved: chunk.bytes }
+  }
+
+  private enqueue(task: () => Promise<void>): Promise<void> {
+    this.appendQueue = this.appendQueue
+      .catch(() => {})
+      .then(task)
+      .catch(() => {})
+    return this.appendQueue
   }
 
   private ensureDir(): void {
@@ -328,7 +356,7 @@ export class ScrollbackArchive {
     }
   }
 
-  private flushMeta(): void {
+  private async flushMeta(): Promise<void> {
     const meta: ArchiveMeta = {
       version: 1,
       nextChunkId: this.nextChunkId,
@@ -343,7 +371,7 @@ export class ScrollbackArchive {
       })),
     }
     try {
-      fs.writeFileSync(this.metaPath, JSON.stringify(meta), "utf8")
+      await fsp.writeFile(this.metaPath, JSON.stringify(meta), "utf8")
     } catch {
       // Ignore metadata write failures.
     }
