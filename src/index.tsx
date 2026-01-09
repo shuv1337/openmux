@@ -2,6 +2,58 @@
  * Terminal multiplexer with master-stack layout
  */
 
+async function getCliVersion(): Promise<string> {
+  const envVersion = process.env.OPENMUX_VERSION?.trim();
+  if (envVersion) {
+    return envVersion;
+  }
+
+  try {
+    const { readFileSync } = await import('node:fs');
+    const { resolve, dirname } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const here = dirname(fileURLToPath(import.meta.url));
+    const pkgPath = resolve(here, '..', 'package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
+    if (pkg.version) {
+      return pkg.version;
+    }
+  } catch {
+    // Best-effort: version may be embedded by wrapper or unavailable in binaries.
+  }
+
+  return 'unknown';
+}
+
+function formatHelp(version: string): string {
+  const header = version === 'unknown' ? 'openmux' : `openmux v${version}`;
+  return [
+    header,
+    '',
+    'Usage: openmux [options]',
+    '',
+    'Options:',
+    '  -h, --help       Show this help message',
+    '  -v, --version    Show version',
+    '  --shim           Run shim server (internal)',
+  ].join('\n');
+}
+
+async function handleCliFlags(): Promise<boolean> {
+  const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
+    const version = await getCliVersion();
+    console.log(formatHelp(version));
+    return true;
+  }
+  if (args.includes('--version') || args.includes('-v')) {
+    const version = await getCliVersion();
+    console.log(version);
+    return true;
+  }
+  return false;
+}
+
 async function runShimIfRequested(): Promise<boolean> {
   if (!process.argv.includes('--shim')) {
     return false;
@@ -13,6 +65,9 @@ async function runShimIfRequested(): Promise<boolean> {
 }
 
 async function main() {
+  if (await handleCliFlags()) {
+    return;
+  }
   if (await runShimIfRequested()) {
     return;
   }

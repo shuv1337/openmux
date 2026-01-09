@@ -300,8 +300,10 @@ build() {
     # Create empty bunfig.toml in dist to prevent parent config from being used
     echo "# openmux runtime config (empty - preload already compiled in)" > "$DIST_DIR/bunfig.toml"
 
-    # Create wrapper script
-    create_wrapper "$DIST_DIR/$BINARY_NAME"
+    # Create wrapper script (embed version for --version output)
+    local version
+    version=$(grep '"version"' "$PROJECT_DIR/package.json" | head -1 | sed 's/.*"version": *"\([^"]*\)".*/\1/')
+    create_wrapper "$DIST_DIR/$BINARY_NAME" "$version"
 
     sign_macos_artifacts
 
@@ -311,6 +313,7 @@ build() {
 
 create_wrapper() {
     local wrapper_path="$1"
+    local version="$2"
 
     if [[ "$OS" == "windows" ]]; then
         # Windows batch file
@@ -322,6 +325,7 @@ set "SCRIPT_DIR=%~dp0"
 set "ZIG_PTY_LIB=%SCRIPT_DIR%zig_pty.dll"
 set "ZIG_GIT_LIB=%SCRIPT_DIR%zig_git.dll"
 set "GHOSTTY_VT_LIB=%SCRIPT_DIR%libghostty-vt.dll"
+if not defined OPENMUX_VERSION set "OPENMUX_VERSION=$version"
 if not defined OPENMUX_ORIGINAL_CWD set "OPENMUX_ORIGINAL_CWD=%CD%"
 cd /d "%SCRIPT_DIR%"
 "%SCRIPT_DIR%openmux-bin.exe" %*
@@ -336,6 +340,7 @@ SCRIPT_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 export ZIG_PTY_LIB="\${ZIG_PTY_LIB:-\$SCRIPT_DIR/libzig_pty.$LIB_EXT}"
 export ZIG_GIT_LIB="\${ZIG_GIT_LIB:-\$SCRIPT_DIR/libzig_git.$LIB_EXT}"
 export GHOSTTY_VT_LIB="\${GHOSTTY_VT_LIB:-\$SCRIPT_DIR/$GHOSTTY_LIB_NAME}"
+export OPENMUX_VERSION="\${OPENMUX_VERSION:-$version}"
 export OPENMUX_ORIGINAL_CWD="\${OPENMUX_ORIGINAL_CWD:-\$(pwd)}"
 cd "\$SCRIPT_DIR"
 exec "./openmux-bin" "\$@"

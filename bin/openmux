@@ -160,6 +160,9 @@ if [[ -z "$PKG_JSON" ]]; then
         if [[ ! -f "$BIN_DIR/bunfig.toml" ]]; then
             echo "# openmux runtime config (empty - preload already compiled in)" > "$BIN_DIR/bunfig.toml"
         fi
+        if [[ -f "$BIN_DIR/.version" ]]; then
+            export OPENMUX_VERSION="$(cat "$BIN_DIR/.version")"
+        fi
         export ZIG_PTY_LIB="${ZIG_PTY_LIB:-$BIN_DIR/libzig_pty.$LIB_EXT}"
         # cd to BIN_DIR to avoid reading user's bunfig.toml
         cd "$BIN_DIR"
@@ -192,5 +195,6 @@ fi
 
 # Set library path, cd to BIN_DIR to avoid user's bunfig.toml, and execute
 export ZIG_PTY_LIB="${ZIG_PTY_LIB:-$BIN_DIR/libzig_pty.$LIB_EXT}"
+export OPENMUX_VERSION="$VERSION"
 cd "$BIN_DIR"
 exec "./openmux-bin" "$@"
