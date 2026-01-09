@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.93](https://github.com/monotykamary/openmux/compare/v0.2.92...v0.2.93) (2026-01-09)
+
+
+### Bug Fixes
+
+* **lint:** use type-only imports in shim client ([efaed91](https://github.com/monotykamary/openmux/commit/efaed9161905f75de0d82a6fa26bbfcc25e5df3f))
+* **search:** keep vim insert mode while typing ([71c3bb1](https://github.com/monotykamary/openmux/commit/71c3bb151c6d030db5fd0be98c1bb66bd7a0effa))
+
+
+### Tests
+
+* cover scrollback resize and alt-screen transitions ([1403ae1](https://github.com/monotykamary/openmux/commit/1403ae1f210a20d1ccb1c7c69111b17c115ca1fd))
+
 ### [0.2.92](https://github.com/monotykamary/openmux/compare/v0.2.91...v0.2.92) (2026-01-09)
 
 
