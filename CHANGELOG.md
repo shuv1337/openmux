@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.91](https://github.com/monotykamary/openmux/compare/v0.2.90...v0.2.91) (2026-01-09)
+
+
+### Bug Fixes
+
+* **aggregate:** guard diff stats render ([3aca8cf](https://github.com/monotykamary/openmux/commit/3aca8cfc9ae0789fb7590022d8afa8ae3bfe1e5f))
+
 ### [0.2.90](https://github.com/monotykamary/openmux/compare/v0.2.89...v0.2.90) (2026-01-08)
 
 
