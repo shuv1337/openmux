@@ -53,7 +53,7 @@ import { setupOverlayClipRects } from './components/app/overlay-clips';
 import { createSearchVimState } from './components/app/search-vim';
 import { createOverlayVimMode } from './components/app/overlay-vim-mode';
 import { setupAppLayoutEffects } from './components/app/layout-effects';
-import { compareSemver } from './core/update-check';
+import { checkForUpdateLabel } from './core/update-checker';
 import {
   getCommandPaletteRect,
   getConfirmationRect,
@@ -62,36 +62,6 @@ import {
   getSessionPickerRect,
   getTemplateOverlayRect,
 } from './components/app/overlay-rects';
-
-async function readLocalVersion(): Promise<string | null> {
-  const envVersion = process.env.OPENMUX_VERSION?.trim();
-  if (envVersion) {
-    return envVersion;
-  }
-
-  try {
-    const { readFileSync } = await import('node:fs');
-    const { resolve, dirname } = await import('node:path');
-    const { fileURLToPath } = await import('node:url');
-    const here = dirname(fileURLToPath(import.meta.url));
-    const pkgPath = resolve(here, '..', 'package.json');
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
-    return pkg.version ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function fetchLatestVersion(signal?: AbortSignal): Promise<string | null> {
-  try {
-    const response = await fetch('https://registry.npmjs.org/openmux/latest', { signal });
-    if (!response.ok) return null;
-    const data = (await response.json()) as { version?: string };
-    return typeof data.version === 'string' ? data.version : null;
-  } catch {
-    return null;
-  }
-}
 
 function AppContent() {
   const config = useConfig();
@@ -394,13 +364,8 @@ function AppContent() {
   createEffect(() => {
     const controller = new AbortController();
     void (async () => {
-      const currentVersion = await readLocalVersion();
-      if (!currentVersion) return;
-      const latestVersion = await fetchLatestVersion(controller.signal);
-      if (!latestVersion) return;
-      if (compareSemver(currentVersion, latestVersion) < 0) {
-        setUpdateLabel('[UPDATE!]');
-      }
+      const label = await checkForUpdateLabel(controller.signal);
+      if (label) setUpdateLabel(label);
     })();
 
     onCleanup(() => {
