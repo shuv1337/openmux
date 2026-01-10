@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.101](https://github.com/monotykamary/openmux/compare/v0.2.100...v0.2.101) (2026-01-10)
+
+
+### Bug Fixes
+
+* **panes:** rehydrate titles after reattach ([c46f3dc](https://github.com/monotykamary/openmux/commit/c46f3dcbecb66e6d2318fee53b630cbdd6f5c9f9))
+* **panes:** reset manual title on empty rename ([4f5ebf7](https://github.com/monotykamary/openmux/commit/4f5ebf7d2ca612538ca130d0157ffaa7b2beb697))
+
 ### [0.2.100](https://github.com/monotykamary/openmux/compare/v0.2.99...v0.2.100) (2026-01-10)
 
 
