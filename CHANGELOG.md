@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.97](https://github.com/monotykamary/openmux/compare/v0.2.96...v0.2.97) (2026-01-10)
+
+
+### Bug Fixes
+
+* **ui:** order overlay labels before vim mode ([112d7da](https://github.com/monotykamary/openmux/commit/112d7dae4f1b8440ff1a296964431944b21d9097))
+
 ### [0.2.96](https://github.com/monotykamary/openmux/compare/v0.2.95...v0.2.96) (2026-01-10)
 
 
