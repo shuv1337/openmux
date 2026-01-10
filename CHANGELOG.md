@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.94](https://github.com/monotykamary/openmux/compare/v0.2.93...v0.2.94) (2026-01-10)
+
+
+### Bug Fixes
+
+* **scrollback:** async archive writes and cleanup ([ac714e8](https://github.com/monotykamary/openmux/commit/ac714e8e8204a9495d965467321dc4775ed4eb6c))
+* **tests:** sync vitest jsx runtime and archive setup ([7df2259](https://github.com/monotykamary/openmux/commit/7df2259e82e8f811eacff8e25318ea62a904ec0a))
+
 ### [0.2.93](https://github.com/monotykamary/openmux/compare/v0.2.92...v0.2.93) (2026-01-09)
 
 
