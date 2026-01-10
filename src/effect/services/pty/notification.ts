@@ -15,15 +15,12 @@ export function getCurrentScrollState(session: InternalPtySession): TerminalScro
   const scrollbackLength = session.emulator.getScrollbackLength()
   const liveScrollbackLength = session.liveEmulator.getScrollbackLength()
 
-  // SCROLL POSITION FIX: When new content is added (scrollback grows) and user
-  // is scrolled back, adjust viewportOffset by the delta to maintain the same
-  // visual position. Without this, new lines cause the viewed content to shift up.
+  // SCROLL POSITION FIX: When scrollback length changes and the user is scrolled back,
+  // adjust viewportOffset by the delta to keep the same content anchored in view.
   const scrollbackDelta = scrollbackLength - session.scrollState.lastScrollbackLength
-  if (scrollbackDelta > 0 && session.scrollState.viewportOffset > 0) {
-    session.scrollState.viewportOffset = Math.min(
-      session.scrollState.viewportOffset + scrollbackDelta,
-      scrollbackLength
-    )
+  if (scrollbackDelta !== 0 && session.scrollState.viewportOffset > 0) {
+    const nextOffset = session.scrollState.viewportOffset + scrollbackDelta
+    session.scrollState.viewportOffset = Math.max(0, Math.min(nextOffset, scrollbackLength))
   }
 
   // Update last scrollback length for next comparison

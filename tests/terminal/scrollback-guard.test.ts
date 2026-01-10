@@ -89,6 +89,27 @@ describe('scrollback-guard', () => {
     expect(result.shouldDefer).toBe(false);
   });
 
+  it('detects non-user scroll when viewport offset tracks scrollback shrink', () => {
+    const rows = 3;
+    const desiredScrollbackLength = 8;
+    const desiredViewportOffset = 3;
+    const desiredRowCache = [createRow('A'), createRow('B'), createRow('C')];
+
+    const result = guardScrollbackRender({
+      desiredViewportOffset,
+      desiredScrollbackLength,
+      rows,
+      desiredRowCache,
+      lastStableViewportOffset: 5,
+      lastStableScrollbackLength: 10,
+      lastObservedViewportOffset: 5,
+      lastObservedScrollbackLength: 10,
+    });
+
+    expect(result.isUserScroll).toBe(false);
+    expect(result.shouldDefer).toBe(false);
+  });
+
   it('detects user scroll when viewport offset diverges from expected delta', () => {
     const rows = 3;
     const desiredScrollbackLength = 12;

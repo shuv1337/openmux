@@ -29,7 +29,7 @@ describe('scroll-position-stability', () => {
     };
   }
 
-  describe('viewportOffset adjustment when scrollback grows', () => {
+  describe('viewportOffset adjustment when scrollback length changes', () => {
     it('should adjust viewportOffset by scrollback delta when scrolled back', () => {
       // Simulates getCurrentScrollState() logic in notification.ts
       const session = {
@@ -101,7 +101,7 @@ describe('scroll-position-stability', () => {
       expect(session.scrollState.viewportOffset).toBe(100);
     });
 
-    it('should not adjust when scrollback shrinks (reset scenario)', () => {
+    it('should adjust when scrollback shrinks while scrolled back', () => {
       const session = {
         scrollState: {
           viewportOffset: 50,
@@ -112,16 +112,13 @@ describe('scroll-position-stability', () => {
 
       const scrollbackDelta = newScrollbackLength - session.scrollState.lastScrollbackLength;
 
-      // scrollbackDelta is -100, not > 0, so no adjustment
-      if (scrollbackDelta > 0 && session.scrollState.viewportOffset > 0) {
-        session.scrollState.viewportOffset = Math.min(
-          session.scrollState.viewportOffset + scrollbackDelta,
-          newScrollbackLength
-        );
+      if (scrollbackDelta !== 0 && session.scrollState.viewportOffset > 0) {
+        const nextOffset = session.scrollState.viewportOffset + scrollbackDelta;
+        session.scrollState.viewportOffset = Math.max(0, Math.min(nextOffset, newScrollbackLength));
       }
 
-      // viewportOffset unchanged (will be clamped elsewhere when rendering)
-      expect(session.scrollState.viewportOffset).toBe(50);
+      // viewportOffset clamps to 0 when scrollback drops to 0
+      expect(session.scrollState.viewportOffset).toBe(0);
     });
   });
 
@@ -322,6 +319,25 @@ describe('scroll-position-stability', () => {
       const absoluteYAfter = scrollbackLength - viewportOffset + 0; // 101 - 11 + 0 = 90
 
       // Same visual position maintained
+      expect(absoluteYAfter).toBe(absoluteYBefore);
+    });
+
+    it('should maintain same absoluteY when scrollback shrinks', () => {
+      let scrollbackLength = 100;
+      let viewportOffset = 20;
+
+      const absoluteYBefore = scrollbackLength - viewportOffset + 0; // 80
+
+      const newScrollbackLength = 90;
+      const scrollbackDelta = newScrollbackLength - scrollbackLength;
+
+      if (scrollbackDelta !== 0 && viewportOffset > 0) {
+        viewportOffset = Math.max(0, Math.min(viewportOffset + scrollbackDelta, newScrollbackLength));
+      }
+      scrollbackLength = newScrollbackLength;
+
+      const absoluteYAfter = scrollbackLength - viewportOffset + 0; // 90 - 10 + 0 = 80
+
       expect(absoluteYAfter).toBe(absoluteYBefore);
     });
 

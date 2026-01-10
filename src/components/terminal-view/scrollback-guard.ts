@@ -42,8 +42,9 @@ export function guardScrollbackRender(
   } = options
 
   const scrollbackDelta = desiredScrollbackLength - lastObservedScrollbackLength
-  const expectedViewportOffset = scrollbackDelta > 0
-    ? lastObservedViewportOffset + scrollbackDelta
+  const shouldAutoAdjust = scrollbackDelta !== 0 && lastObservedViewportOffset > 0
+  const expectedViewportOffset = shouldAutoAdjust
+    ? Math.max(0, Math.min(lastObservedViewportOffset + scrollbackDelta, desiredScrollbackLength))
     : lastObservedViewportOffset
   const isUserScroll = desiredViewportOffset !== expectedViewportOffset
 
