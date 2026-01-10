@@ -8,6 +8,7 @@ import {
   formatRelativeTime,
   truncate,
 } from './formatting';
+import { truncateHint } from '../overlay-hints';
 import { getTemplateStats, type SaveSummaryLine } from './summary';
 
 interface TemplateOverlayViewProps {
@@ -139,6 +140,13 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
     return `${save}:save ${close}:close`;
   };
 
+  const hintWidth = () => Math.max(1, props.overlayWidth - 4);
+  const applyHintDisplay = () => truncateHint(
+    props.templates.length === 0 ? emptyApplyHints() : applyHints(),
+    hintWidth()
+  );
+  const saveHintDisplay = () => truncateHint(props.error ?? saveHints(), hintWidth());
+
   return (
     <Show when={props.show}>
       <box
@@ -198,7 +206,7 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
                 </box>
                 <box style={{ height: 1 }}>
                   <text fg="#666666">
-                    {props.error ?? saveHints()}
+                    {saveHintDisplay()}
                   </text>
                 </box>
               </box>
@@ -226,9 +234,7 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
             </box>
             <box style={{ height: 1 }}>
               <text fg="#666666">
-                {props.templates.length === 0
-                  ? emptyApplyHints()
-                  : applyHints()}
+                {applyHintDisplay()}
               </text>
             </box>
           </Show>

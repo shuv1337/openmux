@@ -146,8 +146,10 @@ export function getFilterText(filterQuery: string): string {
 /**
  * Calculate footer text widths
  */
-export function calculateFooterWidths(totalWidth: number, hintsText: string) {
-  const hintsWidth = hintsText.length;
+export function calculateFooterWidths(totalWidth: number, filterText: string, hintsText: string) {
+  const minFilterWidth = Math.min(filterText.length, Math.max(1, totalWidth - 2));
+  const maxHintsWidth = Math.max(0, totalWidth - minFilterWidth - 2);
+  const hintsWidth = Math.min(hintsText.length, maxHintsWidth);
   const filterWidth = totalWidth - hintsWidth - 2; // -2 for spacing
   return { hintsWidth, filterWidth };
 }

@@ -22,3 +22,5 @@ export {
   type LayoutConfig,
   type LayoutDimensions,
 } from './layout-utils';
+
+export { truncateHint } from '../overlay-hints';

@@ -11,6 +11,7 @@ import { eventToCombo, formatComboSet, matchKeybinding, type ResolvedKeybindingM
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
 import type { KeyboardEvent } from '../effect/bridge';
 import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
+import { truncateHint } from './overlay-hints';
 
 interface SessionPickerProps {
   width: number;
@@ -38,6 +39,7 @@ function formatRelativeTime(timestamp: number): string {
   if (days < 7) return `${days}d ago`;
   return new Date(timestamp).toLocaleDateString();
 }
+
 
 export function SessionPicker(props: SessionPickerProps) {
   const theme = useTheme();
@@ -296,6 +298,8 @@ export function SessionPicker(props: SessionPickerProps) {
   const overlayHeight = () => Math.min(sessionRowCount() + 6, props.height - 4);
   const overlayX = () => Math.floor((props.width - overlayWidth()) / 2);
   const overlayY = () => Math.floor((props.height - overlayHeight()) / 2);
+  const hintWidth = () => Math.max(1, overlayWidth() - 4);
+  const hintDisplay = () => truncateHint(buildHintText(), hintWidth());
 
   return (
     <Show when={state.showSessionPicker}>
@@ -362,7 +366,7 @@ export function SessionPicker(props: SessionPickerProps) {
             <text fg="#444444">{'─'.repeat(overlayWidth() - 4)}</text>
           </box>
           <box style={{ height: 1 }}>
-            <text fg="#666666">{buildHintText()}</text>
+            <text fg="#666666">{hintDisplay()}</text>
           </box>
         </box>
       </box>

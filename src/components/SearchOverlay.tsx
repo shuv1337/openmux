@@ -11,6 +11,7 @@ import { useSearch } from '../contexts/SearchContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { formatComboSet, type ResolvedKeybindingMap } from '../core/keybindings';
 import type { SearchState } from '../contexts/search/types';
+import { truncateHint } from './overlay-hints';
 
 interface SearchOverlayProps {
   width: number;
@@ -19,6 +20,15 @@ interface SearchOverlayProps {
 
 function getCombos(bindings: ResolvedKeybindingMap, action: string): string[] {
   return bindings.byAction.get(action) ?? [];
+}
+
+function fitLine(text: string, width: number): string {
+  if (width <= 0) return '';
+  if (text.length > width) {
+    if (width <= 3) return text.slice(0, width);
+    return text.slice(0, width - 3) + '...';
+  }
+  return text.padEnd(width);
 }
 
 export function SearchOverlay(props: SearchOverlayProps) {
@@ -31,6 +41,7 @@ export function SearchOverlay(props: SearchOverlayProps) {
 
   // Calculate overlay dimensions
   const overlayWidth = () => Math.min(props.width - 4, 60);
+  const innerWidth = () => Math.max(1, overlayWidth() - 4);
   const overlayHeight = 3;
   const overlayX = () => Math.floor((props.width - overlayWidth()) / 2);
   const overlayY = () => props.height - overlayHeight - 1;
@@ -63,6 +74,24 @@ export function SearchOverlay(props: SearchOverlayProps) {
     return `${nav}:nav ${cancel}:cancel`;
   };
 
+  const promptText = '/ ';
+  const spacerText = ' ';
+  const cursorText = '_';
+
+  const queryDisplay = (query: string) => query || ' ';
+
+  const hintWidth = () => {
+    const reserved =
+      promptText.length +
+      spacerText.length * 2 +
+      cursorText.length +
+      matchDisplay().length +
+      queryDisplay(search.searchState?.query ?? '').length;
+    return Math.max(0, innerWidth() - reserved);
+  };
+
+  const hintDisplay = () => truncateHint(hintText(), hintWidth());
+
   return (
     <Show when={search.searchState}>
       {(state: Accessor<SearchState>) => (
@@ -86,13 +115,15 @@ export function SearchOverlay(props: SearchOverlayProps) {
           titleAlignment="center"
         >
           <box style={{ flexDirection: 'row', height: 1 }}>
-            <text fg={accentColor()}>/ </text>
-            <text fg="#FFFFFF">{state().query || ' '}</text>
-            <text fg={accentColor()}>_</text>
-            <text fg="#444444">  </text>
+            <text fg={accentColor()}>{promptText}</text>
+            <text fg="#FFFFFF">{queryDisplay(state().query)}</text>
+            <text fg={accentColor()}>{cursorText}</text>
+            <text fg="#444444">{spacerText}</text>
             <text fg={state().matches.length > 0 ? '#88FF88' : '#888888'}>{matchDisplay()}</text>
-            <text fg="#444444">  </text>
-            <text fg="#666666">{hintText()}</text>
+            <Show when={hintDisplay().length > 0}>
+              <text fg="#444444">{spacerText}</text>
+              <text fg="#666666">{hintDisplay()}</text>
+            </Show>
           </box>
         </box>
       )}

@@ -20,6 +20,7 @@ import type { KeyboardEvent } from '../effect/bridge';
 import { RGBA } from '@opentui/core';
 import { filterCommands } from './command-palette-utils';
 import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
+import { truncateHint } from './overlay-hints';
 
 export interface CommandPaletteState {
   show: boolean;
@@ -306,6 +307,10 @@ export function CommandPalette(props: CommandPaletteProps) {
     return `${props.state.selectedIndex + 1}/${resultCount()}`;
   };
 
+  const promptText = '> ';
+  const spacerText = ' ';
+  const cursorText = '_';
+
   const hintText = () => {
     if (vimEnabled()) {
       const modeHint = vimMode() === 'insert' ? 'esc:normal' : 'i:insert';
@@ -320,6 +325,20 @@ export function CommandPalette(props: CommandPaletteProps) {
     const close = formatComboSet(getCombos(bindings, 'command.palette.close'));
     return `${nav}:nav ${run}:run ${close}:close`;
   };
+
+  const queryDisplay = () => props.state.query || ' ';
+
+  const hintWidth = createMemo(() => {
+    const reserved =
+      promptText.length +
+      spacerText.length * 2 +
+      cursorText.length +
+      matchDisplay().length +
+      queryDisplay().length;
+    return Math.max(0, innerWidth() - reserved);
+  });
+
+  const hintDisplay = () => truncateHint(hintText(), hintWidth());
 
   return (
     <Show when={props.state.show}>
@@ -345,13 +364,15 @@ export function CommandPalette(props: CommandPaletteProps) {
       >
         <box style={{ flexDirection: 'column' }}>
           <box style={{ flexDirection: 'row', height: 1 }}>
-            <text fg={accentColor()}>{'> '}</text>
-            <text fg="#FFFFFF">{props.state.query || ' '}</text>
-            <text fg={accentColor()}>_</text>
-            <text fg="#444444">  </text>
+            <text fg={accentColor()}>{promptText}</text>
+            <text fg="#FFFFFF">{queryDisplay()}</text>
+            <text fg={accentColor()}>{cursorText}</text>
+            <text fg="#444444">{spacerText}</text>
             <text fg={resultCount() > 0 ? '#88FF88' : '#888888'}>{matchDisplay()}</text>
-            <text fg="#444444">  </text>
-            <text fg="#666666">{hintText()}</text>
+            <Show when={hintDisplay().length > 0}>
+              <text fg="#444444">{spacerText}</text>
+              <text fg="#666666">{hintDisplay()}</text>
+            </Show>
           </box>
 
           <Show when={visibleCommands().length > 0}>

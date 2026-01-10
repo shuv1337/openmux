@@ -33,6 +33,7 @@ import {
   getFilterText,
   calculateFooterWidths,
 } from './aggregate';
+import { truncateHint } from './overlay-hints';
 import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
 
 interface AggregateViewProps {
@@ -371,7 +372,7 @@ export function AggregateView(props: AggregateViewProps) {
   const filterText = () => getFilterText(state.filterQuery);
 
   // Calculate footer widths
-  const footerWidths = () => calculateFooterWidths(props.width, hintsText());
+  const footerWidths = () => calculateFooterWidths(props.width, filterText(), hintsText());
 
   return (
     <Show when={state.showAggregateView}>
@@ -479,7 +480,7 @@ export function AggregateView(props: AggregateViewProps) {
             <text fg="#CCCCCC">{filterText().slice(0, footerWidths().filterWidth)}</text>
           </box>
           <box style={{ width: footerWidths().hintsWidth + 2, flexDirection: 'row', justifyContent: 'flex-end' }}>
-            <text fg="#666666">{hintsText()}</text>
+            <text fg="#666666">{truncateHint(hintsText(), footerWidths().hintsWidth)}</text>
           </box>
         </box>
       </box>
