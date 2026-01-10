@@ -43,6 +43,13 @@ const BASE_COMMANDS: CommandPaletteCommand[] = [
     keywords: ['rename', 'name', 'title', 'pane'],
   },
   {
+    id: 'workspace.label',
+    title: 'Label workspace',
+    description: 'Label the active workspace',
+    action: 'workspace.label',
+    keywords: ['workspace', 'label', 'name'],
+  },
+  {
     id: 'pane.zoom',
     title: 'Toggle zoom',
     description: 'Zoom or unzoom the focused pane',

@@ -5,6 +5,7 @@ import { filterCommands } from '../command-palette-utils';
 import { buildTemplateSummary } from '../template-overlay/summary';
 import { calculateLayoutDimensions } from '../aggregate';
 import type { PaneRenameState } from '../PaneRenameOverlay';
+import type { WorkspaceLabelState } from '../WorkspaceLabelOverlay';
 
 type CopyNotificationState = {
   visible: boolean;
@@ -102,6 +103,22 @@ export function getPaneRenameRect(
   width: number,
   height: number,
   state: PaneRenameState
+): Rectangle | null {
+  if (!state.show) return null;
+  const overlayWidth = Math.max(0, Math.min(70, width - 4));
+  const overlayHeight = 3;
+  const overlayX = Math.floor((width - overlayWidth) / 2);
+  const desiredCommandY = Math.floor(height * 0.15);
+  const desired = Math.max(0, desiredCommandY - 1);
+  const maxY = Math.max(0, height - overlayHeight);
+  const overlayY = Math.min(desired, maxY);
+  return { x: overlayX, y: overlayY, width: overlayWidth, height: overlayHeight };
+}
+
+export function getWorkspaceLabelRect(
+  width: number,
+  height: number,
+  state: WorkspaceLabelState
 ): Rectangle | null {
   if (!state.show) return null;
   const overlayWidth = Math.max(0, Math.min(70, width - 4));

@@ -27,6 +27,7 @@ export interface KeyboardHandlerOptions {
   onRequestQuit?: () => void;
   onRequestClosePane?: () => void;
   onRenamePane?: () => void;
+  onLabelWorkspace?: () => void;
   onToggleSessionPicker?: () => void;
   onToggleTemplateOverlay?: () => void;
   onEnterSearch?: () => void;

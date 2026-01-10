@@ -26,6 +26,7 @@ export type OverlayType =
   | "confirmationDialog"
   | "commandPalette"
   | "paneRename"
+  | "workspaceLabel"
   | "templateOverlay"
   | "sessionPicker"
   | "aggregateView"
@@ -38,6 +39,7 @@ const OVERLAY_PRIORITY: Record<OverlayType, number> = {
   confirmationDialog: 30, // Highest - modal dialogs take precedence
   commandPalette: 25,
   paneRename: 24,
+  workspaceLabel: 23,
   templateOverlay: 22,
   sessionPicker: 20,
   aggregateView: 10,

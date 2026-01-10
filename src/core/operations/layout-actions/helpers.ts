@@ -146,6 +146,7 @@ export function syncSplitIdCounter(workspaces: Workspaces): void {
 export function createWorkspace(id: WorkspaceId, layoutMode: LayoutMode): Workspace {
   return {
     id,
+    label: undefined,
     mainPane: null,
     stackPanes: [],
     focusedPaneId: null,

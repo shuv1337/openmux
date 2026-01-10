@@ -44,6 +44,7 @@ import { setupKeyboardRouting } from './components/app/keyboard-routing';
 import { usePtyCreation } from './components/app/pty-creation';
 import { AppOverlays } from './components/app/AppOverlays';
 import type { PaneRenameState } from './components/PaneRenameOverlay';
+import type { WorkspaceLabelState } from './components/WorkspaceLabelOverlay';
 import { createTemplatePendingActions } from './components/app/template-pending-actions';
 import { createSessionPendingActions } from './components/app/session-pending-actions';
 import { createKittyGraphicsBridge } from './components/app/kitty-graphics-bridge';
@@ -59,6 +60,7 @@ import { checkForUpdateLabel } from './core/update-checker';
 import {
   getCommandPaletteRect,
   getPaneRenameRect,
+  getWorkspaceLabelRect,
   getConfirmationRect,
   getCopyNotificationRect,
   getSearchOverlayRect,
@@ -103,8 +105,14 @@ function AppContent() {
     paneId: null,
     value: '',
   });
+  const [workspaceLabelState, setWorkspaceLabelState] = createStore<WorkspaceLabelState>({
+    show: false,
+    workspaceId: null,
+    value: '',
+  });
   const [commandPaletteVimMode, setCommandPaletteVimMode] = createSignal<VimInputMode>('normal');
   const [paneRenameVimMode, setPaneRenameVimMode] = createSignal<VimInputMode>('normal');
+  const [workspaceLabelVimMode, setWorkspaceLabelVimMode] = createSignal<VimInputMode>('normal');
   const [sessionPickerVimMode, setSessionPickerVimMode] = createSignal<VimInputMode>('normal');
   const [templateOverlayVimMode, setTemplateOverlayVimMode] = createSignal<VimInputMode>('normal');
   const [aggregateVimMode, setAggregateVimMode] = createSignal<VimInputMode>('normal');
@@ -163,12 +171,14 @@ function AppContent() {
     commandPaletteState,
     commandPaletteCommands: DEFAULT_COMMAND_PALETTE_COMMANDS,
     paneRenameState,
+    workspaceLabelState,
     confirmationVisible: () => confirmationState().visible,
     kittyRenderer,
     getSessionPickerRect,
     getTemplateOverlayRect,
     getCommandPaletteRect,
     getPaneRenameRect,
+    getWorkspaceLabelRect,
     getSearchOverlayRect,
     getConfirmationRect,
     getCopyNotificationRect,
@@ -265,6 +275,10 @@ function AppContent() {
     setPaneRenameVimMode(mode);
   };
 
+  const handleWorkspaceLabelVimModeChange = (mode: VimInputMode) => {
+    setWorkspaceLabelVimMode(mode);
+  };
+
   const handleSessionPickerVimModeChange = (mode: VimInputMode) => {
     setSessionPickerVimMode(mode);
   };
@@ -283,6 +297,16 @@ function AppContent() {
     const currentTitle =
       titleContext.getTitle(focusedPane.id) ?? focusedPane.title ?? 'shell';
     setPaneRenameState({ show: true, paneId: focusedPane.id, value: currentTitle });
+  };
+
+  const handleWorkspaceLabelOpen = () => {
+    const workspace = layout.activeWorkspace;
+    const currentLabel = workspace.label ?? '';
+    setWorkspaceLabelState({
+      show: true,
+      workspaceId: workspace.id,
+      value: currentLabel,
+    });
   };
 
   const hasAnyPanes = () =>
@@ -363,6 +387,7 @@ function AppContent() {
         onToggleCommandPalette: toggleCommandPalette,
         onToggleVimMode: handleToggleVimMode,
         onRenamePane: handlePaneRenameOpen,
+        onLabelWorkspace: handleWorkspaceLabelOpen,
       }
     );
   };
@@ -376,6 +401,7 @@ function AppContent() {
     confirmationVisible: () => confirmationState().visible,
     commandPaletteState,
     paneRenameState,
+    workspaceLabelState,
     session,
     sessionState,
     aggregateState,
@@ -383,6 +409,7 @@ function AppContent() {
     search,
     commandPaletteVimMode,
     paneRenameVimMode,
+    workspaceLabelVimMode,
     sessionPickerVimMode,
     templateOverlayVimMode,
     aggregateVimMode,
@@ -425,6 +452,7 @@ function AppContent() {
     onToggleCommandPalette: toggleCommandPalette,
     onToggleVimMode: handleToggleVimMode,
     onRenamePane: handlePaneRenameOpen,
+    onLabelWorkspace: handleWorkspaceLabelOpen,
   });
 
   setupAppLayoutEffects({
@@ -479,10 +507,13 @@ function AppContent() {
         onCommandPaletteExecute={handleCommandPaletteExecute}
         paneRenameState={paneRenameState}
         setPaneRenameState={setPaneRenameState}
+        workspaceLabelState={workspaceLabelState}
+        setWorkspaceLabelState={setWorkspaceLabelState}
         overlayVimMode={overlayVimMode()}
         updateLabel={updateLabel()}
         onCommandPaletteVimModeChange={handleCommandPaletteVimModeChange}
         onPaneRenameVimModeChange={handlePaneRenameVimModeChange}
+        onWorkspaceLabelVimModeChange={handleWorkspaceLabelVimModeChange}
         onSessionPickerVimModeChange={handleSessionPickerVimModeChange}
         onTemplateOverlayVimModeChange={handleTemplateOverlayVimModeChange}
         onAggregateVimModeChange={handleAggregateVimModeChange}

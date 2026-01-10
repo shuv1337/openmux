@@ -119,8 +119,11 @@ export function serializeWorkspace(
   workspace: WorkspaceState,
   cwdMap: Map<string, string>
 ): SerializedWorkspace | null {
-  // Only serialize workspaces with panes
-  if (!workspace.mainPane && workspace.stackPanes.length === 0) {
+  const hasLabel = Boolean(workspace.label?.trim())
+  const hasPanes = Boolean(workspace.mainPane) || workspace.stackPanes.length > 0
+
+  // Only serialize workspaces with panes or labels
+  if (!hasPanes && !hasLabel) {
     return null
   }
 
@@ -155,6 +158,7 @@ export function serializeWorkspace(
 
   return SerializedWorkspace.make({
     id: WorkspaceId.make(id),
+    label: workspace.label,
     mainPane,
     stackPanes,
     focusedPaneId: workspace.focusedPaneId ?? null,

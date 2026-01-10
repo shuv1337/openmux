@@ -22,15 +22,6 @@ function getCombos(bindings: ResolvedKeybindingMap, action: string): string[] {
   return bindings.byAction.get(action) ?? [];
 }
 
-function fitLine(text: string, width: number): string {
-  if (width <= 0) return '';
-  if (text.length > width) {
-    if (width <= 3) return text.slice(0, width);
-    return text.slice(0, width - 3) + '...';
-  }
-  return text.padEnd(width);
-}
-
 export function SearchOverlay(props: SearchOverlayProps) {
   const theme = useTheme();
   const config = useConfig();

@@ -73,6 +73,9 @@ export function handleNormalModeAction(
     case 'pane.rename':
       options.onRenamePane?.();
       return true;
+    case 'workspace.label':
+      options.onLabelWorkspace?.();
+      return true;
     case 'pane.zoom':
       layout.toggleZoom();
       return true;
@@ -184,6 +187,10 @@ export function handlePrefixModeAction(
       return true;
     case 'pane.rename':
       options.onRenamePane?.();
+      exitPrefix();
+      return true;
+    case 'workspace.label':
+      options.onLabelWorkspace?.();
       exitPrefix();
       return true;
     case 'pane.zoom':

@@ -1,6 +1,7 @@
 import type { Accessor } from 'solid-js';
 import type { CommandPaletteState } from '../CommandPalette';
 import type { PaneRenameState } from '../PaneRenameOverlay';
+import type { WorkspaceLabelState } from '../WorkspaceLabelOverlay';
 import type { VimInputMode } from '../../core/vim-sequences';
 import type { SearchContextValue } from '../../contexts/search/types';
 import type { SessionState } from '../../core/operations/session-actions';
@@ -13,6 +14,7 @@ export function createOverlayVimMode(params: {
   confirmationVisible: Accessor<boolean>;
   commandPaletteState: CommandPaletteState;
   paneRenameState: PaneRenameState;
+  workspaceLabelState: WorkspaceLabelState;
   session: ReturnType<typeof useSession>;
   sessionState: SessionState;
   aggregateState: { showAggregateView: boolean };
@@ -20,6 +22,7 @@ export function createOverlayVimMode(params: {
   search: SearchContextValue;
   commandPaletteVimMode: Accessor<VimInputMode>;
   paneRenameVimMode: Accessor<VimInputMode>;
+  workspaceLabelVimMode: Accessor<VimInputMode>;
   sessionPickerVimMode: Accessor<VimInputMode>;
   templateOverlayVimMode: Accessor<VimInputMode>;
   aggregateVimMode: Accessor<VimInputMode>;
@@ -29,6 +32,7 @@ export function createOverlayVimMode(params: {
     confirmationVisible,
     commandPaletteState,
     paneRenameState,
+    workspaceLabelState,
     session,
     sessionState,
     aggregateState,
@@ -36,6 +40,7 @@ export function createOverlayVimMode(params: {
     search,
     commandPaletteVimMode,
     paneRenameVimMode,
+    workspaceLabelVimMode,
     sessionPickerVimMode,
     templateOverlayVimMode,
     aggregateVimMode,
@@ -46,6 +51,7 @@ export function createOverlayVimMode(params: {
     if (confirmationVisible()) return null;
     if (commandPaletteState.show) return commandPaletteVimMode();
     if (paneRenameState.show) return paneRenameVimMode();
+    if (workspaceLabelState.show) return workspaceLabelVimMode();
     if (session.showTemplateOverlay) return templateOverlayVimMode();
     if (sessionState.showSessionPicker) return sessionPickerVimMode();
     if (aggregateState.showAggregateView) return aggregateVimMode();

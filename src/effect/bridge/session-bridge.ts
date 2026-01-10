@@ -273,6 +273,7 @@ function deserializeLayoutNode(serialized: SerializedLayoutNode): LayoutNode {
 function deserializeWorkspace(serialized: SerializedWorkspace): Workspace {
   return {
     id: serialized.id as WorkspaceId,
+    label: serialized.label ?? undefined,
     mainPane: serialized.mainPane ? deserializeLayoutNode(serialized.mainPane) : null,
     stackPanes: serialized.stackPanes.map(deserializeLayoutNode),
     focusedPaneId: serialized.focusedPaneId,
@@ -343,6 +344,7 @@ export async function saveCurrentSession(
           layoutMode: ws.layoutMode,
           activeStackIndex: ws.activeStackIndex,
           zoomed: ws.zoomed,
+          label: ws.label,
         })
       }
 

@@ -54,6 +54,36 @@ export function handleSwitchWorkspace(state: LayoutState, workspaceId: Workspace
 }
 
 /**
+ * Handle SET_WORKSPACE_LABEL action
+ * Updates the label for a workspace (no geometry changes)
+ */
+export function handleSetWorkspaceLabel(
+  state: LayoutState,
+  workspaceId: WorkspaceId,
+  label?: string
+): LayoutState {
+  const existing = state.workspaces[workspaceId];
+  const workspace = existing ?? createWorkspace(workspaceId, state.config.defaultLayoutMode);
+  const trimmed = label?.trim() ?? '';
+  const nextLabel = trimmed.length > 0 ? trimmed : undefined;
+
+  if (!existing && !nextLabel) {
+    return state;
+  }
+
+  if (existing && workspace.label === nextLabel) {
+    return state;
+  }
+
+  const updated = { ...workspace, label: nextLabel };
+  return {
+    ...state,
+    workspaces: updateWorkspace(state, updated),
+    layoutVersion: state.layoutVersion + 1,
+  };
+}
+
+/**
  * Handle LOAD_SESSION action
  * Loads workspaces from a saved session
  */

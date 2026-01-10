@@ -57,6 +57,7 @@ interface LayoutContextValue {
   setViewport: (viewport: { x: number; y: number; width: number; height: number }) => void;
   switchWorkspace: (workspaceId: WorkspaceId) => void;
   setLayoutMode: (mode: LayoutMode) => void;
+  setWorkspaceLabel: (workspaceId: WorkspaceId, label?: string) => void;
   setPanePty: (paneId: string, ptyId: string) => void;
   setPaneTitle: (paneId: string, title: string) => void;
   swapMain: () => void;
@@ -261,7 +262,7 @@ export function LayoutProvider(props: LayoutProviderProps) {
   const populatedWorkspaces = createMemo(() => {
     const result: WorkspaceId[] = [];
     for (const [idStr, workspace] of Object.entries(state.workspaces)) {
-      if (workspace?.mainPane) {
+      if (workspace?.mainPane || workspace?.label) {
         result.push(Number(idStr) as WorkspaceId);
       }
     }
@@ -288,6 +289,8 @@ export function LayoutProvider(props: LayoutProviderProps) {
   const switchWorkspace = (workspaceId: WorkspaceId) =>
     dispatch({ type: 'SWITCH_WORKSPACE', workspaceId });
   const setLayoutMode = (mode: LayoutMode) => dispatch({ type: 'SET_LAYOUT_MODE', mode });
+  const setWorkspaceLabel = (workspaceId: WorkspaceId, label?: string) =>
+    dispatch({ type: 'SET_WORKSPACE_LABEL', workspaceId, label });
   const setPanePty = (paneId: string, ptyId: string) =>
     dispatch({ type: 'SET_PANE_PTY', paneId, ptyId });
   const setPaneTitle = (paneId: string, title: string) =>
@@ -353,6 +356,7 @@ export function LayoutProvider(props: LayoutProviderProps) {
     setViewport,
     switchWorkspace,
     setLayoutMode,
+    setWorkspaceLabel,
     setPanePty,
     setPaneTitle,
     swapMain,

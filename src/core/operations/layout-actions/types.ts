@@ -29,6 +29,7 @@ export type LayoutAction =
   | { type: 'CLOSE_PANE_BY_ID'; paneId: NodeId }
   | { type: 'SET_VIEWPORT'; viewport: Rectangle }
   | { type: 'SWITCH_WORKSPACE'; workspaceId: WorkspaceId }
+  | { type: 'SET_WORKSPACE_LABEL'; workspaceId: WorkspaceId; label?: string }
   | { type: 'SET_LAYOUT_MODE'; mode: LayoutMode }
   | { type: 'SET_PANE_PTY'; paneId: NodeId; ptyId: string }
   | { type: 'SET_PANE_TITLE'; paneId: NodeId; title: string }

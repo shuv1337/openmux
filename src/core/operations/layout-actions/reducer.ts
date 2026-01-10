@@ -9,7 +9,7 @@ import { handleNavigate } from './navigate';
 import { handleNewPane } from './new-pane';
 import { handleSplitPane } from './split-pane';
 import { handleClosePane, handleClosePaneById } from './close-pane';
-import { handleSetViewport, handleSwitchWorkspace, handleLoadSession, handleClearAll } from './workspace-ops';
+import { handleSetViewport, handleSwitchWorkspace, handleSetWorkspaceLabel, handleLoadSession, handleClearAll } from './workspace-ops';
 import { handleSetLayoutMode, handleSetPanePty, handleSetPaneTitle, handleSwapMain, handleMovePane, handleToggleZoom } from './pane-ops';
 
 /**
@@ -43,6 +43,9 @@ export function layoutReducer(state: LayoutState, action: LayoutAction): LayoutS
 
     case 'SWITCH_WORKSPACE':
       return handleSwitchWorkspace(state, action.workspaceId);
+
+    case 'SET_WORKSPACE_LABEL':
+      return handleSetWorkspaceLabel(state, action.workspaceId, action.label);
 
     case 'SET_LAYOUT_MODE':
       return handleSetLayoutMode(state, action.mode);

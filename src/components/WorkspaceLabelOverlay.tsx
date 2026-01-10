@@ -1,5 +1,5 @@
 /**
- * PaneRenameOverlay - modal overlay for renaming panes
+ * WorkspaceLabelOverlay - modal overlay for labelling workspaces
  */
 
 import { Show, createEffect, createMemo, createSignal } from 'solid-js';
@@ -7,38 +7,36 @@ import { type SetStoreFunction } from 'solid-js/store';
 import { useConfig } from '../contexts/ConfigContext';
 import { useLayout } from '../contexts/LayoutContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { useTitle } from '../contexts/TitleContext';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
 import { eventToCombo } from '../core/keybindings';
+import type { WorkspaceId } from '../core/types';
 import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
 import type { KeyboardEvent } from '../effect/bridge';
 import { truncateHint } from './overlay-hints';
 
-const DEFAULT_PANE_TITLE = 'shell';
 const VIM_SEQUENCES = [
-  { keys: ['enter'], action: 'pane.rename.confirm' },
-  { keys: ['q'], action: 'pane.rename.close' },
+  { keys: ['enter'], action: 'workspace.label.confirm' },
+  { keys: ['q'], action: 'workspace.label.close' },
 ];
 
-export interface PaneRenameState {
+export interface WorkspaceLabelState {
   show: boolean;
-  paneId: string | null;
+  workspaceId: WorkspaceId | null;
   value: string;
 }
 
-interface PaneRenameOverlayProps {
+interface WorkspaceLabelOverlayProps {
   width: number;
   height: number;
-  state: PaneRenameState;
-  setState: SetStoreFunction<PaneRenameState>;
+  state: WorkspaceLabelState;
+  setState: SetStoreFunction<WorkspaceLabelState>;
   onVimModeChange?: (mode: VimInputMode) => void;
 }
 
-export function PaneRenameOverlay(props: PaneRenameOverlayProps) {
+export function WorkspaceLabelOverlay(props: WorkspaceLabelOverlayProps) {
   const config = useConfig();
   const theme = useTheme();
   const layout = useLayout();
-  const titleContext = useTitle();
 
   const accentColor = () => theme.pane.focusedBorderColor;
   const vimEnabled = () => config.config().keyboard.vimMode === 'overlays';
@@ -49,23 +47,22 @@ export function PaneRenameOverlay(props: PaneRenameOverlayProps) {
   });
 
   const closeOverlay = () => {
-    props.setState({ show: false, paneId: null, value: '' });
+    props.setState({ show: false, workspaceId: null, value: '' });
   };
 
   const updateValue = (value: string) => {
     props.setState({ value });
   };
 
-  const applyRename = () => {
-    const paneId = props.state.paneId;
-    if (!paneId) {
+  const applyLabel = () => {
+    const workspaceId = props.state.workspaceId;
+    if (!workspaceId) {
       closeOverlay();
       return;
     }
     const trimmed = props.state.value.trim();
-    const nextTitle = trimmed === '' ? DEFAULT_PANE_TITLE : trimmed;
-    layout.setPaneTitle(paneId, nextTitle);
-    titleContext.setManualTitle(paneId, nextTitle);
+    const nextLabel = trimmed.length > 0 ? trimmed : undefined;
+    layout.setWorkspaceLabel(workspaceId, nextLabel);
     closeOverlay();
   };
 
@@ -101,13 +98,13 @@ export function PaneRenameOverlay(props: PaneRenameOverlayProps) {
 
   const handleAction = (action: string | null): boolean => {
     switch (action) {
-      case 'pane.rename.close':
+      case 'workspace.label.close':
         closeOverlay();
         return true;
-      case 'pane.rename.confirm':
-        applyRename();
+      case 'workspace.label.confirm':
+        applyLabel();
         return true;
-      case 'pane.rename.delete':
+      case 'workspace.label.delete':
         deleteLast();
         return true;
       default:
@@ -126,7 +123,7 @@ export function PaneRenameOverlay(props: PaneRenameOverlayProps) {
 
     if (!vimEnabled()) {
       if (isConfirmKey(event)) {
-        applyRename();
+        applyLabel();
         return true;
       }
       if (isBareEscape(event)) {
@@ -147,7 +144,7 @@ export function PaneRenameOverlay(props: PaneRenameOverlayProps) {
         return true;
       }
       if (isConfirmKey(event)) {
-        applyRename();
+        applyLabel();
         return true;
       }
       if (event.key === 'backspace') {
@@ -177,7 +174,7 @@ export function PaneRenameOverlay(props: PaneRenameOverlayProps) {
   };
 
   useOverlayKeyboardHandler({
-    overlay: 'paneRename',
+    overlay: 'workspaceLabel',
     isActive: () => props.state.show,
     handler: handleKeyDown,
   });
@@ -214,7 +211,7 @@ export function PaneRenameOverlay(props: PaneRenameOverlayProps) {
     return Math.min(desired, maxY);
   };
 
-  const promptText = 'name: ';
+  const promptText = 'label: ';
   const spacerText = ' ';
   const cursorText = '_';
 
@@ -223,9 +220,9 @@ export function PaneRenameOverlay(props: PaneRenameOverlayProps) {
   const hintText = () => {
     if (vimEnabled()) {
       const modeHint = vimMode() === 'insert' ? 'esc:normal' : 'i:insert';
-      return `enter:save q:close ${modeHint} empty:shell`;
+      return `enter:save q:close ${modeHint} empty:clear`;
     }
-    return 'enter:save esc:close backspace:del empty:shell';
+    return 'enter:save esc:close backspace:del empty:clear';
   };
 
   const hintWidth = createMemo(() => {
@@ -255,10 +252,10 @@ export function PaneRenameOverlay(props: PaneRenameOverlayProps) {
           paddingRight: 1,
           paddingTop: 0,
           paddingBottom: 0,
-          zIndex: 158,
+          zIndex: 157,
         }}
         backgroundColor="#1a1a1a"
-        title=" Rename Pane "
+        title=" Label Workspace "
         titleAlignment="center"
       >
         <box style={{ flexDirection: 'row', height: 1 }}>

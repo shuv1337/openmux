@@ -76,6 +76,7 @@ export class SerializedSplitNode extends Schema.Class<SerializedSplitNode>("Seri
 /** Serialized workspace for persistence - matches legacy core/types.ts */
 export class SerializedWorkspace extends Schema.Class<SerializedWorkspace>("SerializedWorkspace")({
   id: WorkspaceId,
+  label: Schema.optional(Schema.String),
   mainPane: Schema.NullOr(SerializedLayoutNodeSchema),
   stackPanes: Schema.Array(SerializedLayoutNodeSchema),
   focusedPaneId: Schema.NullOr(Schema.String),

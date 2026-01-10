@@ -2,6 +2,7 @@ import { createEffect } from 'solid-js';
 import type { Rectangle } from '../../core/types';
 import type { CommandPaletteState } from '../CommandPalette';
 import type { PaneRenameState } from '../PaneRenameOverlay';
+import type { WorkspaceLabelState } from '../WorkspaceLabelOverlay';
 import type { SessionState } from '../../core/operations/session-actions';
 import type { TemplateSession } from '../../effect/models';
 import type { CommandPaletteCommand } from '../../core/command-palette';
@@ -31,6 +32,7 @@ export function setupOverlayClipRects(params: {
   commandPaletteState: CommandPaletteState;
   commandPaletteCommands: CommandPaletteCommand[];
   paneRenameState: PaneRenameState;
+  workspaceLabelState: WorkspaceLabelState;
   confirmationVisible: () => boolean;
   kittyRenderer: {
     setClipRects: (rects: ClipRect[]) => void;
@@ -40,6 +42,7 @@ export function setupOverlayClipRects(params: {
   getTemplateOverlayRect: ClipRectProvider;
   getCommandPaletteRect: ClipRectProvider;
   getPaneRenameRect: ClipRectProvider;
+  getWorkspaceLabelRect: ClipRectProvider;
   getSearchOverlayRect: ClipRectProvider;
   getConfirmationRect: ClipRectProvider;
   getCopyNotificationRect: ClipRectProvider;
@@ -56,12 +59,14 @@ export function setupOverlayClipRects(params: {
     commandPaletteState,
     commandPaletteCommands,
     paneRenameState,
+    workspaceLabelState,
     confirmationVisible,
     kittyRenderer,
     getSessionPickerRect,
     getTemplateOverlayRect,
     getCommandPaletteRect,
     getPaneRenameRect,
+    getWorkspaceLabelRect,
     getSearchOverlayRect,
     getConfirmationRect,
     getCopyNotificationRect,
@@ -81,6 +86,7 @@ export function setupOverlayClipRects(params: {
     pushRect(getTemplateOverlayRect(w, h, session.showTemplateOverlay, session.templates.length, layout.state.workspaces));
     pushRect(getCommandPaletteRect(w, h, commandPaletteState, commandPaletteCommands));
     pushRect(getPaneRenameRect(w, h, paneRenameState));
+    pushRect(getWorkspaceLabelRect(w, h, workspaceLabelState));
     pushRect(getSearchOverlayRect(w, h, Boolean(search.searchState)));
     pushRect(getConfirmationRect(w, h, confirmationVisible()));
     pushRect(getCopyNotificationRect(w, h, selection.copyNotification, aggregateState, layout.panes));

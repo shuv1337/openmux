@@ -8,12 +8,14 @@ import { useLayout } from '../contexts/LayoutContext';
 import { useKeyboardState } from '../contexts/KeyboardContext';
 import { useSession, useSessionState } from '../contexts/SessionContext';
 import type { KeyMode, WorkspaceId, LayoutMode } from '../core/types';
+import type { Workspaces } from '../core/operations/layout-actions';
 import type { VimInputMode } from '../core/vim-sequences';
 
 interface StatusBarProps {
   width: number;
   showCommandPalette?: boolean;
   showPaneRename?: boolean;
+  showWorkspaceLabel?: boolean;
   overlayVimMode?: VimInputMode | null;
   updateLabel?: string | null;
 }
@@ -51,6 +53,7 @@ export function StatusBar(props: StatusBarProps) {
         <WorkspaceTabs
           populatedWorkspaces={layout.populatedWorkspaces}
           activeWorkspaceId={layout.state.activeWorkspaceId}
+          workspaces={layout.state.workspaces}
         />
       </box>
 
@@ -62,6 +65,9 @@ export function StatusBar(props: StatusBarProps) {
         </Show>
         <Show when={props.showPaneRename}>
           <text fg={sessionColor()}>[RENAME]</text>
+        </Show>
+        <Show when={props.showWorkspaceLabel}>
+          <text fg={sessionColor()}>[LABEL]</text>
         </Show>
         <Show when={sessionState.showSessionPicker}>
           <text fg={sessionColor()}>[SESSIONS]</text>
@@ -141,6 +147,7 @@ function LayoutModeIndicator(props: LayoutModeIndicatorProps) {
 interface WorkspaceTabsProps {
   populatedWorkspaces: WorkspaceId[];
   activeWorkspaceId: WorkspaceId;
+  workspaces: Workspaces;
 }
 
 function WorkspaceTabs(props: WorkspaceTabsProps) {
@@ -150,8 +157,10 @@ function WorkspaceTabs(props: WorkspaceTabsProps) {
   const tabs = createMemo(() => {
     if (props.populatedWorkspaces.length === 0) return null;
     return props.populatedWorkspaces.map((id) => {
+      const label = props.workspaces[id]?.label?.trim();
+      const labelSuffix = label ? `: ${label}` : '';
       const isActive = id === props.activeWorkspaceId;
-      return isActive ? `[${id}]` : ` ${id} `;
+      return isActive ? `[${id}${labelSuffix}]` : ` ${id}${labelSuffix} `;
     }).join('');
   });
 

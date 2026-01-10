@@ -43,4 +43,5 @@ export interface WorkspaceState {
   layoutMode: "vertical" | "horizontal" | "stacked"
   activeStackIndex: number
   zoomed: boolean
+  label?: string
 }

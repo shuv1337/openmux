@@ -40,6 +40,8 @@ export interface PaneData {
  */
 export interface Workspace {
   id: WorkspaceId;
+  /** Optional user label for status bar display */
+  label?: string;
   mainPane: LayoutNode | null;
   stackPanes: LayoutNode[];
   focusedPaneId: NodeId | null;
@@ -336,6 +338,7 @@ export type SerializedLayoutNode = SerializedPaneData | SerializedSplitNode;
 /** Serializable workspace state */
 export interface SerializedWorkspace {
   id: WorkspaceId;
+  label?: string;
   mainPane: SerializedLayoutNode | null;
   stackPanes: SerializedLayoutNode[];
   focusedPaneId: string | null;

@@ -26,5 +26,11 @@ export { handleNavigate } from './navigate';
 export { handleNewPane } from './new-pane';
 export { handleSplitPane } from './split-pane';
 export { handleClosePane, handleClosePaneById } from './close-pane';
-export { handleSetViewport, handleSwitchWorkspace, handleLoadSession, handleClearAll } from './workspace-ops';
+export {
+  handleSetViewport,
+  handleSwitchWorkspace,
+  handleSetWorkspaceLabel,
+  handleLoadSession,
+  handleClearAll
+} from './workspace-ops';
 export { handleSetLayoutMode, handleSetPanePty, handleSetPaneTitle, handleSwapMain, handleMovePane, handleToggleZoom } from './pane-ops';
