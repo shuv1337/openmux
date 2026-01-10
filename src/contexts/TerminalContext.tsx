@@ -223,9 +223,13 @@ export function TerminalProvider(props: TerminalProviderProps) {
         subscribeToAllTitleChanges((event) => {
           // Find the pane associated with this PTY
           const paneId = ptyToPaneMap.get(event.ptyId);
-          if (paneId && event.title) {
+          if (!paneId) return;
+          const trimmed = event.title.trim();
+          if (trimmed) {
             // Update title in TitleContext (doesn't trigger layout re-renders)
-            titleContext.setTitle(paneId, event.title);
+            titleContext.setTitle(paneId, trimmed);
+          } else {
+            titleContext.clearAutoTitle(paneId);
           }
         }).then((unsub) => {
           if (!isActive) {

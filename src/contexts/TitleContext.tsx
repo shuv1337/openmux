@@ -18,6 +18,8 @@ interface TitleContextValue {
   getTitle: (paneId: string) => string | undefined;
   /** Set the title for a pane (does not trigger layout re-renders) */
   setTitle: (paneId: string, title: string) => void;
+  /** Clear auto title (preserves manual override if set) */
+  clearAutoTitle: (paneId: string) => void;
   /** Set a manual title override for a pane */
   setManualTitle: (paneId: string, title: string) => void;
   /** Clear manual title override */
@@ -31,6 +33,16 @@ interface TitleContextValue {
 const TitleContext = createContext<TitleContextValue | null>(null);
 
 export function TitleProvider(props: ParentProps) {
+  const value = createTitleStore();
+
+  return (
+    <TitleContext.Provider value={value}>
+      {props.children}
+    </TitleContext.Provider>
+  );
+}
+
+export function createTitleStore(): TitleContextValue {
   // Plain Map for titles - not reactive
   const titles = new Map<string, string>();
   const manualTitles = new Map<string, string>();
@@ -50,6 +62,13 @@ export function TitleProvider(props: ParentProps) {
         // Increment version to trigger re-reads in components
         setTitleVersion(v => v + 1);
       }
+    }
+  };
+
+  const clearAutoTitle = (paneId: string) => {
+    const hadAuto = titles.delete(paneId);
+    if (hadAuto && !manualTitles.has(paneId)) {
+      setTitleVersion(v => v + 1);
     }
   };
 
@@ -76,20 +95,15 @@ export function TitleProvider(props: ParentProps) {
     }
   };
 
-  const value: TitleContextValue = {
+  return {
     getTitle,
     setTitle,
+    clearAutoTitle,
     setManualTitle,
     clearManualTitle,
     clearTitle,
     titleVersion,
   };
-
-  return (
-    <TitleContext.Provider value={value}>
-      {props.children}
-    </TitleContext.Provider>
-  );
 }
 
 export function useTitle(): TitleContextValue {

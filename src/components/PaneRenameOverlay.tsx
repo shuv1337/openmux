@@ -13,8 +13,8 @@ import { eventToCombo } from '../core/keybindings';
 import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
 import type { KeyboardEvent } from '../effect/bridge';
 import { truncateHint } from './overlay-hints';
+import { DEFAULT_PANE_TITLE, resolvePaneRename } from './pane-rename-utils';
 
-const DEFAULT_PANE_TITLE = 'shell';
 const VIM_SEQUENCES = [
   { keys: ['enter'], action: 'pane.rename.confirm' },
   { keys: ['q'], action: 'pane.rename.close' },
@@ -62,10 +62,14 @@ export function PaneRenameOverlay(props: PaneRenameOverlayProps) {
       closeOverlay();
       return;
     }
-    const trimmed = props.state.value.trim();
-    const nextTitle = trimmed === '' ? DEFAULT_PANE_TITLE : trimmed;
-    layout.setPaneTitle(paneId, nextTitle);
-    titleContext.setManualTitle(paneId, nextTitle);
+    const result = resolvePaneRename(props.state.value, DEFAULT_PANE_TITLE);
+    layout.setPaneTitle(paneId, result.title);
+    if (result.type === 'clear') {
+      titleContext.clearManualTitle(paneId);
+      closeOverlay();
+      return;
+    }
+    titleContext.setManualTitle(paneId, result.title);
     closeOverlay();
   };
 
