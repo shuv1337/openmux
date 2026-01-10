@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.95](https://github.com/monotykamary/openmux/compare/v0.2.94...v0.2.95) (2026-01-10)
+
+
+### Bug Fixes
+
+* **ui:** truncate overlay hints consistently ([b594726](https://github.com/monotykamary/openmux/commit/b594726cd0c34a27ca1d7f42b3a1b4cbec51e75c))
+
 ### [0.2.94](https://github.com/monotykamary/openmux/compare/v0.2.93...v0.2.94) (2026-01-10)
 
 
