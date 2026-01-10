@@ -39,7 +39,8 @@
     "release:major": "standard-version --release-as major",
     "release:patch": "standard-version --release-as patch",
     "release:first": "standard-version --first-release",
-    "publish:npm": "./scripts/publish.sh"
+    "publish:npm": "./scripts/publish.sh",
+    "lfg": "bun release && git push --follow-tags && bun publish:npm"
   },
   "repository": {
     "type": "git",
