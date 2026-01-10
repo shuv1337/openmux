@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.99](https://github.com/monotykamary/openmux/compare/v0.2.98...v0.2.99) (2026-01-10)
+
+
+### Refactoring
+
+* modularize app and terminal rendering ([9145cd6](https://github.com/monotykamary/openmux/commit/9145cd6ff573d900f95a49f8df11901519cf675d))
+
 ### [0.2.98](https://github.com/monotykamary/openmux/compare/v0.2.97...v0.2.98) (2026-01-10)
 
 
