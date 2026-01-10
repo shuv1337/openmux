@@ -56,11 +56,6 @@ export function StatusBar(props: StatusBarProps) {
       {/* Right section: Mode and layout mode */}
       <box style={{ flexDirection: 'row', gap: 1 }}>
         <ModeIndicator mode={kbState.mode} />
-        <Show when={props.overlayVimMode}>
-          <text fg={props.overlayVimMode === 'insert' ? '#33CC66' : '#00AAFF'}>
-            {props.overlayVimMode === 'insert' ? '[INSERT]' : '[NORMAL]'}
-          </text>
-        </Show>
         <Show when={props.showCommandPalette}>
           <text fg={commandColor()}>[COMMAND]</text>
         </Show>
@@ -69,6 +64,11 @@ export function StatusBar(props: StatusBarProps) {
         </Show>
         <Show when={session.showTemplateOverlay}>
           <text fg={sessionColor()}>[TEMPLATES]</text>
+        </Show>
+        <Show when={props.overlayVimMode}>
+          <text fg={props.overlayVimMode === 'insert' ? '#33CC66' : '#00AAFF'}>
+            {props.overlayVimMode === 'insert' ? '[INSERT]' : '[NORMAL]'}
+          </text>
         </Show>
         <Show when={props.updateLabel}>
           <text fg="#33CC66">{props.updateLabel}</text>
