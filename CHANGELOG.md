@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.96](https://github.com/monotykamary/openmux/compare/v0.2.95...v0.2.96) (2026-01-10)
+
+
+### Bug Fixes
+
+* **scrollback:** keep viewport anchored on resize ([8405f48](https://github.com/monotykamary/openmux/commit/8405f48382c8af5bf2bd63888788952b27ef9494))
+
 ### [0.2.95](https://github.com/monotykamary/openmux/compare/v0.2.94...v0.2.95) (2026-01-10)
 
 
