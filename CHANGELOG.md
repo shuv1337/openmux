@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.100](https://github.com/monotykamary/openmux/compare/v0.2.99...v0.2.100) (2026-01-10)
+
+
+### Refactoring
+
+* **app:** centralize overlay state ([9652d3a](https://github.com/monotykamary/openmux/commit/9652d3acc83b8e2e357263533f5b4c95019007e2))
+
 ### [0.2.99](https://github.com/monotykamary/openmux/compare/v0.2.98...v0.2.99) (2026-01-10)
 
 
