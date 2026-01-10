@@ -15,6 +15,13 @@ export default defineConfig({
   },
   esbuild: {
     jsx: "automatic",
-    jsxImportSource: "@opentui/react",
+    jsxImportSource: "@opentui/solid",
+    jsxDev: false,
+  },
+  resolve: {
+    alias: {
+      "@opentui/solid/jsx-runtime": "solid-js/h/jsx-runtime",
+      "@opentui/solid/jsx-dev-runtime": "solid-js/h/jsx-dev-runtime",
+    },
   },
 })

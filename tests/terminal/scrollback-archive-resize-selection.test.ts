@@ -44,12 +44,12 @@ function rowFromString(value: string): TerminalCell[] {
   return Array.from(value, (char) => createTestCell(char))
 }
 
-function createHarness(options: {
+async function createHarness(options: {
   archivedLines: string[]
   liveLines: string[]
   cols: number
   rows: number
-}): EmulatorHarness {
+}): Promise<EmulatorHarness> {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openmux-archive-test-"))
   const archive = new ScrollbackArchive({
     rootDir: tmpDir,
@@ -58,7 +58,7 @@ function createHarness(options: {
     cacheSize: 100,
   })
 
-  archive.appendLines(options.archivedLines.map(rowFromString))
+  await archive.appendLines(options.archivedLines.map(rowFromString))
 
   let liveCells = options.liveLines.map(rowFromString)
   let cols = options.cols
@@ -165,8 +165,8 @@ function createHarness(options: {
 }
 
 describe("scrollback archive resize + selection", () => {
-  it("keeps archived row width stable across resize", () => {
-    const harness = createHarness({
+  it("keeps archived row width stable across resize", async () => {
+    const harness = await createHarness({
       archivedLines: ["ABCD"],
       liveLines: ["LIVE"],
       cols: 4,
@@ -185,8 +185,8 @@ describe("scrollback archive resize + selection", () => {
     }
   })
 
-  it("extracts selection across archived + live rows after resize", () => {
-    const harness = createHarness({
+  it("extracts selection across archived + live rows after resize", async () => {
+    const harness = await createHarness({
       archivedLines: ["ABCD", "EFGH"],
       liveLines: ["IJKL"],
       cols: 4,
