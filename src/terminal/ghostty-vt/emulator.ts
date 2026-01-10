@@ -19,11 +19,9 @@ import type { TerminalColors } from "../terminal-colors";
 import { createTitleParser } from "../title-parser";
 import { stripProblematicOscSequences } from "./osc-stripping";
 import { GhosttyVtTerminal } from "./terminal";
-import { DirtyState } from "./types";
 import { createEmptyRow } from "../ghostty-emulator/cell-converter";
 import {
   ScrollbackCache,
-  shouldClearCacheOnUpdate,
   createDefaultModes,
   createDefaultScrollState,
   createEmptyTerminalState,
@@ -31,11 +29,11 @@ import {
 } from "../emulator-utils";
 import { getModes } from "./utils";
 import { searchTerminal } from "./terminal-search";
-import { buildDirtyState } from "./dirty-state";
 import { mapKittyImageInfo, mapKittyPlacements } from "./kitty";
 import { fetchScrollbackLine } from "./scrollback";
 import { drainTerminalResponses } from "./responses";
 import { getCursorSnapshot } from "./cursor";
+import { prepareEmulatorUpdate } from "./emulator-updates";
 import { HOT_SCROLLBACK_LIMIT } from "../scrollback-config";
 
 const SCROLLBACK_LIMIT = HOT_SCROLLBACK_LIMIT;
@@ -408,88 +406,37 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
 
   private prepareUpdate(forceFull: boolean): void {
     if (this._disposed) return;
-    const dirtyState = this.terminal.update();
-    this.scrollbackSnapshotDirty = false;
-    const cursor = this.terminal.getCursor();
-    const scrollbackLength = this.terminal.getScrollbackLength();
-    const kittyKeyboardFlags = this.terminal.getKittyKeyboardFlags();
-    const isAtScrollbackLimit = scrollbackLength >= SCROLLBACK_LIMIT;
-    const prevModes = this.modes;
-    const newModes = getModes(this.terminal);
-
-    const updateScrollState: TerminalScrollState = {
-      viewportOffset: 0,
-      scrollbackLength,
-      isAtBottom: true,
-      isAtScrollbackLimit,
-    };
-
-    const shouldBuildFull = forceFull || dirtyState === DirtyState.FULL || !this.cachedState;
-    const viewport = shouldBuildFull || dirtyState !== DirtyState.NONE
-      ? this.terminal.getViewport()
-      : null;
-
-    const { cachedState, dirtyRows, fullState } = buildDirtyState({
+    const result = prepareEmulatorUpdate({
       terminal: this.terminal,
-      viewport,
       cols: this._cols,
       rows: this._rows,
       colors: this.colors,
       cachedState: this.cachedState,
-      shouldBuildFull,
-      cursor,
-      modes: newModes,
-      kittyKeyboardFlags,
+      modes: this.modes,
+      scrollState: this.scrollState,
+      scrollbackCache: this.scrollbackCache,
+      forceFull,
+      scrollbackLimit: SCROLLBACK_LIMIT,
     });
-    this.cachedState = cachedState;
 
-    const update: DirtyTerminalUpdate = {
-      dirtyRows,
-      cursor: {
-        x: cursor.x,
-        y: cursor.y,
-        visible: cursor.visible,
-        style: "block",
-      },
-      scrollState: updateScrollState,
-      cols: this._cols,
-      rows: this._rows,
-      isFull: shouldBuildFull,
-      fullState,
-      alternateScreen: newModes.alternateScreen,
-      mouseTracking: newModes.mouseTracking,
-      cursorKeyMode: newModes.cursorKeyMode,
-      kittyKeyboardFlags,
-      inBandResize: newModes.inBandResize,
-    };
-
-    this.scrollState = {
-      ...this.scrollState,
-      scrollbackLength,
-    };
-
-    this.scrollbackCache.handleScrollbackChange(scrollbackLength, isAtScrollbackLimit);
-    const shouldClearCache = shouldClearCacheOnUpdate(update, prevModes);
-    if (shouldClearCache) {
-      this.scrollbackCache.clear();
-    }
+    this.cachedState = result.cachedState;
+    this.pendingUpdate = result.pendingUpdate;
+    this.scrollState = result.scrollState;
+    this.scrollbackSnapshotDirty = result.scrollbackSnapshotDirty;
 
     if (
-      prevModes.mouseTracking !== newModes.mouseTracking ||
-      prevModes.cursorKeyMode !== newModes.cursorKeyMode ||
-      prevModes.alternateScreen !== newModes.alternateScreen ||
-      prevModes.inBandResize !== newModes.inBandResize
+      result.prevModes.mouseTracking !== result.modes.mouseTracking ||
+      result.prevModes.cursorKeyMode !== result.modes.cursorKeyMode ||
+      result.prevModes.alternateScreen !== result.modes.alternateScreen ||
+      result.prevModes.inBandResize !== result.modes.inBandResize
     ) {
-      this.modes = newModes;
+      this.modes = result.modes;
       for (const callback of this.modeChangeCallbacks) {
-        callback(newModes, prevModes);
+        callback(result.modes, result.prevModes);
       }
     } else {
-      this.modes = newModes;
+      this.modes = result.modes;
     }
-
-    this.pendingUpdate = update;
-    this.terminal.markClean();
   }
 }
 

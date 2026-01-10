@@ -2,61 +2,45 @@
  * Main App component for openmux
  */
 
-import { createSignal, createEffect, onCleanup } from 'solid-js';
-import { createStore } from 'solid-js/store';
 import { useTerminalDimensions, useRenderer } from '@opentui/solid';
 import {
-  ConfigProvider,
   useConfig,
-  ThemeProvider,
-  LayoutProvider,
-  KeyboardProvider,
-  TerminalProvider,
   useLayout,
   useKeyboardHandler,
   useKeyboardState,
   useTerminal,
 } from './contexts';
-import { SelectionProvider, useSelection } from './contexts/SelectionContext';
-import { SearchProvider, useSearch } from './contexts/SearchContext';
+import { useSelection } from './contexts/SelectionContext';
+import { useSearch } from './contexts/SearchContext';
 import { useSession } from './contexts/SessionContext';
-import { AggregateViewProvider, useAggregateView } from './contexts/AggregateViewContext';
-import { TitleProvider, useTitle } from './contexts/TitleContext';
+import { useAggregateView } from './contexts/AggregateViewContext';
+import { useTitle } from './contexts/TitleContext';
 import { PaneContainer } from './components';
-import type { ConfirmationType } from './core/types';
-import { SessionBridge } from './components/SessionBridge';
 import { getFocusedPane, getFocusedPtyId } from './core/workspace-utils';
-import { DEFAULT_COMMAND_PALETTE_COMMANDS, type CommandPaletteCommand } from './core/command-palette';
+import { type CommandPaletteCommand } from './core/command-palette';
 import { setKeyboardVimMode, type KeyboardVimMode } from './core/user-config';
-import { type VimInputMode } from './core/vim-sequences';
 import { onShimDetached, shutdownShim } from './effect/bridge';
 import { disposeRuntime } from './effect/runtime';
 import {
-  createConfirmationHandlers,
   createPaneResizeHandlers,
   createPasteHandler,
 } from './components/app';
 import { setClipboardPasteHandler } from './terminal/focused-pty-registry';
 import { readFromClipboard } from './effect/bridge';
 import { handleNormalModeAction } from './contexts/keyboard/handlers';
-import { createCommandPaletteState } from './components/app/command-palette-state';
 import { setupKeyboardRouting } from './components/app/keyboard-routing';
 import { usePtyCreation } from './components/app/pty-creation';
 import { AppOverlays } from './components/app/AppOverlays';
-import type { PaneRenameState } from './components/PaneRenameOverlay';
-import type { WorkspaceLabelState } from './components/WorkspaceLabelOverlay';
-import { createTemplatePendingActions } from './components/app/template-pending-actions';
-import { createSessionPendingActions } from './components/app/session-pending-actions';
 import { createKittyGraphicsBridge } from './components/app/kitty-graphics-bridge';
 import { createCellMetricsGetter, createPixelResizeTracker } from './components/app/pixel-metrics';
 import { createExitHandlers } from './components/app/exit-handlers';
-import { setupClipboardAndShimBridge } from './components/app/clipboard-bridge';
-import { setupFocusedPtyRegistry, setupHostFocusTracking } from './components/app/focus-tracking';
-import { setupOverlayClipRects } from './components/app/overlay-clips';
 import { createSearchVimState } from './components/app/search-vim';
 import { createOverlayVimMode } from './components/app/overlay-vim-mode';
 import { setupAppLayoutEffects } from './components/app/layout-effects';
-import { checkForUpdateLabel } from './core/update-checker';
+import { createOverlayState } from './components/app/overlay-state';
+import { createConfirmationWorkflows } from './components/app/confirmation-workflows';
+import { setupAppEffects } from './components/app/app-effects';
+import { AppProviders } from './components/app/AppProviders';
 import {
   getCommandPaletteRect,
   getPaneRenameRect,
@@ -99,24 +83,30 @@ function AppContent() {
   const { enterConfirmMode, exitConfirmMode, exitSearchMode: keyboardExitSearchMode } = keyboardState;
   const renderer = useRenderer();
 
-  const { commandPaletteState, setCommandPaletteState, toggleCommandPalette } = createCommandPaletteState();
-  const [paneRenameState, setPaneRenameState] = createStore<PaneRenameState>({
-    show: false,
-    paneId: null,
-    value: '',
-  });
-  const [workspaceLabelState, setWorkspaceLabelState] = createStore<WorkspaceLabelState>({
-    show: false,
-    workspaceId: null,
-    value: '',
-  });
-  const [commandPaletteVimMode, setCommandPaletteVimMode] = createSignal<VimInputMode>('normal');
-  const [paneRenameVimMode, setPaneRenameVimMode] = createSignal<VimInputMode>('normal');
-  const [workspaceLabelVimMode, setWorkspaceLabelVimMode] = createSignal<VimInputMode>('normal');
-  const [sessionPickerVimMode, setSessionPickerVimMode] = createSignal<VimInputMode>('normal');
-  const [templateOverlayVimMode, setTemplateOverlayVimMode] = createSignal<VimInputMode>('normal');
-  const [aggregateVimMode, setAggregateVimMode] = createSignal<VimInputMode>('normal');
-  const [updateLabel, setUpdateLabel] = createSignal<string | null>(null);
+  const overlayState = createOverlayState();
+  const {
+    commandPaletteState,
+    setCommandPaletteState,
+    toggleCommandPalette,
+    paneRenameState,
+    setPaneRenameState,
+    workspaceLabelState,
+    setWorkspaceLabelState,
+    commandPaletteVimMode,
+    setCommandPaletteVimMode,
+    paneRenameVimMode,
+    setPaneRenameVimMode,
+    workspaceLabelVimMode,
+    setWorkspaceLabelVimMode,
+    sessionPickerVimMode,
+    setSessionPickerVimMode,
+    templateOverlayVimMode,
+    setTemplateOverlayVimMode,
+    aggregateVimMode,
+    setAggregateVimMode,
+    updateLabel,
+    setUpdateLabel,
+  } = overlayState;
 
   const getCellMetrics = createCellMetricsGetter(renderer as any, width, height);
 
@@ -148,18 +138,29 @@ function AppContent() {
   });
   const handleQuit = exitHandlers.handleQuit;
   const handleDetach = exitHandlers.handleDetach;
+  const confirmationWorkflows = createConfirmationWorkflows({
+    closePane,
+    getFocusedPtyId: () => getFocusedPtyId(layout.activeWorkspace),
+    destroyPTY,
+    enterConfirmMode,
+    exitConfirmMode,
+    onQuit: handleQuit,
+  });
+  const {
+    confirmationState,
+    confirmationHandlers,
+    requestTemplateApplyConfirm,
+    requestTemplateOverwriteConfirm,
+    requestTemplateDeleteConfirm,
+    requestSessionDeleteConfirm,
+  } = confirmationWorkflows;
 
-
-  // Confirmation dialog state
-  const [confirmationState, setConfirmationState] = createSignal<{
-    visible: boolean;
-    type: ConfirmationType;
-  }>({ visible: false, type: 'close_pane' });
-
-  // Track pending kill PTY ID for aggregate view kill confirmation
-  const [pendingKillPtyId, setPendingKillPtyId] = createSignal<string | null>(null);
-
-  setupOverlayClipRects({
+  // Create paste handler for bracketed paste from host terminal
+  const pasteHandler = createPasteHandler({
+    getFocusedPtyId: () => getFocusedPtyId(layout.activeWorkspace),
+    writeToPTY,
+  });
+  setupAppEffects({
     getWidth: width,
     getHeight: height,
     sessionState,
@@ -169,7 +170,6 @@ function AppContent() {
     selection,
     aggregateState,
     commandPaletteState,
-    commandPaletteCommands: DEFAULT_COMMAND_PALETTE_COMMANDS,
     paneRenameState,
     workspaceLabelState,
     confirmationVisible: () => confirmationState().visible,
@@ -182,64 +182,16 @@ function AppContent() {
     getSearchOverlayRect,
     getConfirmationRect,
     getCopyNotificationRect,
-  });
-
-  const templatePending = createTemplatePendingActions();
-  const sessionPending = createSessionPendingActions();
-
-  const handleConfirmTemplateApply = templatePending.confirmApply;
-  const handleCancelTemplateApply = templatePending.cancelApply;
-  const handleConfirmTemplateOverwrite = templatePending.confirmOverwrite;
-  const handleCancelTemplateOverwrite = templatePending.cancelOverwrite;
-  const handleConfirmTemplateDelete = templatePending.confirmDelete;
-  const handleCancelTemplateDelete = templatePending.cancelDelete;
-  const handleConfirmSessionDelete = sessionPending.confirmDelete;
-  const handleCancelSessionDelete = sessionPending.cancelDelete;
-
-  // Create confirmation handlers
-  const confirmationHandlers = createConfirmationHandlers({
-    confirmationState,
-    setConfirmationState,
-    pendingKillPtyId,
-    setPendingKillPtyId,
-    closePane,
-    getFocusedPtyId: () => getFocusedPtyId(layout.activeWorkspace),
-    destroyPTY,
-    enterConfirmMode,
-    exitConfirmMode,
-    onQuit: handleQuit,
-    onConfirmApplyTemplate: handleConfirmTemplateApply,
-    onCancelApplyTemplate: handleCancelTemplateApply,
-    onConfirmOverwriteTemplate: handleConfirmTemplateOverwrite,
-    onCancelOverwriteTemplate: handleCancelTemplateOverwrite,
-    onConfirmDeleteTemplate: handleConfirmTemplateDelete,
-    onCancelDeleteTemplate: handleCancelTemplateDelete,
-    onConfirmDeleteSession: handleConfirmSessionDelete,
-    onCancelDeleteSession: handleCancelSessionDelete,
-  });
-
-  // Create paste handler for bracketed paste from host terminal
-  const pasteHandler = createPasteHandler({
-    getFocusedPtyId: () => getFocusedPtyId(layout.activeWorkspace),
-    writeToPTY,
-  });
-
-  // Connect focused PTY registry for clipboard passthrough
-  // This bridges the stdin-level paste trigger with the SolidJS context
-  // Key insight: We read from clipboard (always complete) instead of unreliable stdin data
-  setupClipboardAndShimBridge({
+    renderer,
+    pasteHandler,
+    setUpdateLabel,
     setClipboardPasteHandler,
     readFromClipboard,
     writeToPTY,
     onShimDetached,
     handleShimDetached: exitHandlers.handleShimDetached,
-  });
-
-  setupFocusedPtyRegistry(() => getFocusedPtyId(layout.activeWorkspace));
-  setupHostFocusTracking({
-    renderer,
-    isPtyActive,
     getFocusedPtyId: () => getFocusedPtyId(layout.activeWorkspace),
+    isPtyActive,
   });
 
   const { handleNewPane, handleSplitPane } = usePtyCreation({
@@ -256,39 +208,6 @@ function AppContent() {
   // Create paste handler for manual paste (Ctrl+V, prefix+p/])
   const handlePaste = () => {
     pasteToFocused();
-  };
-
-  // Session picker toggle handler
-  const handleToggleSessionPicker = () => {
-    togglePicker();
-  };
-
-  const handleToggleTemplateOverlay = () => {
-    toggleTemplateOverlay();
-  };
-
-  const handleCommandPaletteVimModeChange = (mode: VimInputMode) => {
-    setCommandPaletteVimMode(mode);
-  };
-
-  const handlePaneRenameVimModeChange = (mode: VimInputMode) => {
-    setPaneRenameVimMode(mode);
-  };
-
-  const handleWorkspaceLabelVimModeChange = (mode: VimInputMode) => {
-    setWorkspaceLabelVimMode(mode);
-  };
-
-  const handleSessionPickerVimModeChange = (mode: VimInputMode) => {
-    setSessionPickerVimMode(mode);
-  };
-
-  const handleTemplateOverlayVimModeChange = (mode: VimInputMode) => {
-    setTemplateOverlayVimMode(mode);
-  };
-
-  const handleAggregateVimModeChange = (mode: VimInputMode) => {
-    setAggregateVimMode(mode);
   };
 
   const handlePaneRenameOpen = () => {
@@ -313,26 +232,6 @@ function AppContent() {
     Object.values(layout.state.workspaces).some(
       (workspace) => workspace && (workspace.mainPane || workspace.stackPanes.length > 0)
     );
-
-  const requestTemplateApplyConfirm = (applyTemplate: () => Promise<void>) => {
-    templatePending.setPendingApply(() => applyTemplate);
-    confirmationHandlers.handleRequestApplyTemplate();
-  };
-
-  const requestTemplateOverwriteConfirm = (overwriteTemplate: () => Promise<void>) => {
-    templatePending.setPendingOverwrite(() => overwriteTemplate);
-    confirmationHandlers.handleRequestOverwriteTemplate();
-  };
-
-  const requestTemplateDeleteConfirm = (deleteTemplate: () => Promise<void>) => {
-    templatePending.setPendingDelete(() => deleteTemplate);
-    confirmationHandlers.handleRequestDeleteTemplate();
-  };
-
-  const requestSessionDeleteConfirm = (deleteSession: () => Promise<void>) => {
-    sessionPending.setPendingDelete(() => deleteSession);
-    confirmationHandlers.handleRequestDeleteSession();
-  };
 
   // Toggle debug console
   const handleToggleConsole = () => {
@@ -360,11 +259,6 @@ function AppContent() {
     }
   };
 
-  // Aggregate view toggle handler
-  const handleToggleAggregateView = () => {
-    openAggregateView();
-  };
-
   const executeCommandAction = (action: string) => {
     handleNormalModeAction(
       action,
@@ -379,11 +273,11 @@ function AppContent() {
         onDetach: handleDetach,
         onRequestQuit: confirmationHandlers.handleRequestQuit,
         onRequestClosePane: confirmationHandlers.handleRequestClosePane,
-        onToggleSessionPicker: handleToggleSessionPicker,
-        onToggleTemplateOverlay: handleToggleTemplateOverlay,
+        onToggleSessionPicker: togglePicker,
+        onToggleTemplateOverlay: toggleTemplateOverlay,
         onEnterSearch: handleEnterSearch,
         onToggleConsole: handleToggleConsole,
-        onToggleAggregateView: handleToggleAggregateView,
+        onToggleAggregateView: openAggregateView,
         onToggleCommandPalette: toggleCommandPalette,
         onToggleVimMode: handleToggleVimMode,
         onRenamePane: handlePaneRenameOpen,
@@ -415,27 +309,6 @@ function AppContent() {
     aggregateVimMode,
   });
 
-  createEffect(() => {
-    const controller = new AbortController();
-    void (async () => {
-      const label = await checkForUpdateLabel(controller.signal);
-      if (label) setUpdateLabel(label);
-    })();
-
-    onCleanup(() => {
-      controller.abort();
-    });
-  });
-
-  // Handle bracketed paste from host terminal (Cmd+V sends this)
-  createEffect(() => {
-    renderer.keyInput.on('paste', pasteHandler.handleBracketedPaste);
-
-    onCleanup(() => {
-      renderer.keyInput.off('paste', pasteHandler.handleBracketedPaste);
-    });
-  });
-
   const keyboardHandler = useKeyboardHandler({
     onPaste: handlePaste,
     onNewPane: handleNewPane,
@@ -444,11 +317,11 @@ function AppContent() {
     onDetach: handleDetach,
     onRequestQuit: confirmationHandlers.handleRequestQuit,
     onRequestClosePane: confirmationHandlers.handleRequestClosePane,
-    onToggleSessionPicker: handleToggleSessionPicker,
-    onToggleTemplateOverlay: handleToggleTemplateOverlay,
+    onToggleSessionPicker: togglePicker,
+    onToggleTemplateOverlay: toggleTemplateOverlay,
     onEnterSearch: handleEnterSearch,
     onToggleConsole: handleToggleConsole,
-    onToggleAggregateView: handleToggleAggregateView,
+    onToggleAggregateView: openAggregateView,
     onToggleCommandPalette: toggleCommandPalette,
     onToggleVimMode: handleToggleVimMode,
     onRenamePane: handlePaneRenameOpen,
@@ -511,12 +384,12 @@ function AppContent() {
         setWorkspaceLabelState={setWorkspaceLabelState}
         overlayVimMode={overlayVimMode()}
         updateLabel={updateLabel()}
-        onCommandPaletteVimModeChange={handleCommandPaletteVimModeChange}
-        onPaneRenameVimModeChange={handlePaneRenameVimModeChange}
-        onWorkspaceLabelVimModeChange={handleWorkspaceLabelVimModeChange}
-        onSessionPickerVimModeChange={handleSessionPickerVimModeChange}
-        onTemplateOverlayVimModeChange={handleTemplateOverlayVimModeChange}
-        onAggregateVimModeChange={handleAggregateVimModeChange}
+        onCommandPaletteVimModeChange={setCommandPaletteVimMode}
+        onPaneRenameVimModeChange={setPaneRenameVimMode}
+        onWorkspaceLabelVimModeChange={setWorkspaceLabelVimMode}
+        onSessionPickerVimModeChange={setSessionPickerVimMode}
+        onTemplateOverlayVimModeChange={setTemplateOverlayVimMode}
+        onAggregateVimModeChange={setAggregateVimMode}
         confirmationState={confirmationState}
         onConfirm={confirmationHandlers.handleConfirmAction}
         onCancel={confirmationHandlers.handleCancelConfirmation}
@@ -532,43 +405,10 @@ function AppContent() {
   );
 }
 
-function AppWithTerminal() {
-  return (
-    <TitleProvider>
-      <TerminalProvider>
-        <SelectionProvider>
-          <SearchProvider>
-            <SessionBridge>
-              <AggregateViewProvider>
-                <AppContent />
-              </AggregateViewProvider>
-            </SessionBridge>
-          </SearchProvider>
-        </SelectionProvider>
-      </TerminalProvider>
-    </TitleProvider>
-  );
-}
-
 export function App() {
   return (
-    <ConfigProvider>
-      <ConfiguredApp />
-    </ConfigProvider>
-  );
-}
-
-function ConfiguredApp() {
-  const config = useConfig();
-  const currentConfig = () => config.config();
-
-  return (
-    <ThemeProvider theme={currentConfig().theme}>
-      <LayoutProvider config={currentConfig().layout}>
-        <KeyboardProvider>
-          <AppWithTerminal />
-        </KeyboardProvider>
-      </LayoutProvider>
-    </ThemeProvider>
+    <AppProviders>
+      <AppContent />
+    </AppProviders>
   );
 }
