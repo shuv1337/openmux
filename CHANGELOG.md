@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.98](https://github.com/monotykamary/openmux/compare/v0.2.97...v0.2.98) (2026-01-10)
+
+
+### Features
+
+* **ui:** add pane rename overlay ([44ca0ef](https://github.com/monotykamary/openmux/commit/44ca0ef1e47aee9671210829088fe7fe090a9421))
+* **ui:** add workspace labels ([e18cd07](https://github.com/monotykamary/openmux/commit/e18cd0740191207f83ecedca7cfac067a1eb29f2))
+
 ### [0.2.97](https://github.com/monotykamary/openmux/compare/v0.2.96...v0.2.97) (2026-01-10)
 
 
