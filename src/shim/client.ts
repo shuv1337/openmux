@@ -8,6 +8,7 @@ import { bufferToArrayBuffer } from './client/utils';
 import {
   getKittyState,
   getPtyState,
+  handlePtyTitle,
   registerEmulatorFactory,
   setPtyState,
 } from './client/state';
@@ -211,12 +212,14 @@ export async function getGitDiffStats(
 
 export async function getTitle(ptyId: string): Promise<string> {
   const cached = getPtyState(ptyId)?.title;
-  if (cached !== undefined) {
+  if (cached !== undefined && cached !== '') {
     return cached;
   }
 
   const response = await sendRequest('getTitle', { ptyId });
-  return (response.header.result as { title: string }).title ?? '';
+  const title = (response.header.result as { title: string }).title ?? '';
+  handlePtyTitle(ptyId, title);
+  return title;
 }
 
 export async function getLastCommand(ptyId: string): Promise<string | undefined> {

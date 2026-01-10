@@ -6,8 +6,9 @@
 import type { ParentProps } from 'solid-js';
 import { useLayout } from '../contexts/LayoutContext';
 import { useTerminal } from '../contexts/TerminalContext';
+import { useTitle } from '../contexts/TitleContext';
 import { SessionProvider } from '../contexts/SessionContext';
-import type { WorkspaceId } from '../core/types';
+import type { WorkspaceId, PaneData } from '../core/types';
 import type { Workspaces } from '../core/operations/layout-actions';
 import { collectPanes } from '../core/layout-tree';
 import { pruneMissingPanes } from './session-bridge-utils';
@@ -18,13 +19,18 @@ import {
   clearSessionCwdMap,
   setSessionCommandMap,
   clearSessionCommandMap,
+  getPtyTitle,
+  waitForShimClient,
 } from '../effect/bridge';
 
 interface SessionBridgeProps extends ParentProps {}
 
+const DEFAULT_PANE_TITLE = 'shell';
+
 export function SessionBridge(props: SessionBridgeProps) {
   const layout = useLayout();
   const { loadSession, clearAll } = layout;
+  const titleContext = useTitle();
   const {
     suspendSession,
     resumeSession,
@@ -56,6 +62,48 @@ export function SessionBridge(props: SessionBridgeProps) {
 
   const getActiveWorkspaceId = () => {
     return layout.state.activeWorkspaceId;
+  };
+
+  const hydratePaneTitles = async (workspacesToLoad: Workspaces) => {
+    try {
+      const panes: PaneData[] = [];
+      for (const workspace of Object.values(workspacesToLoad)) {
+        if (!workspace) continue;
+        if (workspace.mainPane) {
+          collectPanes(workspace.mainPane, panes);
+        }
+        for (const node of workspace.stackPanes) {
+          collectPanes(node, panes);
+        }
+      }
+
+      if (panes.length === 0) return;
+
+      const manualPaneIds = new Set<string>();
+      for (const pane of panes) {
+        titleContext.clearTitle(pane.id);
+        const trimmedTitle = pane.title?.trim();
+        if (trimmedTitle && trimmedTitle !== DEFAULT_PANE_TITLE) {
+          manualPaneIds.add(pane.id);
+          titleContext.setManualTitle(pane.id, trimmedTitle);
+        }
+      }
+
+      await waitForShimClient();
+
+      await Promise.all(
+        panes.map(async (pane) => {
+          if (!pane.ptyId) return;
+          if (manualPaneIds.has(pane.id)) return;
+          const title = (await getPtyTitle(pane.ptyId)).trim();
+          if (title) {
+            titleContext.setTitle(pane.id, title);
+          }
+        })
+      );
+    } catch {
+      // Best-effort hydration; ignore failures on detach/attach races.
+    }
   };
 
   const onSessionLoad = async (
@@ -119,6 +167,8 @@ export function SessionBridge(props: SessionBridgeProps) {
 
     // Load workspaces into layout (this triggers reactive effects)
     loadSession({ workspaces: workspacesToLoad, activeWorkspaceId: activeWorkspaceIdToLoad });
+
+    void hydratePaneTitles(workspacesToLoad);
   };
 
   const onBeforeSwitch = async (currentSessionId: string) => {
