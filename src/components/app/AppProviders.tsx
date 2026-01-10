@@ -10,6 +10,7 @@ import {
   LayoutProvider,
   KeyboardProvider,
   TerminalProvider,
+  OverlayProvider,
 } from '../../contexts';
 import { SelectionProvider } from '../../contexts/SelectionContext';
 import { SearchProvider } from '../../contexts/SearchContext';
@@ -43,7 +44,9 @@ function ConfiguredProviders(props: AppProvidersProps) {
                 <SearchProvider>
                   <SessionBridge>
                     <AggregateViewProvider>
-                      {props.children}
+                      <OverlayProvider>
+                        {props.children}
+                      </OverlayProvider>
                     </AggregateViewProvider>
                   </SessionBridge>
                 </SearchProvider>

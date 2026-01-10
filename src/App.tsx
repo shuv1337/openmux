@@ -8,6 +8,7 @@ import {
   useLayout,
   useKeyboardHandler,
   useKeyboardState,
+  useOverlays,
   useTerminal,
 } from './contexts';
 import { useSelection } from './contexts/SelectionContext';
@@ -19,8 +20,7 @@ import { PaneContainer } from './components';
 import { getFocusedPane, getFocusedPtyId } from './core/workspace-utils';
 import { type CommandPaletteCommand } from './core/command-palette';
 import { setKeyboardVimMode, type KeyboardVimMode } from './core/user-config';
-import { onShimDetached, shutdownShim } from './effect/bridge';
-import { disposeRuntime } from './effect/runtime';
+import { onShimDetached } from './effect/bridge';
 import {
   createPaneResizeHandlers,
   createPasteHandler,
@@ -33,12 +33,8 @@ import { usePtyCreation } from './components/app/pty-creation';
 import { AppOverlays } from './components/app/AppOverlays';
 import { createKittyGraphicsBridge } from './components/app/kitty-graphics-bridge';
 import { createCellMetricsGetter, createPixelResizeTracker } from './components/app/pixel-metrics';
-import { createExitHandlers } from './components/app/exit-handlers';
 import { createSearchVimState } from './components/app/search-vim';
-import { createOverlayVimMode } from './components/app/overlay-vim-mode';
 import { setupAppLayoutEffects } from './components/app/layout-effects';
-import { createOverlayState } from './components/app/overlay-state';
-import { createConfirmationWorkflows } from './components/app/confirmation-workflows';
 import { setupAppEffects } from './components/app/app-effects';
 import { AppProviders } from './components/app/AppProviders';
 import {
@@ -58,11 +54,10 @@ function AppContent() {
   const width = () => dimensions().width;
   const height = () => dimensions().height;
   const layout = useLayout();
-  const { setViewport, newPane, closePane } = layout;
+  const { setViewport, newPane } = layout;
   // Don't destructure isInitialized - it's a reactive getter that loses reactivity when destructured
   const terminal = useTerminal();
   const {
-    destroyPTY,
     resizePTY,
     writeToFocused,
     writeToPTY,
@@ -71,7 +66,7 @@ function AppContent() {
     isPtyActive,
   } = terminal;
   const session = useSession();
-  const { togglePicker, toggleTemplateOverlay, state: sessionState, saveSession, suspendPersistence } = session;
+  const { togglePicker, toggleTemplateOverlay, state: sessionState } = session;
   const titleContext = useTitle();
   // Keep selection/search contexts to access reactive getters
   const selection = useSelection();
@@ -80,33 +75,20 @@ function AppContent() {
   const { enterSearchMode, exitSearchMode, setSearchQuery, nextMatch, prevMatch } = search;
   const { state: aggregateState, openAggregateView } = useAggregateView();
   const keyboardState = useKeyboardState();
-  const { enterConfirmMode, exitConfirmMode, exitSearchMode: keyboardExitSearchMode } = keyboardState;
+  const { exitSearchMode: keyboardExitSearchMode } = keyboardState;
   const renderer = useRenderer();
-
-  const overlayState = createOverlayState();
+  const overlays = useOverlays();
   const {
-    commandPaletteState,
-    setCommandPaletteState,
     toggleCommandPalette,
-    paneRenameState,
     setPaneRenameState,
-    workspaceLabelState,
     setWorkspaceLabelState,
-    commandPaletteVimMode,
-    setCommandPaletteVimMode,
-    paneRenameVimMode,
-    setPaneRenameVimMode,
-    workspaceLabelVimMode,
-    setWorkspaceLabelVimMode,
-    sessionPickerVimMode,
-    setSessionPickerVimMode,
-    templateOverlayVimMode,
-    setTemplateOverlayVimMode,
-    aggregateVimMode,
-    setAggregateVimMode,
-    updateLabel,
     setUpdateLabel,
-  } = overlayState;
+    confirmationState,
+    confirmationHandlers,
+    handleQuit,
+    handleDetach,
+    handleShimDetached,
+  } = overlays;
 
   const getCellMetrics = createCellMetricsGetter(renderer as any, width, height);
 
@@ -129,32 +111,6 @@ function AppContent() {
     stopPixelResizePoll,
   });
 
-  const exitHandlers = createExitHandlers({
-    saveSession,
-    suspendSessionPersistence: suspendPersistence,
-    shutdownShim,
-    disposeRuntime,
-    renderer,
-  });
-  const handleQuit = exitHandlers.handleQuit;
-  const handleDetach = exitHandlers.handleDetach;
-  const confirmationWorkflows = createConfirmationWorkflows({
-    closePane,
-    getFocusedPtyId: () => getFocusedPtyId(layout.activeWorkspace),
-    destroyPTY,
-    enterConfirmMode,
-    exitConfirmMode,
-    onQuit: handleQuit,
-  });
-  const {
-    confirmationState,
-    confirmationHandlers,
-    requestTemplateApplyConfirm,
-    requestTemplateOverwriteConfirm,
-    requestTemplateDeleteConfirm,
-    requestSessionDeleteConfirm,
-  } = confirmationWorkflows;
-
   // Create paste handler for bracketed paste from host terminal
   const pasteHandler = createPasteHandler({
     getFocusedPtyId: () => getFocusedPtyId(layout.activeWorkspace),
@@ -169,9 +125,9 @@ function AppContent() {
     search,
     selection,
     aggregateState,
-    commandPaletteState,
-    paneRenameState,
-    workspaceLabelState,
+    commandPaletteState: overlays.commandPaletteState,
+    paneRenameState: overlays.paneRenameState,
+    workspaceLabelState: overlays.workspaceLabelState,
     confirmationVisible: () => confirmationState().visible,
     kittyRenderer,
     getSessionPickerRect,
@@ -189,7 +145,7 @@ function AppContent() {
     readFromClipboard,
     writeToPTY,
     onShimDetached,
-    handleShimDetached: exitHandlers.handleShimDetached,
+    handleShimDetached,
     getFocusedPtyId: () => getFocusedPtyId(layout.activeWorkspace),
     isPtyActive,
   });
@@ -290,25 +246,6 @@ function AppContent() {
     executeCommandAction(command.action);
   };
 
-  const overlayVimMode = createOverlayVimMode({
-    config,
-    confirmationVisible: () => confirmationState().visible,
-    commandPaletteState,
-    paneRenameState,
-    workspaceLabelState,
-    session,
-    sessionState,
-    aggregateState,
-    keyboardState,
-    search,
-    commandPaletteVimMode,
-    paneRenameVimMode,
-    workspaceLabelVimMode,
-    sessionPickerVimMode,
-    templateOverlayVimMode,
-    aggregateVimMode,
-  });
-
   const keyboardHandler = useKeyboardHandler({
     onPaste: handlePaste,
     onNewPane: handleNewPane,
@@ -375,31 +312,7 @@ function AppContent() {
       <AppOverlays
         width={width()}
         height={height()}
-        commandPaletteState={commandPaletteState}
-        setCommandPaletteState={setCommandPaletteState}
         onCommandPaletteExecute={handleCommandPaletteExecute}
-        paneRenameState={paneRenameState}
-        setPaneRenameState={setPaneRenameState}
-        workspaceLabelState={workspaceLabelState}
-        setWorkspaceLabelState={setWorkspaceLabelState}
-        overlayVimMode={overlayVimMode()}
-        updateLabel={updateLabel()}
-        onCommandPaletteVimModeChange={setCommandPaletteVimMode}
-        onPaneRenameVimModeChange={setPaneRenameVimMode}
-        onWorkspaceLabelVimModeChange={setWorkspaceLabelVimMode}
-        onSessionPickerVimModeChange={setSessionPickerVimMode}
-        onTemplateOverlayVimModeChange={setTemplateOverlayVimMode}
-        onAggregateVimModeChange={setAggregateVimMode}
-        confirmationState={confirmationState}
-        onConfirm={confirmationHandlers.handleConfirmAction}
-        onCancel={confirmationHandlers.handleCancelConfirmation}
-        onRequestApplyConfirm={requestTemplateApplyConfirm}
-        onRequestOverwriteConfirm={requestTemplateOverwriteConfirm}
-        onRequestDeleteConfirm={requestTemplateDeleteConfirm}
-        onRequestDeleteSessionConfirm={requestSessionDeleteConfirm}
-        onRequestQuit={confirmationHandlers.handleRequestQuit}
-        onDetach={handleDetach}
-        onRequestKillPty={confirmationHandlers.handleRequestKillPty}
       />
     </box>
   );

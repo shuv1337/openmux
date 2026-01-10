@@ -2,13 +2,9 @@
  * App overlay stack extracted from App.
  */
 
-import type { Accessor } from 'solid-js';
-import type { SetStoreFunction } from 'solid-js/store';
-import { useLayout } from '../../contexts';
+import { useLayout, useOverlays } from '../../contexts';
 import { useSelection } from '../../contexts/SelectionContext';
 import { useAggregateView } from '../../contexts/AggregateViewContext';
-import type { ConfirmationType } from '../../core/types';
-import type { VimInputMode } from '../../core/vim-sequences';
 import { DEFAULT_COMMAND_PALETTE_COMMANDS, type CommandPaletteCommand } from '../../core/command-palette';
 import {
   StatusBar,
@@ -18,98 +14,75 @@ import {
 import { SessionPicker } from '../SessionPicker';
 import { SearchOverlay } from '../SearchOverlay';
 import { AggregateView } from '../AggregateView';
-import { CommandPalette, type CommandPaletteState } from '../CommandPalette';
-import { PaneRenameOverlay, type PaneRenameState } from '../PaneRenameOverlay';
-import { WorkspaceLabelOverlay, type WorkspaceLabelState } from '../WorkspaceLabelOverlay';
+import { CommandPalette } from '../CommandPalette';
+import { PaneRenameOverlay } from '../PaneRenameOverlay';
+import { WorkspaceLabelOverlay } from '../WorkspaceLabelOverlay';
 import { TemplateOverlay } from '../TemplateOverlay';
 import { calculateLayoutDimensions } from '../aggregate';
 
 interface AppOverlaysProps {
   width: number;
   height: number;
-  commandPaletteState: CommandPaletteState;
-  setCommandPaletteState: SetStoreFunction<CommandPaletteState>;
   onCommandPaletteExecute: (command: CommandPaletteCommand) => void;
-  paneRenameState: PaneRenameState;
-  setPaneRenameState: SetStoreFunction<PaneRenameState>;
-  workspaceLabelState: WorkspaceLabelState;
-  setWorkspaceLabelState: SetStoreFunction<WorkspaceLabelState>;
-  overlayVimMode: VimInputMode | null;
-  updateLabel: string | null;
-  onCommandPaletteVimModeChange: (mode: VimInputMode) => void;
-  onPaneRenameVimModeChange: (mode: VimInputMode) => void;
-  onWorkspaceLabelVimModeChange: (mode: VimInputMode) => void;
-  onSessionPickerVimModeChange: (mode: VimInputMode) => void;
-  onTemplateOverlayVimModeChange: (mode: VimInputMode) => void;
-  onAggregateVimModeChange: (mode: VimInputMode) => void;
-  confirmationState: Accessor<{ visible: boolean; type: ConfirmationType }>;
-  onConfirm: () => void;
-  onCancel: () => void;
-  onRequestApplyConfirm: (applyTemplate: () => Promise<void>) => void;
-  onRequestOverwriteConfirm: (overwriteTemplate: () => Promise<void>) => void;
-  onRequestDeleteConfirm: (deleteTemplate: () => Promise<void>) => void;
-  onRequestDeleteSessionConfirm: (deleteSession: () => Promise<void>) => void;
-  onRequestQuit: () => void;
-  onDetach: () => void;
-  onRequestKillPty: (ptyId: string) => void;
 }
 
 export function AppOverlays(props: AppOverlaysProps) {
   const selection = useSelection();
   const layout = useLayout();
   const { state: aggregateState } = useAggregateView();
+  const overlays = useOverlays();
 
   return (
     <>
       <StatusBar
         width={props.width}
-        showCommandPalette={props.commandPaletteState.show}
-        showPaneRename={props.paneRenameState.show}
-        showWorkspaceLabel={props.workspaceLabelState.show}
-        overlayVimMode={props.overlayVimMode}
-        updateLabel={props.updateLabel}
+        showCommandPalette={overlays.commandPaletteState.show}
+        showPaneRename={overlays.paneRenameState.show}
+        showWorkspaceLabel={overlays.workspaceLabelState.show}
+        overlayVimMode={overlays.overlayVimMode()}
+        updateLabel={overlays.updateLabel()}
       />
 
       <SessionPicker
         width={props.width}
         height={props.height}
-        onRequestDeleteConfirm={props.onRequestDeleteSessionConfirm}
-        onVimModeChange={props.onSessionPickerVimModeChange}
+        onRequestDeleteConfirm={overlays.requestSessionDeleteConfirm}
+        onVimModeChange={overlays.setSessionPickerVimMode}
       />
 
       <TemplateOverlay
         width={props.width}
         height={props.height}
-        onRequestApplyConfirm={props.onRequestApplyConfirm}
-        onRequestOverwriteConfirm={props.onRequestOverwriteConfirm}
-        onRequestDeleteConfirm={props.onRequestDeleteConfirm}
-        onVimModeChange={props.onTemplateOverlayVimModeChange}
+        onRequestApplyConfirm={overlays.requestTemplateApplyConfirm}
+        onRequestOverwriteConfirm={overlays.requestTemplateOverwriteConfirm}
+        onRequestDeleteConfirm={overlays.requestTemplateDeleteConfirm}
+        onVimModeChange={overlays.setTemplateOverlayVimMode}
       />
 
       <CommandPalette
         width={props.width}
         height={props.height}
         commands={DEFAULT_COMMAND_PALETTE_COMMANDS}
-        state={props.commandPaletteState}
-        setState={props.setCommandPaletteState}
+        state={overlays.commandPaletteState}
+        setState={overlays.setCommandPaletteState}
         onExecute={props.onCommandPaletteExecute}
-        onVimModeChange={props.onCommandPaletteVimModeChange}
+        onVimModeChange={overlays.setCommandPaletteVimMode}
       />
 
       <PaneRenameOverlay
         width={props.width}
         height={props.height}
-        state={props.paneRenameState}
-        setState={props.setPaneRenameState}
-        onVimModeChange={props.onPaneRenameVimModeChange}
+        state={overlays.paneRenameState}
+        setState={overlays.setPaneRenameState}
+        onVimModeChange={overlays.setPaneRenameVimMode}
       />
 
       <WorkspaceLabelOverlay
         width={props.width}
         height={props.height}
-        state={props.workspaceLabelState}
-        setState={props.setWorkspaceLabelState}
-        onVimModeChange={props.onWorkspaceLabelVimModeChange}
+        state={overlays.workspaceLabelState}
+        setState={overlays.setWorkspaceLabelState}
+        onVimModeChange={overlays.setWorkspaceLabelVimMode}
       />
 
       <SearchOverlay width={props.width} height={props.height} />
@@ -117,19 +90,19 @@ export function AppOverlays(props: AppOverlaysProps) {
       <AggregateView
         width={props.width}
         height={props.height}
-        onRequestQuit={props.onRequestQuit}
-        onDetach={props.onDetach}
-        onRequestKillPty={props.onRequestKillPty}
-        onVimModeChange={props.onAggregateVimModeChange}
+        onRequestQuit={overlays.confirmationHandlers.handleRequestQuit}
+        onDetach={overlays.handleDetach}
+        onRequestKillPty={overlays.confirmationHandlers.handleRequestKillPty}
+        onVimModeChange={overlays.setAggregateVimMode}
       />
 
       <ConfirmationDialog
-        visible={props.confirmationState().visible}
-        type={props.confirmationState().type}
+        visible={overlays.confirmationState().visible}
+        type={overlays.confirmationState().type}
         width={props.width}
         height={props.height}
-        onConfirm={props.onConfirm}
-        onCancel={props.onCancel}
+        onConfirm={overlays.confirmationHandlers.handleConfirmAction}
+        onCancel={overlays.confirmationHandlers.handleCancelConfirmation}
       />
 
       <CopyNotification

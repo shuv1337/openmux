@@ -9,3 +9,4 @@ export * from './KeyboardContext';
 export * from './TerminalContext';
 export * from './SelectionContext';
 export * from './SearchContext';
+export * from './OverlayContext';
