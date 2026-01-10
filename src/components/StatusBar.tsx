@@ -13,6 +13,7 @@ import type { VimInputMode } from '../core/vim-sequences';
 interface StatusBarProps {
   width: number;
   showCommandPalette?: boolean;
+  showPaneRename?: boolean;
   overlayVimMode?: VimInputMode | null;
   updateLabel?: string | null;
 }
@@ -58,6 +59,9 @@ export function StatusBar(props: StatusBarProps) {
         <ModeIndicator mode={kbState.mode} />
         <Show when={props.showCommandPalette}>
           <text fg={commandColor()}>[COMMAND]</text>
+        </Show>
+        <Show when={props.showPaneRename}>
+          <text fg={sessionColor()}>[RENAME]</text>
         </Show>
         <Show when={sessionState.showSessionPicker}>
           <text fg={sessionColor()}>[SESSIONS]</text>

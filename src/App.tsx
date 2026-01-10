@@ -3,6 +3,7 @@
  */
 
 import { createSignal, createEffect, onCleanup } from 'solid-js';
+import { createStore } from 'solid-js/store';
 import { useTerminalDimensions, useRenderer } from '@opentui/solid';
 import {
   ConfigProvider,
@@ -20,11 +21,11 @@ import { SelectionProvider, useSelection } from './contexts/SelectionContext';
 import { SearchProvider, useSearch } from './contexts/SearchContext';
 import { useSession } from './contexts/SessionContext';
 import { AggregateViewProvider, useAggregateView } from './contexts/AggregateViewContext';
-import { TitleProvider } from './contexts/TitleContext';
+import { TitleProvider, useTitle } from './contexts/TitleContext';
 import { PaneContainer } from './components';
 import type { ConfirmationType } from './core/types';
 import { SessionBridge } from './components/SessionBridge';
-import { getFocusedPtyId } from './core/workspace-utils';
+import { getFocusedPane, getFocusedPtyId } from './core/workspace-utils';
 import { DEFAULT_COMMAND_PALETTE_COMMANDS, type CommandPaletteCommand } from './core/command-palette';
 import { setKeyboardVimMode, type KeyboardVimMode } from './core/user-config';
 import { type VimInputMode } from './core/vim-sequences';
@@ -42,6 +43,7 @@ import { createCommandPaletteState } from './components/app/command-palette-stat
 import { setupKeyboardRouting } from './components/app/keyboard-routing';
 import { usePtyCreation } from './components/app/pty-creation';
 import { AppOverlays } from './components/app/AppOverlays';
+import type { PaneRenameState } from './components/PaneRenameOverlay';
 import { createTemplatePendingActions } from './components/app/template-pending-actions';
 import { createSessionPendingActions } from './components/app/session-pending-actions';
 import { createKittyGraphicsBridge } from './components/app/kitty-graphics-bridge';
@@ -56,6 +58,7 @@ import { setupAppLayoutEffects } from './components/app/layout-effects';
 import { checkForUpdateLabel } from './core/update-checker';
 import {
   getCommandPaletteRect,
+  getPaneRenameRect,
   getConfirmationRect,
   getCopyNotificationRect,
   getSearchOverlayRect,
@@ -83,6 +86,7 @@ function AppContent() {
   } = terminal;
   const session = useSession();
   const { togglePicker, toggleTemplateOverlay, state: sessionState, saveSession, suspendPersistence } = session;
+  const titleContext = useTitle();
   // Keep selection/search contexts to access reactive getters
   const selection = useSelection();
   const { clearAllSelections } = selection;
@@ -94,7 +98,13 @@ function AppContent() {
   const renderer = useRenderer();
 
   const { commandPaletteState, setCommandPaletteState, toggleCommandPalette } = createCommandPaletteState();
+  const [paneRenameState, setPaneRenameState] = createStore<PaneRenameState>({
+    show: false,
+    paneId: null,
+    value: '',
+  });
   const [commandPaletteVimMode, setCommandPaletteVimMode] = createSignal<VimInputMode>('normal');
+  const [paneRenameVimMode, setPaneRenameVimMode] = createSignal<VimInputMode>('normal');
   const [sessionPickerVimMode, setSessionPickerVimMode] = createSignal<VimInputMode>('normal');
   const [templateOverlayVimMode, setTemplateOverlayVimMode] = createSignal<VimInputMode>('normal');
   const [aggregateVimMode, setAggregateVimMode] = createSignal<VimInputMode>('normal');
@@ -152,11 +162,13 @@ function AppContent() {
     aggregateState,
     commandPaletteState,
     commandPaletteCommands: DEFAULT_COMMAND_PALETTE_COMMANDS,
+    paneRenameState,
     confirmationVisible: () => confirmationState().visible,
     kittyRenderer,
     getSessionPickerRect,
     getTemplateOverlayRect,
     getCommandPaletteRect,
+    getPaneRenameRect,
     getSearchOverlayRect,
     getConfirmationRect,
     getCopyNotificationRect,
@@ -249,6 +261,10 @@ function AppContent() {
     setCommandPaletteVimMode(mode);
   };
 
+  const handlePaneRenameVimModeChange = (mode: VimInputMode) => {
+    setPaneRenameVimMode(mode);
+  };
+
   const handleSessionPickerVimModeChange = (mode: VimInputMode) => {
     setSessionPickerVimMode(mode);
   };
@@ -259,6 +275,14 @@ function AppContent() {
 
   const handleAggregateVimModeChange = (mode: VimInputMode) => {
     setAggregateVimMode(mode);
+  };
+
+  const handlePaneRenameOpen = () => {
+    const focusedPane = getFocusedPane(layout.activeWorkspace);
+    if (!focusedPane) return;
+    const currentTitle =
+      titleContext.getTitle(focusedPane.id) ?? focusedPane.title ?? 'shell';
+    setPaneRenameState({ show: true, paneId: focusedPane.id, value: currentTitle });
   };
 
   const hasAnyPanes = () =>
@@ -338,6 +362,7 @@ function AppContent() {
         onToggleAggregateView: handleToggleAggregateView,
         onToggleCommandPalette: toggleCommandPalette,
         onToggleVimMode: handleToggleVimMode,
+        onRenamePane: handlePaneRenameOpen,
       }
     );
   };
@@ -350,12 +375,14 @@ function AppContent() {
     config,
     confirmationVisible: () => confirmationState().visible,
     commandPaletteState,
+    paneRenameState,
     session,
     sessionState,
     aggregateState,
     keyboardState,
     search,
     commandPaletteVimMode,
+    paneRenameVimMode,
     sessionPickerVimMode,
     templateOverlayVimMode,
     aggregateVimMode,
@@ -397,6 +424,7 @@ function AppContent() {
     onToggleAggregateView: handleToggleAggregateView,
     onToggleCommandPalette: toggleCommandPalette,
     onToggleVimMode: handleToggleVimMode,
+    onRenamePane: handlePaneRenameOpen,
   });
 
   setupAppLayoutEffects({
@@ -449,9 +477,12 @@ function AppContent() {
         commandPaletteState={commandPaletteState}
         setCommandPaletteState={setCommandPaletteState}
         onCommandPaletteExecute={handleCommandPaletteExecute}
+        paneRenameState={paneRenameState}
+        setPaneRenameState={setPaneRenameState}
         overlayVimMode={overlayVimMode()}
         updateLabel={updateLabel()}
         onCommandPaletteVimModeChange={handleCommandPaletteVimModeChange}
+        onPaneRenameVimModeChange={handlePaneRenameVimModeChange}
         onSessionPickerVimModeChange={handleSessionPickerVimModeChange}
         onTemplateOverlayVimModeChange={handleTemplateOverlayVimModeChange}
         onAggregateVimModeChange={handleAggregateVimModeChange}

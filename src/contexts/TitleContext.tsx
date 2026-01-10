@@ -18,6 +18,10 @@ interface TitleContextValue {
   getTitle: (paneId: string) => string | undefined;
   /** Set the title for a pane (does not trigger layout re-renders) */
   setTitle: (paneId: string, title: string) => void;
+  /** Set a manual title override for a pane */
+  setManualTitle: (paneId: string, title: string) => void;
+  /** Clear manual title override */
+  clearManualTitle: (paneId: string) => void;
   /** Clear title when pane is destroyed */
   clearTitle: (paneId: string) => void;
   /** Version signal - increment triggers title re-reads */
@@ -29,26 +33,45 @@ const TitleContext = createContext<TitleContextValue | null>(null);
 export function TitleProvider(props: ParentProps) {
   // Plain Map for titles - not reactive
   const titles = new Map<string, string>();
+  const manualTitles = new Map<string, string>();
 
   // Version signal to trigger re-reads when titles change
   const [titleVersion, setTitleVersion] = createSignal(0);
 
   const getTitle = (paneId: string): string | undefined => {
-    return titles.get(paneId);
+    return manualTitles.get(paneId) ?? titles.get(paneId);
   };
 
   const setTitle = (paneId: string, title: string) => {
     const current = titles.get(paneId);
     if (current !== title) {
       titles.set(paneId, title);
-      // Increment version to trigger re-reads in components
+      if (!manualTitles.has(paneId)) {
+        // Increment version to trigger re-reads in components
+        setTitleVersion(v => v + 1);
+      }
+    }
+  };
+
+  const setManualTitle = (paneId: string, title: string) => {
+    const current = manualTitles.get(paneId);
+    if (current !== title) {
+      manualTitles.set(paneId, title);
+      setTitleVersion(v => v + 1);
+    }
+  };
+
+  const clearManualTitle = (paneId: string) => {
+    if (manualTitles.has(paneId)) {
+      manualTitles.delete(paneId);
       setTitleVersion(v => v + 1);
     }
   };
 
   const clearTitle = (paneId: string) => {
-    if (titles.has(paneId)) {
-      titles.delete(paneId);
+    const hadTitle = titles.delete(paneId);
+    const hadManual = manualTitles.delete(paneId);
+    if (hadTitle || hadManual) {
       setTitleVersion(v => v + 1);
     }
   };
@@ -56,6 +79,8 @@ export function TitleProvider(props: ParentProps) {
   const value: TitleContextValue = {
     getTitle,
     setTitle,
+    setManualTitle,
+    clearManualTitle,
     clearTitle,
     titleVersion,
   };

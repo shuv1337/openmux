@@ -19,6 +19,7 @@ import { SessionPicker } from '../SessionPicker';
 import { SearchOverlay } from '../SearchOverlay';
 import { AggregateView } from '../AggregateView';
 import { CommandPalette, type CommandPaletteState } from '../CommandPalette';
+import { PaneRenameOverlay, type PaneRenameState } from '../PaneRenameOverlay';
 import { TemplateOverlay } from '../TemplateOverlay';
 import { calculateLayoutDimensions } from '../aggregate';
 
@@ -28,9 +29,12 @@ interface AppOverlaysProps {
   commandPaletteState: CommandPaletteState;
   setCommandPaletteState: SetStoreFunction<CommandPaletteState>;
   onCommandPaletteExecute: (command: CommandPaletteCommand) => void;
+  paneRenameState: PaneRenameState;
+  setPaneRenameState: SetStoreFunction<PaneRenameState>;
   overlayVimMode: VimInputMode | null;
   updateLabel: string | null;
   onCommandPaletteVimModeChange: (mode: VimInputMode) => void;
+  onPaneRenameVimModeChange: (mode: VimInputMode) => void;
   onSessionPickerVimModeChange: (mode: VimInputMode) => void;
   onTemplateOverlayVimModeChange: (mode: VimInputMode) => void;
   onAggregateVimModeChange: (mode: VimInputMode) => void;
@@ -53,12 +57,13 @@ export function AppOverlays(props: AppOverlaysProps) {
 
   return (
     <>
-      <StatusBar
-        width={props.width}
-        showCommandPalette={props.commandPaletteState.show}
-        overlayVimMode={props.overlayVimMode}
-        updateLabel={props.updateLabel}
-      />
+    <StatusBar
+      width={props.width}
+      showCommandPalette={props.commandPaletteState.show}
+      showPaneRename={props.paneRenameState.show}
+      overlayVimMode={props.overlayVimMode}
+      updateLabel={props.updateLabel}
+    />
 
       <SessionPicker
         width={props.width}
@@ -84,6 +89,14 @@ export function AppOverlays(props: AppOverlaysProps) {
         setState={props.setCommandPaletteState}
         onExecute={props.onCommandPaletteExecute}
         onVimModeChange={props.onCommandPaletteVimModeChange}
+      />
+
+      <PaneRenameOverlay
+        width={props.width}
+        height={props.height}
+        state={props.paneRenameState}
+        setState={props.setPaneRenameState}
+        onVimModeChange={props.onPaneRenameVimModeChange}
       />
 
       <SearchOverlay width={props.width} height={props.height} />

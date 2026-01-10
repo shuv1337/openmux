@@ -70,6 +70,9 @@ export function handleNormalModeAction(
     case 'pane.close':
       options.onRequestClosePane ? options.onRequestClosePane() : layout.closePane();
       return true;
+    case 'pane.rename':
+      options.onRenamePane?.();
+      return true;
     case 'pane.zoom':
       layout.toggleZoom();
       return true;
@@ -177,6 +180,10 @@ export function handlePrefixModeAction(
       return true;
     case 'pane.close':
       options.onRequestClosePane ? options.onRequestClosePane() : layout.closePane();
+      exitPrefix();
+      return true;
+    case 'pane.rename':
+      options.onRenamePane?.();
       exitPrefix();
       return true;
     case 'pane.zoom':

@@ -36,6 +36,13 @@ const BASE_COMMANDS: CommandPaletteCommand[] = [
     keywords: ['close', 'kill'],
   },
   {
+    id: 'pane.rename',
+    title: 'Rename pane',
+    description: 'Rename the focused pane',
+    action: 'pane.rename',
+    keywords: ['rename', 'name', 'title', 'pane'],
+  },
+  {
     id: 'pane.zoom',
     title: 'Toggle zoom',
     description: 'Zoom or unzoom the focused pane',

@@ -25,6 +25,7 @@ export type KeyHandler = (e: KeyEvent) => boolean
 export type OverlayType =
   | "confirmationDialog"
   | "commandPalette"
+  | "paneRename"
   | "templateOverlay"
   | "sessionPicker"
   | "aggregateView"
@@ -36,6 +37,7 @@ export type OverlayType =
 const OVERLAY_PRIORITY: Record<OverlayType, number> = {
   confirmationDialog: 30, // Highest - modal dialogs take precedence
   commandPalette: 25,
+  paneRename: 24,
   templateOverlay: 22,
   sessionPicker: 20,
   aggregateView: 10,
