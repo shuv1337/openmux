@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.103](https://github.com/monotykamary/openmux/compare/v0.2.102...v0.2.103) (2026-01-12)
+
+
+### Bug Fixes
+
+* **aggregate-view:** route preview input and search hints ([a68a6b4](https://github.com/monotykamary/openmux/commit/a68a6b4548592b83d30858da3b035fc0e8090bb4))
+
 ### [0.2.102](https://github.com/monotykamary/openmux/compare/v0.2.101...v0.2.102) (2026-01-10)
 
 ### [0.2.101](https://github.com/monotykamary/openmux/compare/v0.2.100...v0.2.101) (2026-01-10)
