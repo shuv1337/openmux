@@ -94,8 +94,7 @@ export function getHintsText(
   const aggregateBindings = keybindings.aggregate;
 
   if (vimEnabled && inSearchMode) {
-    const modeHint = vimMode === 'insert' ? 'esc:normal' : 'i:insert';
-    return `n/N:next/prev enter:confirm q:cancel ${modeHint}`;
+    return 'n/N:next/prev enter:confirm q:cancel';
   }
 
   if (inSearchMode) {

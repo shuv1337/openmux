@@ -20,6 +20,8 @@ export interface AggregateKeyboardDeps {
   getVimEnabled: () => boolean;
   getVimMode: () => VimInputMode;
   setVimMode: (mode: VimInputMode) => void;
+  getSearchVimMode: () => VimInputMode;
+  setSearchVimMode: (mode: VimInputMode) => void;
   getVimHandlers: () => {
     list: VimSequenceHandler;
     preview: VimSequenceHandler;

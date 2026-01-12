@@ -111,9 +111,16 @@ function AppContent() {
     stopPixelResizePoll,
   });
 
+  const getActivePtyId = () => {
+    if (aggregateState.showAggregateView && aggregateState.previewMode) {
+      return aggregateState.selectedPtyId ?? undefined;
+    }
+    return getFocusedPtyId(layout.activeWorkspace);
+  };
+
   // Create paste handler for bracketed paste from host terminal
   const pasteHandler = createPasteHandler({
-    getFocusedPtyId: () => getFocusedPtyId(layout.activeWorkspace),
+    getFocusedPtyId: getActivePtyId,
     writeToPTY,
   });
   setupAppEffects({
@@ -146,7 +153,7 @@ function AppContent() {
     writeToPTY,
     onShimDetached,
     handleShimDetached,
-    getFocusedPtyId: () => getFocusedPtyId(layout.activeWorkspace),
+    getFocusedPtyId: getActivePtyId,
     isPtyActive,
   });
 

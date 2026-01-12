@@ -1,9 +1,8 @@
 import { writeToPty } from '../../../effect/bridge';
 import type { KeyboardEvent } from '../../../effect/bridge';
 import { encodeKeyForEmulator } from '../../../terminal/key-encoder';
-import { eventToCombo, matchKeybinding } from '../../../core/keybindings';
+import { matchKeybinding } from '../../../core/keybindings';
 import type { AggregateKeyboardDeps } from './types';
-import { isBareEscape } from './helpers';
 
 export function createAggregatePreviewHandler(deps: AggregateKeyboardDeps) {
   const forwardToPreviewPty = (event: KeyboardEvent): boolean => {
@@ -56,10 +55,7 @@ export function createAggregatePreviewHandler(deps: AggregateKeyboardDeps) {
 
   const handlePreviewModeKeys = (event: KeyboardEvent): boolean => {
     if (event.eventType === 'release') {
-      if (!deps.getVimEnabled() || deps.getVimMode() === 'insert') {
-        return forwardToPreviewPty(event);
-      }
-      return true;
+      return forwardToPreviewPty(event);
     }
 
     const keybindings = deps.getKeybindings();
@@ -71,46 +67,9 @@ export function createAggregatePreviewHandler(deps: AggregateKeyboardDeps) {
       meta: event.meta,
     };
 
-    if (!deps.getVimEnabled()) {
-      const action = matchKeybinding(keybindings.aggregate.preview, keyEvent);
-      if (handlePreviewAction(action)) return true;
-      return forwardToPreviewPty(event);
-    }
-
-    if (deps.getVimMode() === 'insert') {
-      if (isBareEscape(event)) {
-        const selectedPtyId = deps.getSelectedPtyId();
-        const emulator = selectedPtyId ? deps.getEmulatorSync(selectedPtyId) : null;
-        const alternateScreen = emulator?.getTerminalState()?.alternateScreen ?? false;
-        if (!alternateScreen) {
-          deps.setVimMode('normal');
-          deps.getVimHandlers().preview.reset();
-          return true;
-        }
-      }
-      const action = matchKeybinding(keybindings.aggregate.preview, keyEvent);
-      if (handlePreviewAction(action)) return true;
-      return forwardToPreviewPty(event);
-    }
-
-    if (event.key === 'i' && !event.ctrl && !event.alt && !event.meta) {
-      deps.setVimMode('insert');
-      deps.getVimHandlers().preview.reset();
-      return true;
-    }
-
-    const combo = eventToCombo(keyEvent);
-    const result = deps.getVimHandlers().preview.handleCombo(combo);
-    if (result.pending) return true;
-    if (handlePreviewAction(result.action)) return true;
-
-    const shouldMatchBindings = event.ctrl || event.alt || event.meta || event.key.length > 1;
-    if (shouldMatchBindings && !isBareEscape(event)) {
-      const fallbackAction = matchKeybinding(keybindings.aggregate.preview, keyEvent);
-      if (handlePreviewAction(fallbackAction)) return true;
-    }
-
-    return true;
+    const action = matchKeybinding(keybindings.aggregate.preview, keyEvent);
+    if (handlePreviewAction(action)) return true;
+    return forwardToPreviewPty(event);
   };
 
   return { handlePreviewModeKeys };

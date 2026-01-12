@@ -168,11 +168,9 @@ export function AggregateView(props: AggregateViewProps) {
 
   createEffect(() => {
     if (!state.showAggregateView || !vimEnabled()) return;
-    if (inSearchMode()) {
+    if (inSearchMode() || state.previewMode) {
       setVimMode('normal');
-      return;
     }
-    setVimMode(state.previewMode ? 'insert' : 'normal');
   });
 
   createEffect(() => {
@@ -298,6 +296,8 @@ export function AggregateView(props: AggregateViewProps) {
     getVimEnabled: vimEnabled,
     getVimMode: vimMode,
     setVimMode,
+    getSearchVimMode: () => search.vimMode,
+    setSearchVimMode: search.setVimMode,
     getVimHandlers,
     getEmulatorSync: getAggregateEmulatorSync,
     setFilterQuery,

@@ -78,9 +78,9 @@ export function createAggregateSearchHandler(deps: AggregateKeyboardDeps) {
       return handleSearchInput(event);
     }
 
-    if (deps.getVimMode() === 'insert') {
+    if (deps.getSearchVimMode() === 'insert') {
       if (isBareEscape(event)) {
-        deps.setVimMode('normal');
+        deps.setSearchVimMode('normal');
         deps.getVimHandlers().search.reset();
         return true;
       }
@@ -90,7 +90,7 @@ export function createAggregateSearchHandler(deps: AggregateKeyboardDeps) {
     }
 
     if (event.key === 'i' && !event.ctrl && !event.alt && !event.meta) {
-      deps.setVimMode('insert');
+      deps.setSearchVimMode('insert');
       deps.getVimHandlers().search.reset();
       return true;
     }
