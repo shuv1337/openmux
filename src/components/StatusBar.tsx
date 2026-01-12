@@ -158,7 +158,7 @@ function WorkspaceTabs(props: WorkspaceTabsProps) {
     if (props.populatedWorkspaces.length === 0) return null;
     return props.populatedWorkspaces.map((id) => {
       const label = props.workspaces[id]?.label?.trim();
-      const labelSuffix = label ? `: ${label}` : '';
+      const labelSuffix = label ? `:${label}` : '';
       const isActive = id === props.activeWorkspaceId;
       return isActive ? `[${id}${labelSuffix}]` : ` ${id}${labelSuffix} `;
     }).join('');
