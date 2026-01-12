@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.104](https://github.com/monotykamary/openmux/compare/v0.2.103...v0.2.104) (2026-01-12)
+
+
+### Bug Fixes
+
+* tighten workspace label spacing in status bar ([bc00a2e](https://github.com/monotykamary/openmux/commit/bc00a2e8a8d1b8dc7cf2061f373a7c2a782da7ca))
+
 ### [0.2.103](https://github.com/monotykamary/openmux/compare/v0.2.102...v0.2.103) (2026-01-12)
 
 
