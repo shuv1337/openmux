@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.105](https://github.com/monotykamary/openmux/compare/v0.2.104...v0.2.105) (2026-01-13)
+
+
+### Bug Fixes
+
+* **input:** support horizontal scroll wheel ([d68ca38](https://github.com/monotykamary/openmux/commit/d68ca38603a89dd4f0533a6552bbc02c61075ba0))
+
 ### [0.2.104](https://github.com/monotykamary/openmux/compare/v0.2.103...v0.2.104) (2026-01-12)
 
 
