@@ -72,10 +72,25 @@ export function Pane(props: PaneProps) {
     startOffset: 0,
   };
 
+  type ScrollDirection = 'up' | 'down' | 'left' | 'right';
+
+  const scrollDirectionToButton = (direction: ScrollDirection): number => {
+    switch (direction) {
+      case 'up':
+        return 4;
+      case 'down':
+        return 5;
+      case 'left':
+        return 6;
+      case 'right':
+        return 7;
+    }
+  };
+
   // Track scroll direction with hysteresis to prevent jitter from trackpad micro-movements
   // (pane-specific optimization)
-  let committedDirection: 'up' | 'down' | null = null;
-  let pendingDirection: 'up' | 'down' | null = null;
+  let committedDirection: ScrollDirection | null = null;
+  let pendingDirection: ScrollDirection | null = null;
   let consecutiveCount = 0;
 
   // Cleanup on unmount
@@ -262,11 +277,14 @@ export function Pane(props: PaneProps) {
     const { relX, relY } = getRelativeCoords(event);
     if (!isInsideContent(relX, relY)) return;
 
+    const direction = event.scroll?.direction;
+    if (!direction) return;
+
     // Forward scroll to app if it wants mouse input
     if (mouseHandler.appWantsMouse(props.ptyId) && props.onMouseInput) {
       // Hysteresis to prevent jitter from trackpad micro-movements (pane-specific)
-      const eventDir = event.scroll?.direction === 'up' ? 'up' : 'down' as const;
       const threshold = 2;
+      const eventDir = direction;
 
       if (eventDir === pendingDirection) {
         consecutiveCount++;
@@ -283,7 +301,7 @@ export function Pane(props: PaneProps) {
       }
 
       if (committedDirection !== null && eventDir === committedDirection) {
-        const button = committedDirection === 'up' ? 4 : 5;
+        const button = scrollDirectionToButton(committedDirection);
         const sequence = inputHandler.encodeMouse({
           type: 'scroll',
           button,
@@ -298,7 +316,6 @@ export function Pane(props: PaneProps) {
     } else {
       // Handle scroll locally
       const scrollSpeed = 3;
-      const direction = event.scroll?.direction;
       if (direction === 'up') {
         scrollTerminal(props.ptyId, scrollSpeed);
       } else if (direction === 'down') {

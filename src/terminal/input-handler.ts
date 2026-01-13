@@ -35,6 +35,8 @@ class InputHandlerImpl {
     // Convert scroll button values
     if (button === 4) btn = 64; // scroll up
     if (button === 5) btn = 65; // scroll down
+    if (button === 6) btn = 66; // scroll left
+    if (button === 7) btn = 67; // scroll right
 
     // Add modifiers
     if (shift) btn += 4;

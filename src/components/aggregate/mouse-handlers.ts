@@ -36,6 +36,21 @@ export function createAggregateMouseHandlers(deps: MouseHandlerDeps) {
   // Create shared mouse handler
   const mouseHandler = createTerminalMouseHandler(deps);
 
+  type ScrollDirection = 'up' | 'down' | 'left' | 'right';
+
+  const scrollDirectionToButton = (direction: ScrollDirection): number => {
+    switch (direction) {
+      case 'up':
+        return 4;
+      case 'down':
+        return 5;
+      case 'left':
+        return 6;
+      case 'right':
+        return 7;
+    }
+  };
+
   /**
    * Check if terminal is scrolled back (not at bottom)
    */
@@ -180,11 +195,12 @@ export function createAggregateMouseHandlers(deps: MouseHandlerDeps) {
     if (!ptyId) return;
 
     const { relX, relY } = getRelativeCoords(event);
+    const direction = event.scroll?.direction;
+    if (!direction) return;
 
     // Forward scroll to app if it wants mouse input
     if (mouseHandler.appWantsMouse(ptyId)) {
-      const scrollUp = event.scroll?.direction === 'up';
-      const button = scrollUp ? 4 : 5;
+      const button = scrollDirectionToButton(direction);
       const sequence = inputHandler.encodeMouse({
         type: 'scroll',
         button,
@@ -198,7 +214,6 @@ export function createAggregateMouseHandlers(deps: MouseHandlerDeps) {
     } else {
       // Handle scroll locally
       const scrollSpeed = 3;
-      const direction = event.scroll?.direction;
       if (direction === 'up') {
         scrollTerminal(ptyId, scrollSpeed);
       } else if (direction === 'down') {
