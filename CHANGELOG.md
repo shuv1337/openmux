@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.106](https://github.com/monotykamary/openmux/compare/v0.2.105...v0.2.106) (2026-01-14)
+
+
+### Features
+
+* **cli:** add control socket commands and raw pane capture ([f5aa4f8](https://github.com/monotykamary/openmux/commit/f5aa4f8020532ce1d80c20ec4a4b9b6a2c05b2b4))
+* **cli:** add modular help output ([ae7b1af](https://github.com/monotykamary/openmux/commit/ae7b1aff4404e832d8b4ada65287035351e7be9d))
+
+
+### Bug Fixes
+
+* **control:** clear connect timeout ([3ee686b](https://github.com/monotykamary/openmux/commit/3ee686b5ea5bba35043605bdf21dc79dc888e8ba))
+
+
+### Documentation
+
+* **readme:** add CLI section ([06314f4](https://github.com/monotykamary/openmux/commit/06314f48fd7fcb2c4fcde7791e0742a82c90d34b))
+
 ### [0.2.105](https://github.com/monotykamary/openmux/compare/v0.2.104...v0.2.105) (2026-01-13)
 
 
