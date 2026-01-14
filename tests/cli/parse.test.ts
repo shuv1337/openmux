@@ -7,6 +7,16 @@ describe('cli parser', () => {
     expect(result).toEqual({ ok: true, command: { kind: 'attach' } });
   });
 
+  test('parses --help at root', () => {
+    const result = parseCliArgs(['--help']);
+    expect(result).toEqual({ ok: true, command: { kind: 'help', topic: 'root' } });
+  });
+
+  test('parses help topic for pane capture', () => {
+    const result = parseCliArgs(['pane', 'capture', '--help']);
+    expect(result).toEqual({ ok: true, command: { kind: 'help', topic: 'pane.capture' } });
+  });
+
   test('parses attach --session', () => {
     const result = parseCliArgs(['attach', '--session', 'dev']);
     expect(result).toEqual({ ok: true, command: { kind: 'attach', session: 'dev' } });

@@ -1,3 +1,4 @@
+import { type HelpTopic } from './help';
 import { parsePaneSelector } from '../control/targets';
 
 type PaneCommandBase = {
@@ -6,6 +7,7 @@ type PaneCommandBase = {
 };
 
 export type CliCommand =
+  | { kind: 'help'; topic: HelpTopic }
   | { kind: 'attach'; session?: string }
   | { kind: 'session.list'; json: boolean }
   | { kind: 'session.create'; name?: string }
@@ -16,6 +18,36 @@ export type CliCommand =
 export type ParseResult =
   | { ok: true; command: CliCommand }
   | { ok: false; error: string };
+
+const HELP_FLAGS = new Set(['-h', '--help']);
+
+function shouldShowHelp(args: string[]): boolean {
+  if (args.length === 0) return false;
+  if (args[0] === 'help') return true;
+  return args.some((arg) => HELP_FLAGS.has(arg));
+}
+
+function resolveHelpTopic(args: string[]): HelpTopic {
+  const tokens = args[0] === 'help' ? args.slice(1) : args;
+  const stopIndex = tokens.findIndex((arg) => arg.startsWith('-'));
+  const head = stopIndex === -1 ? tokens : tokens.slice(0, stopIndex);
+  const [first, second] = head;
+
+  if (!first) return 'root';
+  if (first === 'attach') return 'attach';
+  if (first === 'session') {
+    if (second === 'list') return 'session.list';
+    if (second === 'create') return 'session.create';
+    return 'session';
+  }
+  if (first === 'pane') {
+    if (second === 'split') return 'pane.split';
+    if (second === 'send') return 'pane.send';
+    if (second === 'capture') return 'pane.capture';
+    return 'pane';
+  }
+  return 'root';
+}
 
 function readOptionValue(args: string[], index: number, flag: string): { value: string; nextIndex: number } | { error: string } {
   const arg = args[index];
@@ -331,6 +363,10 @@ function parsePaneCapture(args: string[]): ParseResult {
 }
 
 export function parseCliArgs(args: string[]): ParseResult {
+  if (shouldShowHelp(args)) {
+    return { ok: true, command: { kind: 'help', topic: resolveHelpTopic(args) } };
+  }
+
   if (args.length === 0) {
     return { ok: true, command: { kind: 'attach' } };
   }

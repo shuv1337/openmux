@@ -86,6 +86,16 @@ Workspace rules:
 - `pane capture` prints captured text to stdout.
 - Other commands are silent on success.
 
+## Help
+
+```
+openmux --help
+openmux pane --help
+openmux pane capture --help
+```
+
+- `--help` works at the root and subcommand levels.
+
 ## Exit Codes
 
 - `0` success

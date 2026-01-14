@@ -1,5 +1,7 @@
 import { connectControlClient, ControlClientError } from '../control/client';
+import { formatHelp } from './help';
 import { parseCliArgs, type CliCommand } from './parse';
+import { getCliVersion } from './version';
 import { createSessionOnDisk, listSessionsOnDisk } from './session-store';
 
 const EXIT_SUCCESS = 0;
@@ -171,6 +173,11 @@ export async function runCli(args: string[]): Promise<CliOutcome> {
   const command = parsed.command;
 
   switch (command.kind) {
+    case 'help': {
+      const version = await getCliVersion();
+      console.log(formatHelp(command.topic, version));
+      return { kind: 'handled', exitCode: EXIT_SUCCESS };
+    }
     case 'attach':
       return { kind: 'attach', session: command.session };
     case 'session.list':
