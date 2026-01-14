@@ -101,7 +101,7 @@ Notes:
 
 - Pane commands require a running UI (control socket available).
 - `pane send` supports C-style escapes like `\n`, `\t`, `\xNN`, `\uXXXX`.
-- See `docs/CLI.md` for the full spec and exit codes.
+- See [`docs/guides/cli.md`](docs/guides/cli.md) for the full spec and exit codes.
 
 ## Architecture (High Level)
 
@@ -318,7 +318,7 @@ openmux loads `~/.config/openmux/config.toml` (or `$XDG_CONFIG_HOME/openmux/conf
 
 Config changes are hot-reloaded while openmux is running (layout, theme, and keybindings update live).
 
-See [`CONFIG.md`](CONFIG.md) for the full generated config.
+See [`docs/guides/config.md`](docs/guides/config.md) for the full generated config.
 
 Environment variables override the config file for layout values:
 

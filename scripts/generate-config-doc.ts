@@ -7,7 +7,7 @@ import path from 'node:path';
 import * as TOML from '@iarna/toml';
 import { DEFAULT_USER_CONFIG } from '../src/core/user-config';
 
-const outputPath = path.join(process.cwd(), 'CONFIG.md');
+const outputPath = path.join(process.cwd(), 'docs/guides/config.md');
 
 const toml = TOML.stringify(DEFAULT_USER_CONFIG as unknown as any).trimEnd();
 
