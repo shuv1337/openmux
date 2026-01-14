@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.107](https://github.com/monotykamary/openmux/compare/v0.2.106...v0.2.107) (2026-01-14)
+
+
+### Documentation
+
+* **cli:** add pane selector list to help ([bdd579e](https://github.com/monotykamary/openmux/commit/bdd579e7c75dd84b705557dfaaf63ba6dbc18e53))
+
 ### [0.2.106](https://github.com/monotykamary/openmux/compare/v0.2.105...v0.2.106) (2026-01-14)
 
 
