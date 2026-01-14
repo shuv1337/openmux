@@ -75,6 +75,34 @@ bun start      # Run from source
 bun dev        # Run with watch mode
 ```
 
+## CLI
+
+openmux ships a headless-style CLI that talks to the running UI for pane/layout
+operations and uses on-disk session metadata for session listing/creation.
+
+```bash
+openmux --help
+openmux pane --help
+openmux pane capture --help
+```
+
+Examples:
+
+```bash
+openmux session list --json
+openmux session create dev
+openmux attach --session dev
+openmux pane split --direction vertical --workspace 2
+openmux pane send --pane focused --text "npm test\n"
+openmux pane capture --pane focused --lines 200 --format ansi
+```
+
+Notes:
+
+- Pane commands require a running UI (control socket available).
+- `pane send` supports C-style escapes like `\n`, `\t`, `\xNN`, `\uXXXX`.
+- See `docs/CLI.md` for the full spec and exit codes.
+
 ## Architecture (High Level)
 
 ```
