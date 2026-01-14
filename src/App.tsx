@@ -36,6 +36,7 @@ import { createCellMetricsGetter, createPixelResizeTracker } from './components/
 import { createSearchVimState } from './components/app/search-vim';
 import { setupAppLayoutEffects } from './components/app/layout-effects';
 import { setupAppEffects } from './components/app/app-effects';
+import { setupControlServer } from './components/app/control-server';
 import { AppProviders } from './components/app/AppProviders';
 import {
   getCommandPaletteRect,
@@ -117,6 +118,8 @@ function AppContent() {
     }
     return getFocusedPtyId(layout.activeWorkspace);
   };
+
+  setupControlServer({ layout, terminal, session });
 
   // Create paste handler for bracketed paste from host terminal
   const pasteHandler = createPasteHandler({

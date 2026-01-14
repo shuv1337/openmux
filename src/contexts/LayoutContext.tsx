@@ -35,7 +35,7 @@ import {
 // Context Value Interface
 // =============================================================================
 
-interface LayoutContextValue {
+export interface LayoutContextValue {
   state: LayoutState;
   activeWorkspace: Workspace;
   paneCount: number;

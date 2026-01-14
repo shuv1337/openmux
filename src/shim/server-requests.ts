@@ -5,6 +5,7 @@ import type { TerminalScrollState, TerminalState } from '../core/types';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
 import { packTerminalState, packRow } from '../terminal/cell-serialization';
 import type { TerminalColors } from '../terminal/terminal-colors';
+import { captureEmulator, type CaptureFormat } from '../control/capture';
 import type { ShimHeader } from './protocol';
 import type { ShimServerState } from './server-state';
 import type { WithPty } from './server-handlers';
@@ -182,6 +183,30 @@ export function createRequestHandler(params: {
           }
 
           params.sendResponse(socket, requestId, { lineOffsets }, [combined]);
+          return;
+        }
+
+        case 'capturePane': {
+          const ptyId = requestParams.ptyId as string | undefined;
+          if (!ptyId) {
+            params.sendError(socket, requestId, 'Missing ptyId');
+            return;
+          }
+          const requestedLines = requestParams.lines as number | undefined;
+          const lines = Number.isFinite(requestedLines)
+            ? Math.max(1, Math.floor(requestedLines))
+            : 200;
+          const formatParam = requestParams.format;
+          const format: CaptureFormat = formatParam === 'ansi' ? 'ansi' : 'text';
+          const raw = requestParams.raw === true;
+          const emulator = await params.withPty((pty) => pty.getEmulator(PtyId.make(ptyId))) as ITerminalEmulator;
+          const text = captureEmulator(emulator, {
+            lines,
+            format,
+            trimTrailing: !raw,
+            trimTrailingLines: !raw,
+          });
+          params.sendResponse(socket, requestId, { text, lines, format });
           return;
         }
 

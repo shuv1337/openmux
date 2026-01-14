@@ -57,7 +57,7 @@ export type { SessionState, SessionSummary };
 // Context Value Interface
 // =============================================================================
 
-interface SessionContextValue {
+export interface SessionContextValue {
   state: SessionState;
   /** Filter sessions by search query */
   filteredSessions: SessionMetadata[];
@@ -270,7 +270,7 @@ export function SessionProvider(props: SessionProviderProps) {
   // Initialize on mount
   onMount(async () => {
     // Get active session or create default
-    const sessions = await listSessions();
+    let sessions = await listSessions();
     if (sessions.length > 0) {
       dispatch({ type: 'SET_SESSIONS', sessions });
     }
@@ -279,6 +279,23 @@ export function SessionProvider(props: SessionProviderProps) {
     let activeSession = activeId
       ? sessions.find(s => s.id === activeId) ?? null
       : null;
+
+    const requestedSession = (process.env.OPENMUX_START_SESSION ?? '').trim();
+    if (requestedSession) {
+      const matched = sessions.find(
+        (session) => session.id === requestedSession || session.name === requestedSession
+      ) ?? null;
+      if (matched) {
+        activeSession = matched;
+        activeId = matched.id;
+      } else {
+        const metadata = await createSessionOnDisk(requestedSession);
+        sessions = [...sessions, metadata];
+        dispatch({ type: 'SET_SESSIONS', sessions });
+        activeSession = metadata;
+        activeId = metadata.id;
+      }
+    }
 
     if (!activeSession && sessions.length > 0) {
       activeSession = sessions[0] ?? null;

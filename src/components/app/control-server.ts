@@ -1,0 +1,44 @@
+import { onCleanup, onMount } from 'solid-js';
+
+import type { LayoutContextValue } from '../../contexts/LayoutContext';
+import type { TerminalContextValue } from '../../contexts/TerminalContext';
+import type { SessionContextValue } from '../../contexts/SessionContext';
+import { startControlServer, type ControlServer } from '../../control';
+import { capturePty, getScrollState, getTerminalState } from '../../effect/bridge';
+
+export function setupControlServer(params: {
+  layout: LayoutContextValue;
+  terminal: TerminalContextValue;
+  session: SessionContextValue;
+}): void {
+  let server: ControlServer | null = null;
+
+  onMount(() => {
+    startControlServer({
+      getLayoutState: () => params.layout.state,
+      getActiveWorkspace: () => params.layout.activeWorkspace,
+      switchWorkspace: params.layout.switchWorkspace,
+      focusPane: params.layout.focusPane,
+      splitPane: params.layout.splitPane,
+      writeToPty: params.terminal.writeToPTY,
+      getEmulator: params.terminal.getEmulatorSync,
+      fetchTerminalState: getTerminalState,
+      fetchScrollState: getScrollState,
+      capturePty,
+      isPtyActive: params.terminal.isPtyActive,
+      createSession: params.session.createSession,
+      getActiveSessionId: () => params.session.state.activeSessionId,
+    })
+      .then((created) => {
+        server = created;
+      })
+      .catch((error) => {
+        console.error('Failed to start control server:', error);
+      });
+  });
+
+  onCleanup(() => {
+    if (!server) return;
+    server.close().catch(() => {});
+  });
+}

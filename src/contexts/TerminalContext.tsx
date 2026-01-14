@@ -43,7 +43,7 @@ import type { ITerminalEmulator } from '../terminal/emulator-interface';
 import { isShimClient } from '../shim/mode';
 import { getPtyState as getShimPtyState } from '../shim/client/state';
 
-interface TerminalContextValue {
+export interface TerminalContextValue {
   /** Create a new PTY session for a pane */
   createPTY: (paneId: string, cols: number, rows: number, cwd?: string) => Promise<string>;
   /** Create a new pane with PTY in single render (no stutter) */

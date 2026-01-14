@@ -30,12 +30,20 @@ function formatHelp(version: string): string {
   return [
     header,
     '',
-    'Usage: openmux [options]',
+    'Usage:',
+    '  openmux [attach] [--session <name|id>]',
+    '  openmux session list [--json]',
+    '  openmux session create [name]',
+    '  openmux pane split --direction <vertical|horizontal> [--workspace <1-9>] [--pane <selector>]',
+    '  openmux pane send --text <text> [--workspace <1-9>] [--pane <selector>]',
+    '  openmux pane capture [--lines <n>] [--format <text|ansi>] [--raw] [--workspace <1-9>] [--pane <selector>]',
     '',
     'Options:',
     '  -h, --help       Show this help message',
     '  -v, --version    Show version',
     '  --shim           Run shim server (internal)',
+    '',
+    'Pane selectors: focused | main | stack:<n> | pane:<id> | pty:<id>',
   ].join('\n');
 }
 
@@ -70,6 +78,16 @@ async function main() {
   }
   if (await runShimIfRequested()) {
     return;
+  }
+
+  const { runCli } = await import('./cli');
+  const cliOutcome = await runCli(process.argv.slice(2));
+  if (cliOutcome.kind === 'handled') {
+    process.exitCode = cliOutcome.exitCode;
+    return;
+  }
+  if (cliOutcome.kind === 'attach' && cliOutcome.session) {
+    process.env.OPENMUX_START_SESSION = cliOutcome.session;
   }
 
   try {

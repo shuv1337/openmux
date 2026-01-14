@@ -55,15 +55,18 @@ export async function getPtyCwd(ptyId: string): Promise<string> {
   return (response.header.result as { cwd: string }).cwd;
 }
 
-export async function getTerminalState(ptyId: string): Promise<TerminalState | null> {
+export async function getTerminalState(
+  ptyId: string,
+  options?: { force?: boolean }
+): Promise<TerminalState | null> {
   const cached = getPtyState(ptyId)?.terminalState;
-  if (cached) {
+  if (cached && !options?.force) {
     return cached;
   }
 
   const response = await sendRequest('getTerminalState', { ptyId });
   if (response.payloads.length === 0) {
-    return null;
+    return cached ?? null;
   }
 
   const buffer = bufferToArrayBuffer(response.payloads[0]!);
@@ -79,9 +82,12 @@ export async function getTerminalState(ptyId: string): Promise<TerminalState | n
   return state;
 }
 
-export async function getScrollState(ptyId: string): Promise<TerminalScrollState | null> {
+export async function getScrollState(
+  ptyId: string,
+  options?: { force?: boolean }
+): Promise<TerminalScrollState | null> {
   const cached = getPtyState(ptyId)?.scrollState;
-  if (cached) {
+  if (cached && !options?.force) {
     return cached;
   }
 
@@ -96,7 +102,7 @@ export async function getScrollState(ptyId: string): Promise<TerminalScrollState
       title: existing?.title ?? '',
     });
   }
-  return scrollState ?? null;
+  return scrollState ?? cached ?? null;
 }
 
 export async function setScrollOffset(ptyId: string, offset: number): Promise<void> {
@@ -129,6 +135,20 @@ export async function getScrollbackLines(
   }
 
   return lines;
+}
+
+export async function capturePty(
+  ptyId: string,
+  options?: { lines?: number; format?: 'text' | 'ansi'; raw?: boolean }
+): Promise<string> {
+  const response = await sendRequest('capturePane', {
+    ptyId,
+    lines: options?.lines,
+    format: options?.format,
+    raw: options?.raw,
+  });
+  const result = response.header.result as { text?: string } | undefined;
+  return result?.text ?? '';
 }
 
 export async function searchPty(

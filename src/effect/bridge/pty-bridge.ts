@@ -10,6 +10,8 @@ import { PtyId, Cols, Rows } from "../types"
 import type { TerminalState, TerminalScrollState, UnifiedTerminalUpdate } from "../../core/types"
 import type { ITerminalEmulator } from "../../terminal/emulator-interface"
 import { deferMacrotask } from "../../core/scheduling"
+import { isShimClient } from "../../shim/mode"
+import * as ShimClient from "../../shim/client"
 
 /**
  * Create a PTY session using Effect service.
@@ -169,7 +171,18 @@ export function destroyAllPtys(): void {
 /**
  * Get terminal state for a PTY session.
  */
-export async function getTerminalState(ptyId: string): Promise<TerminalState | null> {
+export async function getTerminalState(
+  ptyId: string,
+  options?: { force?: boolean }
+): Promise<TerminalState | null> {
+  if (options?.force && isShimClient()) {
+    try {
+      return await ShimClient.getTerminalState(ptyId, { force: true })
+    } catch {
+      return null
+    }
+  }
+
   try {
     return await runEffect(
       Effect.gen(function* () {
@@ -206,8 +219,17 @@ export async function onPtyExit(
  * Get scroll state for a PTY session.
  */
 export async function getScrollState(
-  ptyId: string
+  ptyId: string,
+  options?: { force?: boolean }
 ): Promise<TerminalScrollState | null> {
+  if (options?.force && isShimClient()) {
+    try {
+      return await ShimClient.getScrollState(ptyId, { force: true })
+    } catch {
+      return null
+    }
+  }
+
   try {
     return await runEffect(
       Effect.gen(function* () {
@@ -215,6 +237,24 @@ export async function getScrollState(
         return yield* pty.getScrollState(PtyId.make(ptyId))
       })
     )
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Capture text from a PTY session.
+ */
+export async function capturePty(
+  ptyId: string,
+  options?: { lines?: number; format?: 'text' | 'ansi'; raw?: boolean }
+): Promise<string | null> {
+  if (!isShimClient()) {
+    return null
+  }
+
+  try {
+    return await ShimClient.capturePty(ptyId, options)
   } catch {
     return null
   }

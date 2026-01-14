@@ -1,0 +1,358 @@
+import { parsePaneSelector } from '../control/targets';
+
+type PaneCommandBase = {
+  pane?: string;
+  workspaceId?: number;
+};
+
+export type CliCommand =
+  | { kind: 'attach'; session?: string }
+  | { kind: 'session.list'; json: boolean }
+  | { kind: 'session.create'; name?: string }
+  | ({ kind: 'pane.split'; direction: 'horizontal' | 'vertical' } & PaneCommandBase)
+  | ({ kind: 'pane.send'; text: string } & PaneCommandBase)
+  | ({ kind: 'pane.capture'; format: 'text' | 'ansi'; lines: number; raw: boolean } & PaneCommandBase);
+
+export type ParseResult =
+  | { ok: true; command: CliCommand }
+  | { ok: false; error: string };
+
+function readOptionValue(args: string[], index: number, flag: string): { value: string; nextIndex: number } | { error: string } {
+  const arg = args[index];
+  const eqIndex = arg.indexOf('=');
+  if (eqIndex >= 0) {
+    return { value: arg.slice(eqIndex + 1), nextIndex: index };
+  }
+  const next = args[index + 1];
+  if (!next) {
+    return { error: `Missing value for ${flag}.` };
+  }
+  return { value: next, nextIndex: index + 1 };
+}
+
+function parseWorkspace(value: string): number | null {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  const intValue = Math.floor(num);
+  if (intValue < 1 || intValue > 9) return null;
+  return intValue;
+}
+
+function parsePaneOption(value: string): string | null {
+  const parsed = parsePaneSelector(value);
+  return parsed.ok ? value : null;
+}
+
+function unescapeCliText(value: string): string {
+  let output = '';
+
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i];
+    if (char !== '\\') {
+      output += char;
+      continue;
+    }
+
+    const next = value[i + 1];
+    if (!next) {
+      output += '\\';
+      continue;
+    }
+
+    switch (next) {
+      case 'n':
+        output += '\n';
+        i++;
+        break;
+      case 'r':
+        output += '\r';
+        i++;
+        break;
+      case 't':
+        output += '\t';
+        i++;
+        break;
+      case '0':
+        output += '\0';
+        i++;
+        break;
+      case '\\':
+        output += '\\';
+        i++;
+        break;
+      case '"':
+        output += '"';
+        i++;
+        break;
+      case "'":
+        output += "'";
+        i++;
+        break;
+      case 'x': {
+        const hex = value.slice(i + 2, i + 4);
+        if (/^[0-9a-fA-F]{2}$/.test(hex)) {
+          output += String.fromCharCode(Number.parseInt(hex, 16));
+          i += 3;
+        } else {
+          output += 'x';
+          i++;
+        }
+        break;
+      }
+      case 'u': {
+        const nextChar = value[i + 2];
+        if (nextChar === '{') {
+          const end = value.indexOf('}', i + 3);
+          if (end !== -1) {
+            const hex = value.slice(i + 3, end);
+            if (/^[0-9a-fA-F]{1,6}$/.test(hex)) {
+              output += String.fromCodePoint(Number.parseInt(hex, 16));
+              i = end;
+              break;
+            }
+          }
+          output += 'u';
+          i++;
+          break;
+        }
+
+        const hex = value.slice(i + 2, i + 6);
+        if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+          output += String.fromCharCode(Number.parseInt(hex, 16));
+          i += 5;
+        } else {
+          output += 'u';
+          i++;
+        }
+        break;
+      }
+      default:
+        output += next;
+        i++;
+        break;
+    }
+  }
+
+  return output;
+}
+
+function parseAttach(args: string[]): ParseResult {
+  let session: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--session' || arg.startsWith('--session=')) {
+      const value = readOptionValue(args, i, '--session');
+      if ('error' in value) return { ok: false, error: value.error };
+      session = value.value;
+      i = value.nextIndex;
+      continue;
+    }
+
+    return { ok: false, error: `Unknown argument: ${arg}` };
+  }
+
+  return { ok: true, command: { kind: 'attach', session } };
+}
+
+function parseSession(args: string[]): ParseResult {
+  const subcommand = args[0];
+  const rest = args.slice(1);
+
+  if (subcommand === 'list') {
+    const json = rest.includes('--json');
+    const unknown = rest.filter((arg) => arg !== '--json');
+    if (unknown.length > 0) {
+      return { ok: false, error: `Unknown argument: ${unknown[0]}` };
+    }
+    return { ok: true, command: { kind: 'session.list', json } };
+  }
+
+  if (subcommand === 'create') {
+    const name = rest[0];
+    if (rest.length > 1) {
+      return { ok: false, error: 'Too many arguments for session create.' };
+    }
+    return { ok: true, command: { kind: 'session.create', name } };
+  }
+
+  return { ok: false, error: 'Unknown session command.' };
+}
+
+function parsePaneSplit(args: string[]): ParseResult {
+  let direction: 'horizontal' | 'vertical' | null = null;
+  let workspaceId: number | undefined;
+  let pane: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--direction' || arg.startsWith('--direction=')) {
+      const value = readOptionValue(args, i, '--direction');
+      if ('error' in value) return { ok: false, error: value.error };
+      if (value.value !== 'horizontal' && value.value !== 'vertical') {
+        return { ok: false, error: 'Direction must be horizontal or vertical.' };
+      }
+      direction = value.value;
+      i = value.nextIndex;
+      continue;
+    }
+    if (arg === '--workspace' || arg.startsWith('--workspace=')) {
+      const value = readOptionValue(args, i, '--workspace');
+      if ('error' in value) return { ok: false, error: value.error };
+      const parsed = parseWorkspace(value.value);
+      if (parsed === null) return { ok: false, error: 'Workspace must be 1-9.' };
+      workspaceId = parsed;
+      i = value.nextIndex;
+      continue;
+    }
+    if (arg === '--pane' || arg.startsWith('--pane=')) {
+      const value = readOptionValue(args, i, '--pane');
+      if ('error' in value) return { ok: false, error: value.error };
+      const parsed = parsePaneOption(value.value);
+      if (!parsed) return { ok: false, error: 'Invalid pane selector.' };
+      pane = parsed;
+      i = value.nextIndex;
+      continue;
+    }
+
+    return { ok: false, error: `Unknown argument: ${arg}` };
+  }
+
+  if (!direction) {
+    return { ok: false, error: 'Missing --direction.' };
+  }
+
+  return {
+    ok: true,
+    command: { kind: 'pane.split', direction, workspaceId, pane },
+  };
+}
+
+function parsePaneSend(args: string[]): ParseResult {
+  let text: string | null = null;
+  let workspaceId: number | undefined;
+  let pane: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--text' || arg.startsWith('--text=')) {
+      const value = readOptionValue(args, i, '--text');
+      if ('error' in value) return { ok: false, error: value.error };
+      text = unescapeCliText(value.value);
+      i = value.nextIndex;
+      continue;
+    }
+    if (arg === '--workspace' || arg.startsWith('--workspace=')) {
+      const value = readOptionValue(args, i, '--workspace');
+      if ('error' in value) return { ok: false, error: value.error };
+      const parsed = parseWorkspace(value.value);
+      if (parsed === null) return { ok: false, error: 'Workspace must be 1-9.' };
+      workspaceId = parsed;
+      i = value.nextIndex;
+      continue;
+    }
+    if (arg === '--pane' || arg.startsWith('--pane=')) {
+      const value = readOptionValue(args, i, '--pane');
+      if ('error' in value) return { ok: false, error: value.error };
+      const parsed = parsePaneOption(value.value);
+      if (!parsed) return { ok: false, error: 'Invalid pane selector.' };
+      pane = parsed;
+      i = value.nextIndex;
+      continue;
+    }
+
+    return { ok: false, error: `Unknown argument: ${arg}` };
+  }
+
+  if (!text) {
+    return { ok: false, error: 'Missing --text.' };
+  }
+
+  return { ok: true, command: { kind: 'pane.send', text, workspaceId, pane } };
+}
+
+function parsePaneCapture(args: string[]): ParseResult {
+  let format: 'text' | 'ansi' = 'text';
+  let lines = 200;
+  let raw = false;
+  let workspaceId: number | undefined;
+  let pane: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--format' || arg.startsWith('--format=')) {
+      const value = readOptionValue(args, i, '--format');
+      if ('error' in value) return { ok: false, error: value.error };
+      if (value.value !== 'text' && value.value !== 'ansi') {
+        return { ok: false, error: 'Format must be text or ansi.' };
+      }
+      format = value.value;
+      i = value.nextIndex;
+      continue;
+    }
+    if (arg === '--lines' || arg.startsWith('--lines=')) {
+      const value = readOptionValue(args, i, '--lines');
+      if ('error' in value) return { ok: false, error: value.error };
+      const parsed = Number(value.value);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        return { ok: false, error: 'Lines must be a positive number.' };
+      }
+      lines = Math.floor(parsed);
+      i = value.nextIndex;
+      continue;
+    }
+    if (arg === '--raw') {
+      raw = true;
+      continue;
+    }
+    if (arg === '--workspace' || arg.startsWith('--workspace=')) {
+      const value = readOptionValue(args, i, '--workspace');
+      if ('error' in value) return { ok: false, error: value.error };
+      const parsed = parseWorkspace(value.value);
+      if (parsed === null) return { ok: false, error: 'Workspace must be 1-9.' };
+      workspaceId = parsed;
+      i = value.nextIndex;
+      continue;
+    }
+    if (arg === '--pane' || arg.startsWith('--pane=')) {
+      const value = readOptionValue(args, i, '--pane');
+      if ('error' in value) return { ok: false, error: value.error };
+      const parsed = parsePaneOption(value.value);
+      if (!parsed) return { ok: false, error: 'Invalid pane selector.' };
+      pane = parsed;
+      i = value.nextIndex;
+      continue;
+    }
+
+    return { ok: false, error: `Unknown argument: ${arg}` };
+  }
+
+  return { ok: true, command: { kind: 'pane.capture', format, lines, raw, workspaceId, pane } };
+}
+
+export function parseCliArgs(args: string[]): ParseResult {
+  if (args.length === 0) {
+    return { ok: true, command: { kind: 'attach' } };
+  }
+
+  const [command, ...rest] = args;
+  if (command === 'attach') {
+    return parseAttach(rest);
+  }
+
+  if (command === 'session') {
+    return parseSession(rest);
+  }
+
+  if (command === 'pane') {
+    const paneCommand = rest[0];
+    const paneArgs = rest.slice(1);
+
+    if (paneCommand === 'split') return parsePaneSplit(paneArgs);
+    if (paneCommand === 'send') return parsePaneSend(paneArgs);
+    if (paneCommand === 'capture') return parsePaneCapture(paneArgs);
+    return { ok: false, error: 'Unknown pane command.' };
+  }
+
+  return { ok: false, error: `Unknown command: ${command}` };
+}

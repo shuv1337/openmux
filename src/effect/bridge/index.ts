@@ -23,6 +23,7 @@ export {
   getTerminalState,
   onPtyExit,
   getScrollState,
+  capturePty,
   setScrollOffset,
   scrollToBottom,
   subscribeUnifiedToPty,
