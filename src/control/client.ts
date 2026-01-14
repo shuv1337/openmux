@@ -98,20 +98,38 @@ export async function connectControlClient(options?: {
 
   return new Promise((resolve, reject) => {
     const client = net.createConnection(socketPath);
-    const handleError = (error: Error) => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let settled = false;
+
+    const cleanup = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      client.removeListener('error', handleError);
       client.removeListener('connect', handleConnect);
+    };
+
+    const handleError = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
       reject(error);
     };
     const handleConnect = () => {
-      client.removeListener('error', handleError);
+      if (settled) return;
+      settled = true;
+      cleanup();
       resolve(new ControlClient(client));
     };
     client.once('error', handleError);
     client.once('connect', handleConnect);
 
     if (timeoutMs > 0) {
-      setTimeout(() => {
-        client.removeListener('connect', handleConnect);
+      timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
         client.destroy();
         reject(new Error('Control socket connection timed out'));
       }, timeoutMs);

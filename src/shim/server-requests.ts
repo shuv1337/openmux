@@ -192,7 +192,9 @@ export function createRequestHandler(params: {
             params.sendError(socket, requestId, 'Missing ptyId');
             return;
           }
-          const requestedLines = requestParams.lines as number | undefined;
+          const requestedLines = typeof requestParams.lines === 'number'
+            ? requestParams.lines
+            : Number.NaN;
           const lines = Number.isFinite(requestedLines)
             ? Math.max(1, Math.floor(requestedLines))
             : 200;
