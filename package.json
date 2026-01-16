@@ -69,12 +69,12 @@
     "@effect/language-service": "^0.60.0",
     "@effect/vitest": "^0.27.0",
     "@types/bun": "latest",
-    "@typescript-eslint/eslint-plugin": "^8.52.0",
-    "@typescript-eslint/parser": "^8.52.0",
-    "@vitest/coverage-v8": "^4.0.16",
+    "@typescript-eslint/eslint-plugin": "^8.53.0",
+    "@typescript-eslint/parser": "^8.53.0",
+    "@vitest/coverage-v8": "^4.0.17",
     "eslint": "^9.39.2",
     "standard-version": "^9.5.0",
-    "vitest": "^4.0.16"
+    "vitest": "^4.0.17"
   },
   "peerDependencies": {
     "typescript": "^5.9.3"
@@ -83,8 +83,8 @@
     "@effect/cli": "^0.72.1",
     "@effect/platform": "^0.93.8",
     "@iarna/toml": "^3.0.0",
-    "@opentui/core": "^0.1.72",
-    "@opentui/solid": "^0.1.72",
+    "@opentui/core": "^0.1.73",
+    "@opentui/solid": "^0.1.73",
     "effect": "^3.19.14",
     "solid-js": "^1.9.10"
   }
