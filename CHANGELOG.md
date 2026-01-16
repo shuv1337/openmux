@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.108](https://github.com/monotykamary/openmux/compare/v0.2.107...v0.2.108) (2026-01-16)
+
+
+### Documentation
+
+* reorganize documentation into topic-based structure ([da1c081](https://github.com/monotykamary/openmux/commit/da1c081d5d89cbca1de979abc429d536c9baebe7))
+
 ### [0.2.107](https://github.com/monotykamary/openmux/compare/v0.2.106...v0.2.107) (2026-01-14)
 
 
