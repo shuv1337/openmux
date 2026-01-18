@@ -71,6 +71,37 @@ export const DEFAULT_THEME: Theme = {
     foregroundColor: '#CCCCCC',
     activeTabColor: '#00AAFF',
     inactiveTabColor: '#666666',
+    successColor: '#33CC66',
+  },
+  ui: {
+    mutedText: '#666666',
+    listSelection: {
+      foreground: '#FFFFFF',
+      background: '#334455',
+    },
+    buttonFocus: {
+      foreground: '#FFFFFF',
+      background: '#334455',
+    },
+    copyNotification: {
+      borderColor: '#7aa2f7',
+      textColor: '#a9b1d6',
+      backgroundColor: '#22242ecc',
+    },
+    aggregate: {
+      selection: {
+        foreground: '#FFFFFF',
+        background: '#3b82f6',
+        dim: '#93c5fd',
+      },
+      diff: {
+        added: '#22c55e',
+        removed: '#ef4444',
+        addedSelected: '#86efac',
+        removedSelected: '#fca5a5',
+        binarySelected: '#cbd5f5',
+      },
+    },
   },
   searchAccentColor: '#FFAA00',
 };

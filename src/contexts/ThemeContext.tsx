@@ -13,9 +13,20 @@ interface ThemeProviderProps extends ParentProps {
 }
 
 export function ThemeProvider(props: ThemeProviderProps) {
+  const uiOverrides = props.theme?.ui;
   const mergedTheme: Theme = {
     pane: { ...DEFAULT_THEME.pane, ...props.theme?.pane },
     statusBar: { ...DEFAULT_THEME.statusBar, ...props.theme?.statusBar },
+    ui: {
+      mutedText: uiOverrides?.mutedText ?? DEFAULT_THEME.ui.mutedText,
+      listSelection: { ...DEFAULT_THEME.ui.listSelection, ...uiOverrides?.listSelection },
+      buttonFocus: { ...DEFAULT_THEME.ui.buttonFocus, ...uiOverrides?.buttonFocus },
+      copyNotification: { ...DEFAULT_THEME.ui.copyNotification, ...uiOverrides?.copyNotification },
+      aggregate: {
+        selection: { ...DEFAULT_THEME.ui.aggregate.selection, ...uiOverrides?.aggregate?.selection },
+        diff: { ...DEFAULT_THEME.ui.aggregate.diff, ...uiOverrides?.aggregate?.diff },
+      },
+    },
     searchAccentColor: props.theme?.searchAccentColor ?? DEFAULT_THEME.searchAccentColor,
   };
 

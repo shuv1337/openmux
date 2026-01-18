@@ -8,6 +8,7 @@ import {
   formatRelativeTime,
   truncate,
 } from './formatting';
+import { useTheme } from '../../contexts/ThemeContext';
 import { useOverlayColors } from '../overlay-colors';
 import { truncateHint } from '../overlay-hints';
 import { getTemplateStats, type SaveSummaryLine } from './summary';
@@ -44,6 +45,7 @@ function getCombos(bindings: ResolvedKeybindingMap, action: string): string[] {
 }
 
 export function TemplateOverlayView(props: TemplateOverlayViewProps) {
+  const theme = useTheme();
   const {
     background: overlayBg,
     foreground: overlayFg,
@@ -96,8 +98,8 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
     const nameWidth = Math.max(1, Math.min(24, maxWidth - (12 + timeWidth)));
     const name = truncate(template.name, nameWidth);
     const line = `  ${name} ${ws} ${panes} ${time}`;
-    const color = selected ? '#FFFFFF' : overlayFg();
-    const bg = selected ? '#334455' : undefined;
+    const color = selected ? theme.ui.listSelection.foreground : overlayFg();
+    const bg = selected ? theme.ui.listSelection.background : undefined;
     return (
       <text fg={color} bg={bg}>
         {truncate(line, maxWidth)}
@@ -106,7 +108,10 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
   };
 
   const renderTab = (label: string, active: boolean) => (
-    <text fg={active ? '#FFFFFF' : overlaySubtle()} bg={active ? '#334455' : undefined}>
+    <text
+      fg={active ? theme.ui.listSelection.foreground : overlaySubtle()}
+      bg={active ? theme.ui.listSelection.background : undefined}
+    >
       {` ${label} `}
     </text>
   );

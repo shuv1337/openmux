@@ -49,7 +49,7 @@ export function StatusBar(props: StatusBarProps) {
     >
       {/* Left section: app name, session name and workspace tabs */}
       <box style={{ flexDirection: 'row', gap: 1 }}>
-        <text fg="#00AAFF">[{displaySessionName()}]</text>
+        <text fg={sessionColor()}>[{displaySessionName()}]</text>
         <WorkspaceTabs
           populatedWorkspaces={layout.populatedWorkspaces}
           activeWorkspaceId={layout.state.activeWorkspaceId}
@@ -76,15 +76,15 @@ export function StatusBar(props: StatusBarProps) {
           <text fg={sessionColor()}>[TEMPLATES]</text>
         </Show>
         <Show when={props.overlayVimMode}>
-          <text fg={props.overlayVimMode === 'insert' ? '#33CC66' : '#00AAFF'}>
+          <text fg={props.overlayVimMode === 'insert' ? theme.statusBar.successColor : sessionColor()}>
             {props.overlayVimMode === 'insert' ? '[INSERT]' : '[NORMAL]'}
           </text>
         </Show>
         <Show when={props.updateLabel}>
-          <text fg="#33CC66">{props.updateLabel}</text>
+          <text fg={theme.statusBar.successColor}>{props.updateLabel}</text>
         </Show>
         <Show when={layout.activeWorkspace.zoomed}>
-          <text fg="#666666">[ZOOMED]</text>
+          <text fg={theme.ui.mutedText}>[ZOOMED]</text>
         </Show>
         <LayoutModeIndicator mode={layout.activeWorkspace.layoutMode} />
       </box>
@@ -113,7 +113,7 @@ function ModeIndicator(props: ModeIndicatorProps) {
       case 'confirm':
         return theme.pane.urgentBorderColor;
       default:
-        return '#666666';
+        return theme.ui.mutedText;
     }
   };
 
@@ -131,6 +131,7 @@ interface LayoutModeIndicatorProps {
 }
 
 function LayoutModeIndicator(props: LayoutModeIndicatorProps) {
+  const theme = useTheme();
   const modeLabels: Record<LayoutMode, string> = {
     vertical: '[VERTICAL]',
     horizontal: '[HORIZONTAL]',
@@ -138,7 +139,7 @@ function LayoutModeIndicator(props: LayoutModeIndicatorProps) {
   };
 
   return (
-    <text fg="#666666">
+    <text fg={theme.ui.mutedText}>
       {modeLabels[props.mode]}
     </text>
   );
@@ -165,7 +166,7 @@ function WorkspaceTabs(props: WorkspaceTabsProps) {
   });
 
   return (
-    <Show when={tabs()} fallback={<text fg="#666666">No workspaces</text>}>
+    <Show when={tabs()} fallback={<text fg={theme.ui.mutedText}>No workspaces</text>}>
       <text fg={theme.statusBar.activeTabColor}>
         {tabs()}
       </text>

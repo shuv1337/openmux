@@ -432,6 +432,7 @@ export function AggregateView(props: AggregateViewProps) {
                       maxWidth={layout().listInnerWidth}
                       index={index()}
                       totalCount={state.matchedPtys.length}
+                      aggregateTheme={theme.ui.aggregate}
                       textColors={{
                         foreground: overlayFg(),
                         muted: overlayMuted(),

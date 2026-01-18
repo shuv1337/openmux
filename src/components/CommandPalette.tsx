@@ -393,6 +393,7 @@ export function CommandPalette(props: CommandPaletteProps) {
                     maxWidth={innerWidth()}
                     keybinding={commandBindings().get(command.id) ?? ''}
                     keybindingWidth={keybindingColumnWidth()}
+                    selection={theme.ui.listSelection}
                     colors={{
                       foreground: overlayFg(),
                       muted: overlayMuted(),
@@ -415,6 +416,10 @@ interface CommandRowProps {
   maxWidth: number;
   keybinding: string;
   keybindingWidth: number;
+  selection: {
+    foreground: string;
+    background: string;
+  };
   colors: {
     foreground: string;
     muted: string;
@@ -446,9 +451,9 @@ function CommandRow(props: CommandRowProps) {
   const keybindingText = () => fitRight(props.keybinding, keybindingWidth());
   const titleWidth = () => Math.max(0, props.maxWidth - (keybindingWidth() ? keybindingWidth() + 1 : 0));
   const left = () => fitLine(`  ${props.command.title}${details()}`, titleWidth());
-  const fg = () => props.isSelected ? '#FFFFFF' : props.colors.foreground;
+  const fg = () => props.isSelected ? props.selection.foreground : props.colors.foreground;
   const bindingFg = () => props.isSelected ? props.colors.muted : props.colors.subtle;
-  const bg = () => props.isSelected ? '#334455' : undefined;
+  const bg = () => props.isSelected ? props.selection.background : undefined;
 
   return (
     <box style={{ flexDirection: 'row' }}>

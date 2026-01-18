@@ -174,6 +174,7 @@ function mergeUserConfig(base: UserConfig, overrides?: Partial<UserConfig>): Use
   if (!overrides) return base;
 
   const vimSequenceTimeoutMs = coerceNumber(overrides.keyboard?.vimSequenceTimeoutMs);
+  const uiOverrides = overrides.theme?.ui;
 
   return {
     layout: {
@@ -193,6 +194,16 @@ function mergeUserConfig(base: UserConfig, overrides?: Partial<UserConfig>): Use
       statusBar: {
         ...base.theme.statusBar,
         ...overrides.theme?.statusBar,
+      },
+      ui: {
+        mutedText: uiOverrides?.mutedText ?? base.theme.ui.mutedText,
+        listSelection: { ...base.theme.ui.listSelection, ...uiOverrides?.listSelection },
+        buttonFocus: { ...base.theme.ui.buttonFocus, ...uiOverrides?.buttonFocus },
+        copyNotification: { ...base.theme.ui.copyNotification, ...uiOverrides?.copyNotification },
+        aggregate: {
+          selection: { ...base.theme.ui.aggregate.selection, ...uiOverrides?.aggregate?.selection },
+          diff: { ...base.theme.ui.aggregate.diff, ...uiOverrides?.aggregate?.diff },
+        },
       },
       searchAccentColor: overrides.theme?.searchAccentColor ?? base.theme.searchAccentColor,
     },

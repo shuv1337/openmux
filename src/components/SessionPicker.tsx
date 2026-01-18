@@ -363,6 +363,8 @@ export function SessionPicker(props: SessionPickerProps) {
                     summary={state.summaries.get(sess.id)}
                     maxWidth={overlayWidth() - 4}
                     textColor={overlayFg()}
+                    activeColor={accentColor()}
+                    selection={theme.ui.listSelection}
                   />
                 </box>
               )}
@@ -395,6 +397,11 @@ interface SessionRowProps {
   summary?: SessionSummary;
   maxWidth: number;
   textColor: string;
+  activeColor: string;
+  selection: {
+    foreground: string;
+    background: string;
+  };
 }
 
 function fitLine(text: string, width: number): string {
@@ -428,8 +435,10 @@ function SessionRow(props: SessionRowProps) {
   const timeStr = () => formatRelativeTime(props.session.lastSwitchedAt);
 
   // Colors - use brighter color for selection
-  const nameColor = () => props.isSelected ? '#FFFFFF' : (props.isActive ? '#00AAFF' : props.textColor);
-  const bgColor = () => props.isSelected ? '#334455' : undefined;
+  const nameColor = () => props.isSelected
+    ? props.selection.foreground
+    : (props.isActive ? props.activeColor : props.textColor);
+  const bgColor = () => props.isSelected ? props.selection.background : undefined;
 
   // Build the line as a single string with proper formatting
   const line = () => fitLine(` ${activeMarker()} ${truncatedName()} ${workspaceInfo()} ${paneInfo()} ${timeStr()}`, props.maxWidth);

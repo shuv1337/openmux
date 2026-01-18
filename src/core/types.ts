@@ -263,6 +263,50 @@ export interface StatusBarTheme {
   foregroundColor: string;
   activeTabColor: string;
   inactiveTabColor: string;
+  successColor: string;
+}
+
+export interface SelectionTheme {
+  foreground: string;
+  background: string;
+}
+
+export interface ButtonFocusTheme {
+  foreground: string;
+  background: string;
+}
+
+export interface CopyNotificationTheme {
+  borderColor: string;
+  textColor: string;
+  backgroundColor: string;
+}
+
+export interface AggregateSelectionTheme {
+  foreground: string;
+  background: string;
+  dim: string;
+}
+
+export interface AggregateDiffTheme {
+  added: string;
+  removed: string;
+  addedSelected: string;
+  removedSelected: string;
+  binarySelected: string;
+}
+
+export interface AggregateTheme {
+  selection: AggregateSelectionTheme;
+  diff: AggregateDiffTheme;
+}
+
+export interface UiTheme {
+  mutedText: string;
+  listSelection: SelectionTheme;
+  buttonFocus: ButtonFocusTheme;
+  copyNotification: CopyNotificationTheme;
+  aggregate: AggregateTheme;
 }
 
 /**
@@ -271,6 +315,7 @@ export interface StatusBarTheme {
 export interface Theme {
   pane: PaneTheme;
   statusBar: StatusBarTheme;
+  ui: UiTheme;
   searchAccentColor: string;
 }
 

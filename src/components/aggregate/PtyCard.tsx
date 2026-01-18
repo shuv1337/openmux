@@ -4,6 +4,7 @@
  */
 
 import type { PtyInfo } from '../../contexts/AggregateViewContext';
+import type { AggregateTheme } from '../../core/types';
 import { getDirectoryName } from './utils';
 
 interface PtyCardProps {
@@ -12,6 +13,7 @@ interface PtyCardProps {
   maxWidth: number;
   index: number;
   totalCount: number;
+  aggregateTheme: AggregateTheme;
   onClick?: () => void;
   textColors: {
     foreground: string;
@@ -61,15 +63,17 @@ export function PtyCard(props: PtyCardProps) {
   // First line: leftPadding + number. + dirName (process)
   const line1Text = () => `${leftPadding}${paddedNumber()}. ${dirName()} (${process()})`;
 
+  const selectionColors = () => props.aggregateTheme.selection;
+  const diffColors = () => props.aggregateTheme.diff;
   // Use background color for selection, keep foreground neutral
-  const fgColor = () => props.isSelected ? '#FFFFFF' : props.textColors.foreground;
-  const bgColor = () => props.isSelected ? '#3b82f6' : undefined;
+  const fgColor = () => props.isSelected ? selectionColors().foreground : props.textColors.foreground;
+  const bgColor = () => props.isSelected ? selectionColors().background : undefined;
   // Dim color needs to be readable - lighter on blue, darker otherwise
-  const dimColor = () => props.isSelected ? '#93c5fd' : props.textColors.muted;
+  const dimColor = () => props.isSelected ? selectionColors().dim : props.textColors.muted;
   // Git diff colors - green for additions, red for removals, gray for binary
-  const addedColor = () => props.isSelected ? '#86efac' : '#22c55e';
-  const removedColor = () => props.isSelected ? '#fca5a5' : '#ef4444';
-  const binaryColor = () => props.isSelected ? '#cbd5f5' : props.textColors.subtle;
+  const addedColor = () => props.isSelected ? diffColors().addedSelected : diffColors().added;
+  const removedColor = () => props.isSelected ? diffColors().removedSelected : diffColors().removed;
+  const binaryColor = () => props.isSelected ? diffColors().binarySelected : props.textColors.subtle;
 
   const handleClick = (event: { preventDefault: () => void }) => {
     event.preventDefault();

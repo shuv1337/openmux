@@ -20,6 +20,7 @@ export function PaneContainer() {
   const { writeToPTY, isMouseTrackingEnabled } = useTerminal();
   const session = useSession();
   const { state: aggregateState } = useAggregateView();
+  const theme = useTheme();
 
   // Memoize workspace properties to prevent cascading re-renders
   // Access layout.activeWorkspace once and derive stable values
@@ -84,7 +85,7 @@ export function PaneContainer() {
                 justifyContent: 'center',
               }}
             >
-              <text fg="#666666">
+              <text fg={theme.ui.mutedText}>
                 No panes. Press Ctrl+b n or Alt+n to create a pane.
               </text>
             </box>
@@ -340,7 +341,7 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
         <For each={tabs()}>
           {({ paneId, label, isActive }) => (
             <text
-              fg={isActive ? '#FFFFFF' : '#666666'}
+              fg={isActive ? theme.ui.listSelection.foreground : theme.ui.mutedText}
               bg={isActive ? activeTabBg() : undefined}
               selectable={false}
               onMouseDown={(e: { preventDefault: () => void }) => {

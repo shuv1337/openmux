@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { PtyCard } from "../../../src/components/aggregate/PtyCard";
 import type { GitDiffStats, PtyInfo } from "../../../src/contexts/aggregate-view-types";
+import { DEFAULT_THEME } from "../../../src/core/config";
 
 function createPty(diffStatsGetter: () => GitDiffStats | undefined): PtyInfo {
   const pty: PtyInfo = {
@@ -59,6 +60,7 @@ describe("PtyCard", () => {
         maxWidth: 80,
         index: 0,
         totalCount: 1,
+        aggregateTheme: DEFAULT_THEME.ui.aggregate,
         textColors: {
           foreground: "#ffffff",
           muted: "#999999",

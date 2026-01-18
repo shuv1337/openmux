@@ -63,6 +63,7 @@ export function ConfirmationDialog(props: ConfirmationDialogProps) {
     separator: overlaySeparator,
   } = useOverlayColors();
   const accentColor = () => theme.pane.urgentBorderColor;
+  const buttonFocus = () => theme.ui.buttonFocus;
   // Track which button is focused: 0 = Confirm, 1 = Cancel (default)
   const [focusedButton, setFocusedButton] = createSignal(1);
 
@@ -120,10 +121,10 @@ export function ConfirmationDialog(props: ConfirmationDialogProps) {
   const overlayY = () => Math.floor((props.height - overlayHeight) / 2);
 
   // Button styling - using opentui-style selection colors
-  const confirmFg = () => (focusedButton() === 0 ? '#FFFFFF' : overlayMuted());
-  const confirmBg = () => (focusedButton() === 0 ? '#334455' : undefined);
-  const cancelFg = () => (focusedButton() === 1 ? '#FFFFFF' : overlayMuted());
-  const cancelBg = () => (focusedButton() === 1 ? '#334455' : undefined);
+  const confirmFg = () => (focusedButton() === 0 ? buttonFocus().foreground : overlayMuted());
+  const confirmBg = () => (focusedButton() === 0 ? buttonFocus().background : undefined);
+  const cancelFg = () => (focusedButton() === 1 ? buttonFocus().foreground : overlayMuted());
+  const cancelBg = () => (focusedButton() === 1 ? buttonFocus().background : undefined);
 
   // Calculate button positioning for right alignment
   const confirmLabel = ' Confirm ';
