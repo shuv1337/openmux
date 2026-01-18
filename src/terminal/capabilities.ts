@@ -108,6 +108,15 @@ export function getHostCapabilities(): TerminalCapabilities | null {
 }
 
 /**
+ * Update cached host colors in capabilities (if initialized).
+ */
+export function setHostCapabilitiesColors(colors: TerminalColors): void {
+  if (cachedCapabilities) {
+    cachedCapabilities.colors = colors;
+  }
+}
+
+/**
  * Forward environment variables that indicate terminal capabilities
  * These should be set in the PTY environment so child apps can detect them
  */

@@ -4,10 +4,11 @@
  * Detects terminal colors from environment variables.
  * This enables openmux to inherit the user's terminal theme.
  *
- * Note: OSC-based color queries are not used because they would
- * interfere with the TUI's stdin handling. In the future, we could
- * do OSC queries before the TUI starts (e.g., in a pre-init phase).
+ * Note: OSC-based color queries are best-effort with a short timeout and
+ * fall back to environment detection to avoid interfering with stdin.
  */
+
+import { writeHostSequence } from './host-output';
 
 /**
  * Terminal color information
@@ -24,6 +25,7 @@ export interface TerminalColors {
 }
 
 let cachedColors: TerminalColors | null = null;
+let lastNonDefaultColors: TerminalColors | null = null;
 
 /**
  * Parse OSC color payloads such as:
@@ -51,7 +53,10 @@ function parseOscColor(payload: string): number | null {
  * Try to query colors from the host terminal using OSC 10/11.
  * This should be called before the TUI takes over stdin.
  */
-async function queryOscColors(timeoutMs: number): Promise<{ foreground?: number; background?: number; paletteOverrides?: Map<number, number> } | null> {
+async function queryOscColors(
+  timeoutMs: number,
+  options?: { requirePalette?: boolean; requireFgBg?: boolean }
+): Promise<{ foreground?: number; background?: number; paletteOverrides?: Map<number, number> } | null> {
   // Only attempt when we have a controllable TTY with raw mode.
   const stdin = process.stdin as (NodeJS.ReadStream & { setRawMode?: (mode: boolean) => void; isRaw?: boolean });
   if (!stdin.isTTY || typeof stdin.setRawMode !== 'function') {
@@ -61,13 +66,22 @@ async function queryOscColors(timeoutMs: number): Promise<{ foreground?: number;
   return await new Promise<{ foreground?: number; background?: number; paletteOverrides?: Map<number, number> } | null>((resolve) => {
     let buffer = '';
     let resolved = false;
-    const decoder = new TextDecoder();
+    let fg: number | undefined;
+    let bg: number | undefined;
+    const OSC_PREFIX = '(?:\\x1b\\]|\\x9d)';
+    const OSC_TERM = '(?:\\x07|\\x1b\\\\|\\x9c)';
+    const OSC_PAYLOAD = '([^\\x07\\x1b\\x9c]+)';
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
     const originalRaw = stdin.isRaw ?? false;
     const cleanup = () => {
       if (resolved) return;
       resolved = true;
       stdin.off('data', onData);
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
       try {
         stdin.setRawMode?.(originalRaw);
       } catch {
@@ -81,20 +95,28 @@ async function queryOscColors(timeoutMs: number): Promise<{ foreground?: number;
     };
 
     const paletteOverrides = new Map<number, number>();
+    const requirePalette = options?.requirePalette ?? true;
+    const requireFgBg = options?.requireFgBg ?? true;
 
     const onData = (chunk: Buffer) => {
-      buffer += decoder.decode(chunk);
+      buffer += chunk.toString('latin1');
 
       // Parse OSC 10/11 responses - allow BEL (\x07) or ST (\x1b\\) terminators
       // Ghostty and other modern terminals may use either
-      const fgMatch = buffer.match(/\x1b]10;([^\x07\x1b]+)(?:\x07|\x1b\\)/);
-      const bgMatch = buffer.match(/\x1b]11;([^\x07\x1b]+)(?:\x07|\x1b\\)/);
+      const fgRegex = new RegExp(`${OSC_PREFIX}10;${OSC_PAYLOAD}${OSC_TERM}`);
+      const bgRegex = new RegExp(`${OSC_PREFIX}11;${OSC_PAYLOAD}${OSC_TERM}`);
+      const fgMatch = fg === undefined ? buffer.match(fgRegex) : null;
+      const bgMatch = bg === undefined ? buffer.match(bgRegex) : null;
 
-      const fg = fgMatch ? parseOscColor(fgMatch[1]) ?? undefined : undefined;
-      const bg = bgMatch ? parseOscColor(bgMatch[1]) ?? undefined : undefined;
+      if (fgMatch) {
+        fg = parseOscColor(fgMatch[1]) ?? undefined;
+      }
+      if (bgMatch) {
+        bg = parseOscColor(bgMatch[1]) ?? undefined;
+      }
 
       // Parse OSC 4 responses; allow BEL or ST terminators
-      const paletteRegex = /\x1b]4;(\d+);([^\x07\x1b]+)(?:\x07|\x1b\\)/g;
+      const paletteRegex = new RegExp(`${OSC_PREFIX}4;(\\d+);${OSC_PAYLOAD}${OSC_TERM}`, 'g');
       let match: RegExpExecArray | null;
       while ((match = paletteRegex.exec(buffer)) !== null) {
         const idx = parseInt(match[1], 10);
@@ -105,8 +127,12 @@ async function queryOscColors(timeoutMs: number): Promise<{ foreground?: number;
       }
 
       const haveAllPalette = paletteOverrides.size >= 16; // we only ask 0-15
+      const haveFgBg = fg !== undefined && bg !== undefined;
+      const ready =
+        (!requireFgBg || haveFgBg) &&
+        (!requirePalette || haveAllPalette);
 
-      if (fg !== undefined || bg !== undefined || haveAllPalette) {
+      if (ready) {
         finish({
           foreground: fg,
           background: bg,
@@ -115,16 +141,27 @@ async function queryOscColors(timeoutMs: number): Promise<{ foreground?: number;
       }
     };
 
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       if (!resolved) {
-        finish(null);
+        finish(
+          fg !== undefined || bg !== undefined || paletteOverrides.size
+            ? {
+                foreground: fg,
+                background: bg,
+                paletteOverrides: paletteOverrides.size ? paletteOverrides : undefined,
+              }
+            : null
+        );
       }
     }, timeoutMs);
 
     try {
       stdin.setRawMode?.(true);
     } catch {
-      clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
       resolve(null);
       return;
     }
@@ -137,9 +174,14 @@ async function queryOscColors(timeoutMs: number): Promise<{ foreground?: number;
       for (let i = 0; i < 16; i++) {
         osc += `\x1b]4;${i};?\x07`;
       }
-      process.stdout.write(osc);
+      if (!writeHostSequence(osc)) {
+        process.stdout.write(osc);
+      }
     } catch {
-      clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
       finish(null);
     }
   });
@@ -222,40 +264,66 @@ export function getDefaultColors(): TerminalColors {
  * @param _timeoutMs Timeout in milliseconds (unused, for API compatibility)
  * @returns Terminal colors (currently always returns defaults or env-based)
  */
-export async function queryHostColors(_timeoutMs: number = 500): Promise<TerminalColors> {
-  // Return cached if available
-  if (cachedColors) {
+export async function queryHostColors(
+  _timeoutMs: number = 500,
+  options?: { force?: boolean; updateCache?: boolean; oscMode?: 'fast' | 'full' }
+): Promise<TerminalColors> {
+  // Return cached if available (unless forced)
+  if (!options?.force && cachedColors) {
     return cachedColors;
   }
 
+  let result: TerminalColors | null = null;
+  const fallbackColors = getHostColors() ?? null;
+
   // First, try OSC queries (best-effort, only if TTY + raw mode available)
   try {
-    const osc = await queryOscColors(_timeoutMs);
+  const osc = await queryOscColors(
+    _timeoutMs,
+    options?.oscMode === 'fast'
+      ? { requirePalette: false, requireFgBg: true }
+      : { requirePalette: true, requireFgBg: true }
+  );
     if (osc && (osc.foreground !== undefined || osc.background !== undefined || osc.paletteOverrides)) {
-      const base16: (number | undefined)[] = new Array(16).fill(undefined);
+      const base = fallbackColors ?? detectColorsFromEnvironment();
+      const palette = base.palette.slice();
       if (osc.paletteOverrides) {
         for (const [idx, color] of osc.paletteOverrides.entries()) {
-          if (idx >= 0 && idx < 16) {
-            base16[idx] = color;
+          if (idx >= 0 && idx < palette.length) {
+            palette[idx] = color;
           }
         }
       }
-      const palette = generate256Palette(base16 as number[]);
-      cachedColors = {
-        foreground: osc.foreground ?? 0xFFFFFF,
-        background: osc.background ?? 0x000000,
+      const hasFg = osc.foreground !== undefined;
+      const hasBg = osc.background !== undefined;
+      const hasComplete = hasFg && hasBg;
+      result = {
+        foreground: hasFg ? osc.foreground! : base.foreground,
+        background: hasBg ? osc.background! : base.background,
         palette,
-        isDefault: false,
+        // Only treat as non-default if we have both fg+bg or a non-default fallback.
+        isDefault: base.isDefault && !hasComplete,
       };
-      return cachedColors;
     }
   } catch {
     // Fall back to environment detection on any error
   }
 
-  // Fallback to environment-based color detection
-  cachedColors = detectColorsFromEnvironment();
-  return cachedColors;
+  if (!result) {
+    result = detectColorsFromEnvironment();
+  }
+
+  if (options?.updateCache !== false) {
+    if (result.isDefault && lastNonDefaultColors) {
+      cachedColors = lastNonDefaultColors;
+    } else {
+      cachedColors = result;
+      if (!result.isDefault) {
+        lastNonDefaultColors = result;
+      }
+    }
+  }
+  return result;
 }
 
 /**
@@ -304,6 +372,12 @@ function detectColorsFromEnvironment(): TerminalColors {
  * Get cached colors (must call queryHostColors first)
  */
 export function getHostColors(): TerminalColors | null {
+  if (cachedColors && !cachedColors.isDefault) {
+    return cachedColors;
+  }
+  if (lastNonDefaultColors) {
+    return lastNonDefaultColors;
+  }
   return cachedColors;
 }
 
@@ -312,6 +386,9 @@ export function getHostColors(): TerminalColors | null {
  */
 export function setHostColors(colors: TerminalColors): void {
   cachedColors = colors;
+  if (!colors.isDefault) {
+    lastNonDefaultColors = colors;
+  }
 }
 
 /**
@@ -319,6 +396,52 @@ export function setHostColors(colors: TerminalColors): void {
  */
 export function clearColorCache(): void {
   cachedColors = null;
+}
+
+/**
+ * Refresh cached host colors by re-querying the terminal.
+ */
+export async function refreshHostColors(
+  options?: { timeoutMs?: number; oscMode?: 'fast' | 'full' }
+): Promise<TerminalColors> {
+  const previous = getHostColors();
+  const next = await queryHostColors(options?.timeoutMs ?? 500, {
+    force: true,
+    updateCache: false,
+    oscMode: options?.oscMode,
+  });
+  if (next.isDefault) {
+    if (previous && !previous.isDefault) {
+      return previous;
+    }
+    if (lastNonDefaultColors) {
+      return lastNonDefaultColors;
+    }
+  }
+  cachedColors = next;
+  if (!next.isDefault) {
+    lastNonDefaultColors = next;
+  }
+  return next;
+}
+
+/**
+ * Compare two terminal color sets for equality.
+ */
+export function areTerminalColorsEqual(
+  a: TerminalColors | null | undefined,
+  b: TerminalColors | null | undefined
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.foreground !== b.foreground || a.background !== b.background || a.isDefault !== b.isDefault) {
+    return false;
+  }
+  if (a.palette.length !== b.palette.length) return false;
+  for (let i = 0; i < a.palette.length; i++) {
+    if (a.palette[i] !== b.palette[i]) return false;
+  }
+  return true;
 }
 
 /**

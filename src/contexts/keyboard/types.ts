@@ -35,4 +35,5 @@ export interface KeyboardHandlerOptions {
   onToggleAggregateView?: () => void;
   onToggleCommandPalette?: () => void;
   onToggleVimMode?: () => void;
+  onRefreshHostColors?: () => void;
 }

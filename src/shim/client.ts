@@ -1,5 +1,6 @@
 import type { TerminalCell, TerminalScrollState, TerminalState } from '../core/types';
 import type { SearchResult } from '../terminal/emulator-interface';
+import type { TerminalColors } from '../terminal/terminal-colors';
 import type { GitInfo } from '../effect/services/pty/helpers';
 import { unpackRow, unpackTerminalState, CELL_SIZE } from '../terminal/cell-serialization';
 import { RemoteEmulator } from './client/emulator';
@@ -48,6 +49,10 @@ export async function destroyPty(ptyId: string): Promise<void> {
 
 export async function destroyAllPtys(): Promise<void> {
   await sendRequest('destroyAll');
+}
+
+export async function setHostColors(colors: TerminalColors): Promise<void> {
+  await sendRequest('setHostColors', { colors });
 }
 
 export async function getPtyCwd(ptyId: string): Promise<string> {

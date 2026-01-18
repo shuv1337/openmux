@@ -62,7 +62,8 @@ export function AggregateView(props: AggregateViewProps) {
   const { exitAggregateMode, enterSearchMode: keyboardEnterSearchMode } = useKeyboardState();
   const { state: layoutState, switchWorkspace, focusPane } = useLayout();
   const { state: sessionState, switchSession } = useSession();
-  const { findSessionForPty, scrollTerminal, isMouseTrackingEnabled, getScrollState, getEmulatorSync, getTerminalStateSync } = useTerminal();
+  const terminal = useTerminal();
+  const { findSessionForPty, scrollTerminal, isMouseTrackingEnabled, getScrollState, getEmulatorSync, getTerminalStateSync } = terminal;
   const theme = useTheme();
   const { clearAllSelections, startSelection, updateSelection, completeSelection, clearSelection, getSelection } = useSelection();
   // Keep search context to access searchState reactively (it's a getter)
@@ -356,7 +357,10 @@ export function AggregateView(props: AggregateViewProps) {
   });
 
   // Get host terminal background color to match user's theme
-  const hostBgColor = getHostBackgroundColor();
+  const hostBgColor = createMemo(() => {
+    const _version = terminal.hostColorsVersion;
+    return getHostBackgroundColor();
+  });
 
   // Build hints text based on mode
   const hintsText = () => getHintsText(
@@ -386,7 +390,7 @@ export function AggregateView(props: AggregateViewProps) {
           flexDirection: 'column',
           zIndex: 100,
         }}
-        backgroundColor={hostBgColor}
+        backgroundColor={hostBgColor()}
       >
         {/* Main content - two panes side by side */}
         <box style={{ flexDirection: 'row', height: layout().contentHeight }}>

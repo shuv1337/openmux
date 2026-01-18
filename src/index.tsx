@@ -76,11 +76,14 @@ async function main() {
         writeHostSequence('\x1b[=3;1u');
         // Enable focus-in/out events from the host terminal.
         writeHostSequence('\x1b[?1004h');
+        // Enable color scheme reporting (Ghostty mode 2031).
+        writeHostSequence('\x1b[?2031h');
       });
 
       onCleanup(() => {
         // Disable focus tracking so we don't pollute the parent shell.
         writeHostSequence('\x1b[?1004l');
+        writeHostSequence('\x1b[?2031l');
         setHostSequenceWriter(null);
       });
 

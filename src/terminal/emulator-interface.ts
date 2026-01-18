@@ -126,6 +126,11 @@ export interface ITerminalEmulator {
    */
   getColors(): TerminalColors;
 
+  /**
+   * Update the terminal's color scheme (best-effort).
+   */
+  setColors?(colors: TerminalColors): void;
+
   // ============================================================================
   // Title
   // ============================================================================

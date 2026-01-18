@@ -120,6 +120,9 @@ export function handleNormalModeAction(
     case 'keyboard.vim.toggle':
       options.onToggleVimMode?.();
       return true;
+    case 'theme.refresh':
+      options.onRefreshHostColors?.();
+      return true;
     case 'mode.move':
       keyboard.enterMoveMode();
       return true;
@@ -251,6 +254,10 @@ export function handlePrefixModeAction(
       return true;
     case 'keyboard.vim.toggle':
       options.onToggleVimMode?.();
+      exitPrefix();
+      return true;
+    case 'theme.refresh':
+      options.onRefreshHostColors?.();
       exitPrefix();
       return true;
     case 'mode.move':

@@ -16,10 +16,74 @@
  */
 
 import { PassThrough } from 'stream';
+import { emitHostColorScheme } from './host-color-scheme';
 
 // Bracketed paste mode sequences (DECSET 2004)
 const PASTE_START = Buffer.from('\x1b[200~');
 const PASTE_END = Buffer.from('\x1b[201~');
+const COLOR_SCHEME_DARK = Buffer.from('\x1b[?997;1n');
+const COLOR_SCHEME_LIGHT = Buffer.from('\x1b[?997;2n');
+const COLOR_SCHEME_MAX_LEN = Math.max(COLOR_SCHEME_DARK.length, COLOR_SCHEME_LIGHT.length);
+
+function stripColorSchemeReports(data: Buffer): {
+  cleaned: Buffer;
+  scheme?: 'light' | 'dark';
+  pending?: Buffer;
+} {
+  let cursor = 0;
+  let scheme: 'light' | 'dark' | undefined;
+  const chunks: Buffer[] = [];
+
+  while (cursor < data.length) {
+    const darkIdx = data.indexOf(COLOR_SCHEME_DARK, cursor);
+    const lightIdx = data.indexOf(COLOR_SCHEME_LIGHT, cursor);
+    let nextIdx = -1;
+    let nextScheme: 'light' | 'dark' | null = null;
+    let nextLen = 0;
+
+    if (darkIdx !== -1 && (lightIdx === -1 || darkIdx < lightIdx)) {
+      nextIdx = darkIdx;
+      nextScheme = 'dark';
+      nextLen = COLOR_SCHEME_DARK.length;
+    } else if (lightIdx !== -1) {
+      nextIdx = lightIdx;
+      nextScheme = 'light';
+      nextLen = COLOR_SCHEME_LIGHT.length;
+    }
+
+    if (nextIdx === -1 || !nextScheme) {
+      break;
+    }
+
+    if (nextIdx > cursor) {
+      chunks.push(data.subarray(cursor, nextIdx));
+    }
+
+    scheme = nextScheme;
+    cursor = nextIdx + nextLen;
+  }
+
+  if (cursor < data.length) {
+    chunks.push(data.subarray(cursor));
+  }
+
+  let cleaned = chunks.length === 1 ? chunks[0] : Buffer.concat(chunks);
+  let pending: Buffer | undefined;
+  const maxSuffix = Math.min(cleaned.length, COLOR_SCHEME_MAX_LEN - 1);
+  for (let len = maxSuffix; len > 0; len--) {
+    const tail = cleaned.subarray(cleaned.length - len);
+    if (
+      COLOR_SCHEME_DARK.subarray(0, len).equals(tail) ||
+      COLOR_SCHEME_LIGHT.subarray(0, len).equals(tail)
+    ) {
+      pending = tail;
+      cleaned = cleaned.subarray(0, cleaned.length - len);
+      break;
+    }
+  }
+
+  return { cleaned, scheme, pending };
+}
 
 export interface PasteInterceptorConfig {
   /**
@@ -62,6 +126,7 @@ export function createPasteInterceptingStdin(
 
   let isPasting = false;
   let pendingBuffer: Buffer | null = null; // Buffer for partial sequences at chunk boundaries
+  let pendingControlBuffer: Buffer | null = null;
 
   // Handle raw stdin data before any encoding is applied
   const handleRawData = (chunk: Buffer | string): void => {
@@ -73,6 +138,19 @@ export function createPasteInterceptingStdin(
       data = Buffer.concat([pendingBuffer, data]);
       pendingBuffer = null;
     }
+    if (pendingControlBuffer) {
+      data = Buffer.concat([pendingControlBuffer, data]);
+      pendingControlBuffer = null;
+    }
+
+    const schemeResult = stripColorSchemeReports(data);
+    if (schemeResult.scheme) {
+      emitHostColorScheme(schemeResult.scheme);
+    }
+    if (schemeResult.pending) {
+      pendingControlBuffer = schemeResult.pending;
+    }
+    data = schemeResult.cleaned;
 
     // Check for paste start marker
     const startIdx = data.indexOf(PASTE_START);

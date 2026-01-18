@@ -11,6 +11,7 @@
 const spawn_ops = @import("spawn_ops.zig");
 const pty_ops = @import("pty_ops.zig");
 const process_info = @import("process_info.zig");
+const notify = @import("notify.zig");
 
 // ============================================================================
 // Synchronous Spawn
@@ -106,4 +107,20 @@ pub fn bun_pty_get_cwd(pid: c_int, buf: [*]u8, len: c_int) c_int {
 pub fn bun_pty_get_process_name(pid: c_int, buf: [*]u8, len: c_int) c_int {
     if (len <= 0) return -1;
     return process_info.getProcessName(pid, buf, @intCast(len));
+}
+
+// ============================================================================
+// macOS notify(3) helpers
+// ============================================================================
+
+pub fn bun_pty_notify_register(name: [*:0]const u8, out_token: *c_int) c_int {
+    return notify.notifyRegister(name, out_token);
+}
+
+pub fn bun_pty_notify_cancel(token: c_int) c_int {
+    return notify.notifyCancel(token);
+}
+
+pub fn bun_pty_notify_register_signal(name: [*:0]const u8, sig: c_int) c_int {
+    return notify.notifyRegisterSignal(name, sig);
 }

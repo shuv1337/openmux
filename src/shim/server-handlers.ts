@@ -45,6 +45,11 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
   const withPty = options?.withPty ?? defaultWithPty;
   const setHostColors = options?.setHostColors ?? setHostColorsDefault;
 
+  const applyHostColors = async (colors: TerminalColors): Promise<void> => {
+    setHostColors(colors);
+    await withPty((pty) => pty.setHostColors(colors));
+  };
+
   const sendEvent = (header: ShimHeader, payloads: ArrayBuffer[] = []) => {
     if (!state.activeClient) return;
     sendFrame(state.activeClient, header, payloads);
@@ -305,7 +310,7 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
   const handleRequest = createRequestHandler({
     state,
     withPty,
-    setHostColors,
+    applyHostColors,
     sendResponse,
     sendError,
     attachClient,

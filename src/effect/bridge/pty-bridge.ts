@@ -9,6 +9,7 @@ import { Pty } from "../services"
 import { PtyId, Cols, Rows } from "../types"
 import type { TerminalState, TerminalScrollState, UnifiedTerminalUpdate } from "../../core/types"
 import type { ITerminalEmulator } from "../../terminal/emulator-interface"
+import type { TerminalColors } from "../../terminal/terminal-colors"
 import { deferMacrotask } from "../../core/scheduling"
 import { isShimClient } from "../../shim/mode"
 import * as ShimClient from "../../shim/client"
@@ -338,6 +339,27 @@ export async function setPtyUpdateEnabled(
   } catch {
     // Ignore errors - best-effort toggle
   }
+}
+
+/**
+ * Apply host terminal colors to the backing PTY service (best-effort).
+ */
+export async function applyHostColors(colors: TerminalColors): Promise<void> {
+  if (isShimClient()) {
+    try {
+      await ShimClient.setHostColors(colors)
+    } catch {
+      // Ignore errors - best-effort refresh
+    }
+    return
+  }
+
+  await runEffectIgnore(
+    Effect.gen(function* () {
+      const pty = yield* Pty
+      yield* pty.setHostColors(colors)
+    })
+  )
 }
 
 /**

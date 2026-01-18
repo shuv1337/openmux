@@ -6,7 +6,7 @@ import { Context, Effect, Layer, Ref, HashMap, Option, Runtime } from "effect"
 import path from "node:path"
 import type { TerminalState, UnifiedTerminalUpdate } from "../../core/types"
 import type { ITerminalEmulator } from "../../terminal/emulator-interface"
-import { getHostColors, getDefaultColors } from "../../terminal/terminal-colors"
+import { getHostColors, getDefaultColors, setHostColors as setHostColorsCache, type TerminalColors } from "../../terminal/terminal-colors"
 import { ScrollbackArchiveManager } from "../../terminal/scrollback-archive"
 import { SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL } from "../../terminal/scrollback-config"
 import { getConfigDir } from "../../core/user-config"
@@ -117,6 +117,9 @@ export class Pty extends Context.Tag("@openmux/Pty")<
 
     /** Get emulator for direct access (e.g., scrollback lines) */
     readonly getEmulator: (id: PtyId) => Effect.Effect<ITerminalEmulator, PtyNotFoundError>
+
+    /** Apply host terminal colors to all active emulators */
+    readonly setHostColors: (colors: TerminalColors) => Effect.Effect<void>
 
     /** Destroy all sessions */
     readonly destroyAll: () => Effect.Effect<void>
@@ -246,6 +249,18 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         globalTitleRegistry,
       })
 
+      const setHostColors = Effect.fn("Pty.setHostColors")(function* (colors: TerminalColors) {
+        setHostColorsCache(colors)
+        const sessions = yield* Ref.get(sessionsRef)
+        for (const id of HashMap.keys(sessions)) {
+          const sessionOpt = HashMap.get(sessions, id)
+          if (Option.isNone(sessionOpt)) continue
+          const session = sessionOpt.value
+          session.emulator.setColors?.(colors)
+          session.scrollbackArchive.clearCache()
+        }
+      })
+
       return Pty.of({
         create,
         write: operations.write,
@@ -263,6 +278,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
         setScrollOffset: operations.setScrollOffset,
         setUpdateEnabled: operations.setUpdateEnabled,
         getEmulator: operations.getEmulator,
+        setHostColors,
         destroyAll: operations.destroyAll,
         listAll: operations.listAll,
         getForegroundProcess: subscriptions.getForegroundProcess,
@@ -357,6 +373,8 @@ export class Pty extends Context.Tag("@openmux/Pty")<
           Effect.promise(() => ShimClient.setUpdateEnabled(String(id), enabled)),
         getEmulator: (id) =>
           Effect.sync(() => ShimClient.getEmulator(String(id))),
+        setHostColors: (colors) =>
+          Effect.promise(() => ShimClient.setHostColors(colors)),
         destroyAll: () =>
           Effect.promise(() => ShimClient.destroyAllPtys()),
         listAll: () =>
@@ -433,6 +451,7 @@ export class Pty extends Context.Tag("@openmux/Pty")<
     setScrollOffset: () => Effect.void,
     setUpdateEnabled: () => Effect.void,
     getEmulator: () => Effect.die(new Error("No emulator in test layer")),
+    setHostColors: () => Effect.void,
     destroyAll: () => Effect.void,
     listAll: () => Effect.succeed([]),
     getForegroundProcess: () => Effect.succeed(undefined),

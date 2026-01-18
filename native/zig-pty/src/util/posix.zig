@@ -17,6 +17,7 @@ pub const c = @cImport({
         @cInclude("crt_externs.h");
         @cInclude("libproc.h"); // For proc_pidinfo, proc_listpids
         @cInclude("sys/sysctl.h"); // For KERN_PROCARGS2 (argv[0] detection)
+        @cInclude("notify.h");
     } else {
         @cInclude("pty.h");
     }

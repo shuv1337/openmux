@@ -114,6 +114,22 @@ export fn bun_pty_get_process_name(pid: c_int, buf: [*]u8, len: c_int) c_int {
 }
 
 // ============================================================================
+// macOS notify(3) helpers
+// ============================================================================
+
+export fn bun_pty_notify_register(name: [*:0]const u8, out_token: *c_int) c_int {
+    return exports.bun_pty_notify_register(name, out_token);
+}
+
+export fn bun_pty_notify_cancel(token: c_int) c_int {
+    return exports.bun_pty_notify_cancel(token);
+}
+
+export fn bun_pty_notify_register_signal(name: [*:0]const u8, sig: c_int) c_int {
+    return exports.bun_pty_notify_register_signal(name, sig);
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 

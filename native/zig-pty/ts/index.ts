@@ -10,6 +10,9 @@
  * - terminal.ts: Terminal class
  */
 
+import { ptr } from "bun:ffi";
+import fs from "node:fs";
+import os from "node:os";
 import { lib } from "./lib-loader";
 import { Terminal } from "./terminal";
 import type { IPty, IPtyForkOptions } from "./types";
@@ -103,4 +106,81 @@ export function spawnAsync(
     // Start polling on next tick to avoid synchronous FFI call
     setImmediate(poll);
   });
+}
+
+const APPEARANCE_NOTIFICATIONS = [
+  "AppleInterfaceThemeChangedNotification",
+  "AppleInterfaceStyleChangedNotification",
+];
+
+const SIGNAL_NAME = "SIGUSR2";
+const SIGNAL_NUMBER =
+  (os.constants.signals as Record<string, number | undefined>)[SIGNAL_NAME] ??
+  (process.platform === "darwin" ? 31 : 12);
+
+/**
+ * Subscribe to macOS appearance changes via notify(3).
+ * Returns a cleanup function, or null if unsupported.
+ */
+export function watchSystemAppearance(onChange: () => void): (() => void) | null {
+  if (process.platform !== "darwin") return null;
+
+  const watchers: Array<{
+    stream: fs.ReadStream;
+    token: number;
+    onData: () => void;
+  }> = [];
+  const signalTokens: number[] = [];
+  let signalHandler: (() => void) | null = null;
+
+  for (const name of APPEARANCE_NOTIFICATIONS) {
+    const tokenBuf = Buffer.alloc(4);
+    const nameBuf = Buffer.from(`${name}\0`, "utf8");
+    const signalToken = lib.symbols.bun_pty_notify_register_signal(nameBuf, SIGNAL_NUMBER);
+    if (signalToken >= 0) {
+      signalTokens.push(signalToken);
+    }
+
+    const fd = lib.symbols.bun_pty_notify_register(nameBuf, ptr(tokenBuf));
+    if (fd >= 0) {
+      const token = tokenBuf.readInt32LE(0);
+      const stream = fs.createReadStream("", { fd, autoClose: true, highWaterMark: 4 });
+      const onData = () => onChange();
+      stream.on("data", onData);
+      stream.on("error", () => {});
+      watchers.push({ stream, token, onData });
+    }
+  }
+
+  if (signalTokens.length > 0) {
+    signalHandler = () => onChange();
+    process.on(SIGNAL_NAME, signalHandler);
+  }
+
+  if (watchers.length === 0 && signalTokens.length === 0) {
+    return null;
+  }
+
+  return () => {
+    if (signalHandler) {
+      process.off(SIGNAL_NAME, signalHandler);
+      signalHandler = null;
+    }
+    for (const token of signalTokens) {
+      try {
+        lib.symbols.bun_pty_notify_cancel(token);
+      } catch {
+        // ignore
+      }
+    }
+    for (const watcher of watchers) {
+      watcher.stream.off("data", watcher.onData);
+      watcher.stream.destroy();
+      try {
+        lib.symbols.bun_pty_notify_cancel(watcher.token);
+      } catch {
+        // ignore
+      }
+    }
+  };
 }

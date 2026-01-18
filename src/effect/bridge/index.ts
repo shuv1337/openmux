@@ -29,6 +29,7 @@ export {
   subscribeUnifiedToPty,
   getEmulator,
   setPtyUpdateEnabled,
+  applyHostColors,
   subscribeToPtyLifecycle,
   subscribeToAllTitleChanges,
   getPtyTitle,

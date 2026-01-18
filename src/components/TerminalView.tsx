@@ -3,7 +3,7 @@
  * Uses Effect bridge for PTY operations.
  */
 
-import { createSignal, createEffect, on, Show } from 'solid-js';
+import { createSignal, createEffect, createMemo, on, Show } from 'solid-js';
 import { useRenderer } from '@opentui/solid';
 import { useTerminal } from '../contexts/TerminalContext';
 import { useSelection } from '../contexts/SelectionContext';
@@ -25,7 +25,10 @@ export function TerminalView(props: TerminalViewProps) {
   const terminal = useTerminal();
   const theme = useTheme();
   const kittyPaneKey = `kitty-pane-${nextKittyPaneId++}`;
-  const hostBgColor = getHostBackgroundColor();
+  const hostBgColor = createMemo(() => {
+    const _version = terminal.hostColorsVersion;
+    return getHostBackgroundColor();
+  });
   // Get selection state - keep full context to access selectionVersion reactively
   const selection = useSelection();
   const { isCellSelected, getSelection } = selection;
@@ -73,6 +76,16 @@ export function TerminalView(props: TerminalViewProps) {
     )
   );
 
+  createEffect(
+    on(
+      () => terminal.hostColorsVersion,
+      () => {
+        setVersion((v) => v + 1);
+        renderer.requestRender();
+      }
+    )
+  );
+
   // Resize events don't always trigger a terminal update, so force a render to avoid blank frames.
   createEffect(
     on(
@@ -93,7 +106,7 @@ export function TerminalView(props: TerminalViewProps) {
             width: props.width,
             height: props.height,
           }}
-          backgroundColor={hostBgColor}
+          backgroundColor={hostBgColor()}
         />
       }
     >
@@ -102,7 +115,7 @@ export function TerminalView(props: TerminalViewProps) {
           width: props.width,
           height: props.height,
         }}
-        backgroundColor={hostBgColor}
+        backgroundColor={hostBgColor()}
         renderAfter={renderTerminal}
       />
     </Show>

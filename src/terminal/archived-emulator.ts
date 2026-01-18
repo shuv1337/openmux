@@ -116,6 +116,10 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
     return this.base.getColors()
   }
 
+  setColors(colors: TerminalColors): void {
+    this.base.setColors?.(colors)
+  }
+
   getTitle(): string {
     return this.base.getTitle()
   }

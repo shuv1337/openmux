@@ -15,7 +15,7 @@ import type {
   KittyGraphicsImageInfo,
   KittyGraphicsPlacement,
 } from "../emulator-interface";
-import type { TerminalColors } from "../terminal-colors";
+import { areTerminalColorsEqual, type TerminalColors } from "../terminal-colors";
 import { createTitleParser } from "../title-parser";
 import { stripProblematicOscSequences } from "./osc-stripping";
 import { GhosttyVtTerminal } from "./terminal";
@@ -44,6 +44,8 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
   private _rows: number;
   private _disposed = false;
   private colors: TerminalColors;
+  private baseColors: TerminalColors;
+  private colorRemap: Map<number, number> | null = null;
   private modes: TerminalModes = createDefaultModes();
   private scrollState: TerminalScrollState = createDefaultScrollState();
 
@@ -65,13 +67,14 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
   constructor(cols: number, rows: number, colors: TerminalColors) {
     this._cols = cols;
     this._rows = rows;
-    this.colors = colors;
+    this.colors = cloneColors(colors);
+    this.baseColors = cloneColors(colors);
 
-    const palette = colors.palette.slice(0, 16);
+    const palette = this.colors.palette.slice(0, 16);
     this.terminal = new GhosttyVtTerminal(cols, rows, {
       scrollbackLimit: 0,
-      fgColor: colors.foreground,
-      bgColor: colors.background,
+      fgColor: this.colors.foreground,
+      bgColor: this.colors.background,
       palette,
     });
 
@@ -319,6 +322,33 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
     return this.colors;
   }
 
+  setColors(colors: TerminalColors): void {
+    if (this._disposed) return;
+    if (areTerminalColorsEqual(this.colors, colors)) return;
+
+    this.colors = cloneColors(colors);
+    this.scrollbackSnapshotDirty = true;
+    this.scrollbackCache.clear();
+
+    const oscSequence = buildOscColorSequence(colors);
+    if (oscSequence) {
+      this.terminal.write(oscSequence);
+    }
+
+    this.terminal.update();
+    this.refreshColorRemap(colors);
+
+    if (!this.updatesEnabled) {
+      this.needsFullRefresh = true;
+      return;
+    }
+
+    this.prepareUpdate(true);
+    for (const callback of this.updateCallbacks) {
+      callback();
+    }
+  }
+
   getTitle(): string {
     return this.currentTitle;
   }
@@ -391,7 +421,7 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
 
   private fetchScrollbackLine(offset: number): TerminalCell[] | null {
     if (this._disposed) return null;
-    return fetchScrollbackLine({
+    const line = fetchScrollbackLine({
       terminal: this.terminal,
       offset,
       cols: this._cols,
@@ -402,6 +432,10 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
         this.scrollbackSnapshotDirty = value;
       },
     });
+    if (line && this.colorRemap) {
+      this.applyColorRemapToRow(line);
+    }
+    return line;
   }
 
   private prepareUpdate(forceFull: boolean): void {
@@ -423,6 +457,7 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
     this.pendingUpdate = result.pendingUpdate;
     this.scrollState = result.scrollState;
     this.scrollbackSnapshotDirty = result.scrollbackSnapshotDirty;
+    this.applyColorRemapToPendingUpdate();
 
     if (
       result.prevModes.mouseTracking !== result.modes.mouseTracking ||
@@ -438,6 +473,56 @@ export class GhosttyVTEmulator implements ITerminalEmulator {
       this.modes = result.modes;
     }
   }
+
+  private refreshColorRemap(colors: TerminalColors): void {
+    const native = this.terminal.getColors();
+    const nativeMatches =
+      native.foreground === colors.foreground &&
+      native.background === colors.background;
+
+    if (nativeMatches) {
+      this.baseColors = cloneColors(colors);
+      this.colorRemap = null;
+      return;
+    }
+    this.colorRemap = buildColorRemap(this.baseColors, colors);
+  }
+
+  private applyColorRemapToPendingUpdate(): void {
+    const remap = this.colorRemap;
+    const pending = this.pendingUpdate;
+    if (!remap || !pending) return;
+
+    if (pending.fullState) {
+      for (const row of pending.fullState.cells) {
+        this.applyColorRemapToRow(row);
+      }
+      return;
+    }
+
+    if (pending.dirtyRows.size > 0) {
+      for (const row of pending.dirtyRows.values()) {
+        this.applyColorRemapToRow(row);
+      }
+    }
+  }
+
+  private applyColorRemapToRow(row: TerminalCell[]): void {
+    const remap = this.colorRemap;
+    if (!remap) return;
+    for (const cell of row) {
+      const fgKey = (cell.fg.r << 16) | (cell.fg.g << 8) | cell.fg.b;
+      const fgNext = remap.get(fgKey);
+      if (fgNext !== undefined) {
+        setRgb(cell.fg, fgNext);
+      }
+      const bgKey = (cell.bg.r << 16) | (cell.bg.g << 8) | cell.bg.b;
+      const bgNext = remap.get(bgKey);
+      if (bgNext !== undefined) {
+        setRgb(cell.bg, bgNext);
+      }
+    }
+  }
 }
 
 export function createGhosttyVTEmulator(
@@ -446,4 +531,55 @@ export function createGhosttyVTEmulator(
   colors: TerminalColors
 ): GhosttyVTEmulator {
   return new GhosttyVTEmulator(cols, rows, colors);
+}
+
+function buildOscColorSequence(colors: TerminalColors): string {
+  const format = (color: number) => `#${color.toString(16).padStart(6, "0")}`;
+  let osc = `\x1b]10;${format(colors.foreground)}\x07`;
+  osc += `\x1b]11;${format(colors.background)}\x07`;
+  osc += `\x1b]12;${format(colors.foreground)}\x07`;
+
+  const palette = colors.palette;
+  const count = Math.min(16, palette.length);
+  for (let i = 0; i < count; i++) {
+    osc += `\x1b]4;${i};${format(palette[i] ?? 0)}\x07`;
+  }
+  return osc;
+}
+
+function cloneColors(colors: TerminalColors): TerminalColors {
+  return {
+    foreground: colors.foreground,
+    background: colors.background,
+    palette: colors.palette.slice(),
+    isDefault: colors.isDefault,
+  };
+}
+
+function buildColorRemap(from: TerminalColors, to: TerminalColors): Map<number, number> | null {
+  if (areTerminalColorsEqual(from, to)) return null;
+  const map = new Map<number, number>();
+  if (from.foreground !== to.foreground) {
+    map.set(from.foreground, to.foreground);
+  }
+  if (from.background !== to.background) {
+    map.set(from.background, to.background);
+  }
+
+  const paletteSize = Math.min(from.palette.length, to.palette.length);
+  for (let i = 0; i < paletteSize; i++) {
+    const fromColor = from.palette[i];
+    const toColor = to.palette[i];
+    if (fromColor === toColor) continue;
+    if (fromColor === from.foreground || fromColor === from.background) continue;
+    map.set(fromColor, toColor);
+  }
+
+  return map.size ? map : null;
+}
+
+function setRgb(target: { r: number; g: number; b: number }, color: number): void {
+  target.r = (color >> 16) & 0xFF;
+  target.g = (color >> 8) & 0xFF;
+  target.b = color & 0xFF;
 }

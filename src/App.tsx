@@ -65,6 +65,7 @@ function AppContent() {
     pasteToFocused,
     getFocusedEmulator,
     isPtyActive,
+    refreshHostColors,
   } = terminal;
   const session = useSession();
   const { togglePicker, toggleTemplateOverlay, state: sessionState } = session;
@@ -211,6 +212,12 @@ function AppContent() {
     config.reloadConfig();
   };
 
+  const handleRefreshHostColors = () => {
+    refreshHostColors({ forceApply: true }).catch((error) => {
+      console.warn('[openmux] Failed to refresh host colors:', error);
+    });
+  };
+
   const searchVimState = createSearchVimState({ config, search });
 
   // Search mode enter handler
@@ -246,6 +253,7 @@ function AppContent() {
         onToggleAggregateView: openAggregateView,
         onToggleCommandPalette: toggleCommandPalette,
         onToggleVimMode: handleToggleVimMode,
+        onRefreshHostColors: handleRefreshHostColors,
         onRenamePane: handlePaneRenameOpen,
         onLabelWorkspace: handleWorkspaceLabelOpen,
       }
@@ -271,6 +279,7 @@ function AppContent() {
     onToggleAggregateView: openAggregateView,
     onToggleCommandPalette: toggleCommandPalette,
     onToggleVimMode: handleToggleVimMode,
+    onRefreshHostColors: handleRefreshHostColors,
     onRenamePane: handlePaneRenameOpen,
     onLabelWorkspace: handleWorkspaceLabelOpen,
   });

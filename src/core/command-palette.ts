@@ -176,6 +176,13 @@ const BASE_COMMANDS: CommandPaletteCommand[] = [
     keywords: ['vim', 'keyboard', 'overlays'],
   },
   {
+    id: 'theme.refresh',
+    title: 'Refresh host theme',
+    description: 'Re-query host terminal colors',
+    action: 'theme.refresh',
+    keywords: ['theme', 'colors', 'appearance', 'refresh'],
+  },
+  {
     id: 'app.detach',
     title: 'Detach',
     description: 'Detach the current client',

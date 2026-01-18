@@ -12,8 +12,13 @@ import {
   type ParentProps,
 } from 'solid-js';
 import { useRenderer, useTerminalDimensions } from '@opentui/solid';
+import fs from 'node:fs';
+import path from 'node:path';
 
-import { detectHostCapabilities, getKittyGraphicsRenderer } from '../terminal';
+import { detectHostCapabilities, getKittyGraphicsRenderer, setHostCapabilitiesColors } from '../terminal';
+import { areTerminalColorsEqual, getHostColors, refreshHostColors as refreshHostColorsCache, setHostColors, type TerminalColors } from '../terminal/terminal-colors';
+import { onHostColorScheme, type HostColorScheme } from '../terminal/host-color-scheme';
+import { watchSystemAppearance } from '../../native/zig-pty/ts/index';
 import type { TerminalState, TerminalScrollState } from '../core/types';
 import {
   createScrollHandlers,
@@ -33,6 +38,7 @@ import {
   subscribeToPtyLifecycle,
   getSessionPtyMapping,
   waitForShimClient,
+  applyHostColors,
 } from '../effect/bridge';
 import {
   subscribeToPtyWithCaches,
@@ -99,6 +105,10 @@ export interface TerminalContextValue {
   getTerminalStateSync: (ptyId: string) => TerminalState | null;
   /** Check if ghostty-vt is initialized */
   isInitialized: boolean;
+  /** Refresh cached host terminal colors and apply to emulators */
+  refreshHostColors: (options?: { timeoutMs?: number; forceApply?: boolean; oscMode?: 'fast' | 'full' }) => Promise<boolean>;
+  /** Version counter for host color changes */
+  hostColorsVersion: number;
   /** Find which session owns a PTY (returns sessionId and paneId, or null if not found) */
   findSessionForPty: (ptyId: string) => { sessionId: string; paneId: string } | null;
   /** Check if a PTY is currently tracked */
@@ -118,6 +128,8 @@ export function TerminalProvider(props: TerminalProviderProps) {
   let isActive = true;
   let initialized = false;
   const [isInitialized, setIsInitialized] = createSignal(false);
+  const [hostColorsVersion, setHostColorsVersion] = createSignal(0);
+  let refreshInFlight: Promise<boolean> | null = null;
 
   // Track ptyId -> paneId mapping for exit handling (current session)
   const ptyToPaneMap = new Map<string, string>();
@@ -148,6 +160,9 @@ export function TerminalProvider(props: TerminalProviderProps) {
   // Track global title subscription
   let titleSubscriptionUnsub: (() => void) | null = null;
   let lifecycleSubscriptionUnsub: (() => void) | null = null;
+  let hostSchemeUnsub: (() => void) | null = null;
+  const schemeColors = new Map<HostColorScheme, TerminalColors>();
+  let lastHostScheme: HostColorScheme | null = null;
 
   // Helper to get focused PTY ID (uses centralized utility)
   const getFocusedPtyId = (): string | undefined => {
@@ -196,6 +211,137 @@ export function TerminalProvider(props: TerminalProviderProps) {
   const isPtyActive = (ptyId: string): boolean =>
     ptyToPaneMap.has(ptyId) || ptyToSessionMap.has(ptyId);
 
+  const refreshHostColors = async (
+    options?: { timeoutMs?: number; forceApply?: boolean; oscMode?: 'fast' | 'full' }
+  ): Promise<boolean> => {
+    if (refreshInFlight) return refreshInFlight;
+    refreshInFlight = (async () => {
+      try {
+        const previous = getHostColors();
+        const next = await refreshHostColorsCache({
+          timeoutMs: options?.timeoutMs ?? 500,
+          oscMode: options?.oscMode,
+        });
+        if (!isActive) return false;
+        const didChange = !areTerminalColorsEqual(previous, next);
+        if (!didChange && !options?.forceApply) return false;
+
+        if (lastHostScheme && !next.isDefault) {
+          schemeColors.set(lastHostScheme, next);
+        }
+        setHostCapabilitiesColors(next);
+        if (didChange) {
+          setHostColorsVersion((version) => version + 1);
+        }
+        renderer.requestRender();
+
+        try {
+          await applyHostColors(next);
+        } catch (error) {
+          console.warn('[openmux] Failed to apply host colors:', error);
+        }
+
+        return didChange;
+      } catch (error) {
+        console.warn('[openmux] Failed to refresh host colors:', error);
+        return false;
+      }
+    })();
+
+    try {
+      return await refreshInFlight;
+    } finally {
+      refreshInFlight = null;
+    }
+  };
+
+  let appearanceWatcherStop: (() => void) | null = null;
+  let appearanceDebounce: ReturnType<typeof setTimeout> | null = null;
+  let appearanceRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  let appearanceSequence = 0;
+
+  const startAppearanceWatcher = () => {
+    if (process.platform !== 'darwin') return;
+    const home = process.env.HOME ?? '';
+    if (!home) return;
+
+    const prefsDir = path.join(home, 'Library', 'Preferences');
+    const prefsFile = '.GlobalPreferences.plist';
+    const triggerRefresh = () => {
+      appearanceSequence += 1;
+      const seq = appearanceSequence;
+      if (appearanceDebounce) {
+        clearTimeout(appearanceDebounce);
+      }
+      if (appearanceRetryTimer) {
+        clearTimeout(appearanceRetryTimer);
+        appearanceRetryTimer = null;
+      }
+      appearanceDebounce = setTimeout(() => {
+        const pollIntervalMs = 250;
+        const pollWindowMs = 10_000;
+        const paletteDelayMs = 400;
+        const startedAt = Date.now();
+
+        const attemptFastRefresh = async () => {
+          const didChange = await refreshHostColors({ timeoutMs: 200, oscMode: 'fast' }).catch(() => false);
+          if (!isActive || seq !== appearanceSequence) return;
+          if (didChange) {
+            appearanceRetryTimer = setTimeout(() => {
+              refreshHostColors({ timeoutMs: 500, oscMode: 'full' }).catch(() => {});
+            }, paletteDelayMs);
+            return;
+          }
+          if (Date.now() - startedAt >= pollWindowMs) {
+            refreshHostColors({ timeoutMs: 500, oscMode: 'full' }).catch(() => {});
+            return;
+          }
+          appearanceRetryTimer = setTimeout(() => {
+            attemptFastRefresh().catch(() => {});
+          }, pollIntervalMs);
+        };
+
+        attemptFastRefresh().catch(() => {});
+      }, 50);
+    };
+
+    const stops: Array<() => void> = [];
+    const notifyStop = watchSystemAppearance(triggerRefresh);
+    if (notifyStop) {
+      stops.push(notifyStop);
+    }
+
+    try {
+      const watcher = fs.watch(prefsDir, { persistent: false }, (event, filename) => {
+        if (!filename || filename === prefsFile || filename.endsWith(`/${prefsFile}`)) {
+          triggerRefresh();
+        }
+      });
+      stops.push(() => watcher.close());
+    } catch {
+      // ignore - no directory watcher
+    }
+
+    if (stops.length === 0) {
+      appearanceWatcherStop = null;
+      return;
+    }
+
+    appearanceWatcherStop = () => {
+      if (appearanceDebounce) {
+        clearTimeout(appearanceDebounce);
+        appearanceDebounce = null;
+      }
+      if (appearanceRetryTimer) {
+        clearTimeout(appearanceRetryTimer);
+        appearanceRetryTimer = null;
+      }
+      for (const stop of stops) {
+        stop();
+      }
+    };
+  };
+
   // Initialize ghostty-vt and detect host terminal capabilities on mount
   onMount(() => {
     if (initialized) return;
@@ -217,6 +363,27 @@ export function TerminalProvider(props: TerminalProviderProps) {
       .then(() => {
         if (!isActive) return;
         setIsInitialized(true);
+        startAppearanceWatcher();
+        hostSchemeUnsub = onHostColorScheme((scheme) => {
+          if (!isActive) return;
+          const current = getHostColors();
+          if (current && !current.isDefault) {
+            const opposite: HostColorScheme = scheme === 'light' ? 'dark' : 'light';
+            schemeColors.set(opposite, current);
+          }
+          lastHostScheme = scheme;
+          const cached = schemeColors.get(scheme);
+          if (cached) {
+            setHostColors(cached);
+            setHostCapabilitiesColors(cached);
+            setHostColorsVersion((version) => version + 1);
+            renderer.requestRender();
+            applyHostColors(cached).catch((error) => {
+              console.warn('[openmux] Failed to apply cached host colors:', error);
+            });
+          }
+          refreshHostColors({ timeoutMs: 200, oscMode: 'fast', forceApply: true }).catch(() => {});
+        });
         // Subscribe to title changes across all PTYs
         // Titles are stored in TitleContext (plain Map) to avoid layout store updates
         // which cause SolidJS reactivity cascades and screen flash
@@ -260,6 +427,14 @@ export function TerminalProvider(props: TerminalProviderProps) {
   // Cleanup on unmount
   onCleanup(() => {
     isActive = false;
+    if (appearanceWatcherStop) {
+      appearanceWatcherStop();
+      appearanceWatcherStop = null;
+    }
+    if (hostSchemeUnsub) {
+      hostSchemeUnsub();
+      hostSchemeUnsub = null;
+    }
     // Unsubscribe title subscription
     if (titleSubscriptionUnsub) {
       titleSubscriptionUnsub();
@@ -443,6 +618,8 @@ export function TerminalProvider(props: TerminalProviderProps) {
     getFocusedEmulator: cacheAccessors.getFocusedEmulator,
     getTerminalStateSync: cacheAccessors.getTerminalStateSync,
     get isInitialized() { return isInitialized(); },
+    refreshHostColors,
+    get hostColorsVersion() { return hostColorsVersion(); },
     findSessionForPty: cacheAccessors.findSessionForPty,
     isPtyActive,
   };

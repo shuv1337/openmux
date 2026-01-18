@@ -13,7 +13,7 @@ import type { WithPty } from './server-handlers';
 export function createRequestHandler(params: {
   state: ShimServerState;
   withPty: WithPty;
-  setHostColors: (colors: TerminalColors) => void;
+  applyHostColors: (colors: TerminalColors) => Promise<void> | void;
   sendResponse: (socket: net.Socket, requestId: number, result?: unknown, payloads?: ArrayBuffer[]) => void;
   sendError: (socket: net.Socket, requestId: number, error: string) => void;
   attachClient: (socket: net.Socket, clientId: string) => Promise<void>;
@@ -62,8 +62,8 @@ export function createRequestHandler(params: {
           return;
 
         case 'setHostColors':
-          if (!params.state.hostColorsSet && requestParams.colors) {
-            params.setHostColors(requestParams.colors as any);
+          if (requestParams.colors) {
+            await params.applyHostColors(requestParams.colors as any);
             params.state.hostColorsSet = true;
           }
           params.sendResponse(socket, requestId, { applied: params.state.hostColorsSet });
