@@ -45,6 +45,35 @@ searchAccentColor = "#FFAA00"
   foregroundColor = "#CCCCCC"
   activeTabColor = "#00AAFF"
   inactiveTabColor = "#666666"
+  successColor = "#33CC66"
+
+  [theme.ui]
+  mutedText = "#666666"
+
+    [theme.ui.listSelection]
+    foreground = "#FFFFFF"
+    background = "#334455"
+
+    [theme.ui.buttonFocus]
+    foreground = "#FFFFFF"
+    background = "#334455"
+
+    [theme.ui.copyNotification]
+    borderColor = "auto"
+    textColor = "auto"
+    backgroundColor = "auto"
+
+[theme.ui.aggregate.selection]
+foreground = "#FFFFFF"
+background = "#3b82f6"
+dim = "#93c5fd"
+
+[theme.ui.aggregate.diff]
+added = "#22c55e"
+removed = "#ef4444"
+addedSelected = "#86efac"
+removedSelected = "#fca5a5"
+binarySelected = "#cbd5f5"
 
 [session]
 autoSaveIntervalMs = 30_000
