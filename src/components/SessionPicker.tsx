@@ -11,6 +11,7 @@ import { eventToCombo, formatComboSet, matchKeybinding, type ResolvedKeybindingM
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
 import type { KeyboardEvent } from '../effect/bridge';
 import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
+import { useOverlayColors } from './overlay-colors';
 import { truncateHint } from './overlay-hints';
 
 interface SessionPickerProps {
@@ -44,6 +45,12 @@ function formatRelativeTime(timestamp: number): string {
 export function SessionPicker(props: SessionPickerProps) {
   const theme = useTheme();
   const config = useConfig();
+  const {
+    background: overlayBg,
+    foreground: overlayFg,
+    subtle: overlaySubtle,
+    separator: overlaySeparator,
+  } = useOverlayColors();
   const accentColor = () => theme.pane.focusedBorderColor;
   const vimEnabled = () => config.config().keyboard.vimMode === 'overlays';
   const [vimMode, setVimMode] = createSignal<VimInputMode>('normal');
@@ -317,22 +324,22 @@ export function SessionPicker(props: SessionPickerProps) {
           paddingRight: 1,
           zIndex: 100,
         }}
-        backgroundColor="#1a1a1a"
+        backgroundColor={overlayBg()}
         title=" Sessions "
         titleAlignment="center"
       >
         <box style={{ flexDirection: 'column' }}>
           {/* Search bar */}
           <box style={{ flexDirection: 'row', height: 1 }}>
-            <text fg="#888888">{state.isRenaming ? 'Rename: ' : 'Search: '}</text>
-            <text fg="#FFFFFF">
+            <text fg={overlaySubtle()}>{state.isRenaming ? 'Rename: ' : 'Search: '}</text>
+            <text fg={overlayFg()}>
               {(state.isRenaming ? state.renameValue : state.searchQuery) + '_'}
             </text>
           </box>
 
           {/* Separator */}
           <box style={{ height: 1 }}>
-            <text fg="#444444">{'─'.repeat(overlayWidth() - 4)}</text>
+            <text fg={overlaySeparator()}>{'─'.repeat(overlayWidth() - 4)}</text>
           </box>
 
           {/* Session list */}
@@ -340,7 +347,7 @@ export function SessionPicker(props: SessionPickerProps) {
             when={session.filteredSessions.length > 0}
             fallback={
               <box style={{ height: 1 }}>
-                <text fg="#666666">  No sessions found</text>
+                <text fg={overlaySubtle()}>  No sessions found</text>
               </box>
             }
           >
@@ -355,6 +362,7 @@ export function SessionPicker(props: SessionPickerProps) {
                     renameValue={state.renameValue}
                     summary={state.summaries.get(sess.id)}
                     maxWidth={overlayWidth() - 4}
+                    textColor={overlayFg()}
                   />
                 </box>
               )}
@@ -363,10 +371,10 @@ export function SessionPicker(props: SessionPickerProps) {
 
           {/* Footer with hints */}
           <box style={{ height: 1 }}>
-            <text fg="#444444">{'─'.repeat(overlayWidth() - 4)}</text>
+            <text fg={overlaySeparator()}>{'─'.repeat(overlayWidth() - 4)}</text>
           </box>
           <box style={{ height: 1 }}>
-            <text fg="#666666">{hintDisplay()}</text>
+            <text fg={overlaySubtle()}>{hintDisplay()}</text>
           </box>
         </box>
       </box>
@@ -386,6 +394,7 @@ interface SessionRowProps {
   renameValue: string;
   summary?: SessionSummary;
   maxWidth: number;
+  textColor: string;
 }
 
 function fitLine(text: string, width: number): string {
@@ -419,7 +428,7 @@ function SessionRow(props: SessionRowProps) {
   const timeStr = () => formatRelativeTime(props.session.lastSwitchedAt);
 
   // Colors - use brighter color for selection
-  const nameColor = () => props.isSelected ? '#FFFFFF' : (props.isActive ? '#00AAFF' : '#CCCCCC');
+  const nameColor = () => props.isSelected ? '#FFFFFF' : (props.isActive ? '#00AAFF' : props.textColor);
   const bgColor = () => props.isSelected ? '#334455' : undefined;
 
   // Build the line as a single string with proper formatting

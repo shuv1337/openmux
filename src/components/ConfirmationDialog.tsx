@@ -9,6 +9,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { matchKeybinding } from '../core/keybindings';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
 import type { KeyboardEvent } from '../effect/bridge';
+import { useOverlayColors } from './overlay-colors';
 
 export type { ConfirmationType };
 
@@ -55,6 +56,12 @@ const MESSAGES: Record<ConfirmationType, { title: string; message: string }> = {
 export function ConfirmationDialog(props: ConfirmationDialogProps) {
   const appConfig = useConfig();
   const theme = useTheme();
+  const {
+    background: overlayBg,
+    foreground: overlayFg,
+    muted: overlayMuted,
+    separator: overlaySeparator,
+  } = useOverlayColors();
   const accentColor = () => theme.pane.urgentBorderColor;
   // Track which button is focused: 0 = Confirm, 1 = Cancel (default)
   const [focusedButton, setFocusedButton] = createSignal(1);
@@ -113,9 +120,9 @@ export function ConfirmationDialog(props: ConfirmationDialogProps) {
   const overlayY = () => Math.floor((props.height - overlayHeight) / 2);
 
   // Button styling - using opentui-style selection colors
-  const confirmFg = () => (focusedButton() === 0 ? '#FFFFFF' : '#888888');
+  const confirmFg = () => (focusedButton() === 0 ? '#FFFFFF' : overlayMuted());
   const confirmBg = () => (focusedButton() === 0 ? '#334455' : undefined);
-  const cancelFg = () => (focusedButton() === 1 ? '#FFFFFF' : '#888888');
+  const cancelFg = () => (focusedButton() === 1 ? '#FFFFFF' : overlayMuted());
   const cancelBg = () => (focusedButton() === 1 ? '#334455' : undefined);
 
   // Calculate button positioning for right alignment
@@ -140,19 +147,19 @@ export function ConfirmationDialog(props: ConfirmationDialogProps) {
           padding: 1,
           zIndex: 200,
         }}
-        backgroundColor="#1a1a1a"
+        backgroundColor={overlayBg()}
         title={dialogConfig().title}
         titleAlignment="center"
       >
         <box style={{ flexDirection: 'column' }}>
           {/* Message */}
           <box style={{ height: 1 }}>
-            <text fg="#CCCCCC">{dialogConfig().message}</text>
+            <text fg={overlayFg()}>{dialogConfig().message}</text>
           </box>
 
           {/* Separator */}
           <box style={{ height: 1 }}>
-            <text fg="#444444">{'─'.repeat(overlayWidth() - 4)}</text>
+            <text fg={overlaySeparator()}>{'─'.repeat(overlayWidth() - 4)}</text>
           </box>
 
           {/* Buttons - right aligned: Confirm, Cancel */}

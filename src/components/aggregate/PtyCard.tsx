@@ -13,6 +13,11 @@ interface PtyCardProps {
   index: number;
   totalCount: number;
   onClick?: () => void;
+  textColors: {
+    foreground: string;
+    muted: string;
+    subtle: string;
+  };
 }
 
 /**
@@ -57,14 +62,14 @@ export function PtyCard(props: PtyCardProps) {
   const line1Text = () => `${leftPadding}${paddedNumber()}. ${dirName()} (${process()})`;
 
   // Use background color for selection, keep foreground neutral
-  const fgColor = () => props.isSelected ? '#FFFFFF' : '#CCCCCC';
+  const fgColor = () => props.isSelected ? '#FFFFFF' : props.textColors.foreground;
   const bgColor = () => props.isSelected ? '#3b82f6' : undefined;
   // Dim color needs to be readable - lighter on blue, darker otherwise
-  const dimColor = () => props.isSelected ? '#93c5fd' : '#666666';
+  const dimColor = () => props.isSelected ? '#93c5fd' : props.textColors.muted;
   // Git diff colors - green for additions, red for removals, gray for binary
   const addedColor = () => props.isSelected ? '#86efac' : '#22c55e';
   const removedColor = () => props.isSelected ? '#fca5a5' : '#ef4444';
-  const binaryColor = () => props.isSelected ? '#cbd5f5' : '#94a3b8';
+  const binaryColor = () => props.isSelected ? '#cbd5f5' : props.textColors.subtle;
 
   const handleClick = (event: { preventDefault: () => void }) => {
     event.preventDefault();

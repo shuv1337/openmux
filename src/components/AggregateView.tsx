@@ -20,6 +20,7 @@ import { useSearch } from '../contexts/SearchContext';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
 import { getEmulator, getHostBackgroundColor } from '../effect/bridge';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
+import { useOverlayColors } from './overlay-colors';
 import {
   PtyCard,
   InteractivePreview,
@@ -65,6 +66,7 @@ export function AggregateView(props: AggregateViewProps) {
   const terminal = useTerminal();
   const { findSessionForPty, scrollTerminal, isMouseTrackingEnabled, getScrollState, getEmulatorSync, getTerminalStateSync } = terminal;
   const theme = useTheme();
+  const { foreground: overlayFg, muted: overlayMuted, subtle: overlaySubtle } = useOverlayColors();
   const { clearAllSelections, startSelection, updateSelection, completeSelection, clearSelection, getSelection } = useSelection();
   // Keep search context to access searchState reactively (it's a getter)
   const search = useSearch();
@@ -358,7 +360,7 @@ export function AggregateView(props: AggregateViewProps) {
 
   // Get host terminal background color to match user's theme
   const hostBgColor = createMemo(() => {
-    const _version = terminal.hostColorsVersion;
+    void terminal.hostColorsVersion;
     return getHostBackgroundColor();
   });
 
@@ -418,7 +420,7 @@ export function AggregateView(props: AggregateViewProps) {
                 when={state.matchedPtys.length > 0}
                 fallback={
                   <box style={{ height: layout().listInnerHeight, justifyContent: 'center', alignItems: 'center' }}>
-                    <text fg="#666666">No PTYs match filter</text>
+                    <text fg={overlaySubtle()}>No PTYs match filter</text>
                   </box>
                 }
               >
@@ -430,6 +432,11 @@ export function AggregateView(props: AggregateViewProps) {
                       maxWidth={layout().listInnerWidth}
                       index={index()}
                       totalCount={state.matchedPtys.length}
+                      textColors={{
+                        foreground: overlayFg(),
+                        muted: overlayMuted(),
+                        subtle: overlaySubtle(),
+                      }}
                       onClick={() => {
                         // Select this PTY and exit preview mode if active
                         selectPty(pty.ptyId);
@@ -481,10 +488,10 @@ export function AggregateView(props: AggregateViewProps) {
         {/* Footer status bar - search on left, hints on right */}
         <box style={{ height: 1, flexDirection: 'row' }}>
           <box style={{ width: footerWidths().filterWidth }}>
-            <text fg="#CCCCCC">{filterText().slice(0, footerWidths().filterWidth)}</text>
+            <text fg={overlayFg()}>{filterText().slice(0, footerWidths().filterWidth)}</text>
           </box>
           <box style={{ width: footerWidths().hintsWidth + 2, flexDirection: 'row', justifyContent: 'flex-end' }}>
-            <text fg="#666666">{truncateHint(hintsText(), footerWidths().hintsWidth)}</text>
+            <text fg={overlaySubtle()}>{truncateHint(hintsText(), footerWidths().hintsWidth)}</text>
           </box>
         </box>
       </box>

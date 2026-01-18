@@ -59,6 +59,11 @@ describe("PtyCard", () => {
         maxWidth: 80,
         index: 0,
         totalCount: 1,
+        textColors: {
+          foreground: "#ffffff",
+          muted: "#999999",
+          subtle: "#777777",
+        },
       });
     }).not.toThrow();
   });

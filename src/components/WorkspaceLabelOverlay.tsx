@@ -12,6 +12,7 @@ import { eventToCombo } from '../core/keybindings';
 import type { WorkspaceId } from '../core/types';
 import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
 import type { KeyboardEvent } from '../effect/bridge';
+import { useOverlayColors } from './overlay-colors';
 import { truncateHint } from './overlay-hints';
 
 const VIM_SEQUENCES = [
@@ -37,6 +38,7 @@ export function WorkspaceLabelOverlay(props: WorkspaceLabelOverlayProps) {
   const config = useConfig();
   const theme = useTheme();
   const layout = useLayout();
+  const { background: overlayBg, foreground: overlayFg, separator: overlaySeparator, subtle: overlaySubtle } = useOverlayColors();
 
   const accentColor = () => theme.pane.focusedBorderColor;
   const vimEnabled = () => config.config().keyboard.vimMode === 'overlays';
@@ -254,17 +256,17 @@ export function WorkspaceLabelOverlay(props: WorkspaceLabelOverlayProps) {
           paddingBottom: 0,
           zIndex: 157,
         }}
-        backgroundColor="#1a1a1a"
+        backgroundColor={overlayBg()}
         title=" Label Workspace "
         titleAlignment="center"
       >
         <box style={{ flexDirection: 'row', height: 1 }}>
           <text fg={accentColor()}>{promptText}</text>
-          <text fg="#FFFFFF">{valueDisplay()}</text>
+          <text fg={overlayFg()}>{valueDisplay()}</text>
           <text fg={accentColor()}>{cursorText}</text>
           <Show when={hintDisplay().length > 0}>
-            <text fg="#444444">{spacerText}</text>
-            <text fg="#666666">{hintDisplay()}</text>
+            <text fg={overlaySeparator()}>{spacerText}</text>
+            <text fg={overlaySubtle()}>{hintDisplay()}</text>
           </Show>
         </box>
       </box>

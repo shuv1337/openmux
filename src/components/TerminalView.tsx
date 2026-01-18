@@ -26,7 +26,7 @@ export function TerminalView(props: TerminalViewProps) {
   const theme = useTheme();
   const kittyPaneKey = `kitty-pane-${nextKittyPaneId++}`;
   const hostBgColor = createMemo(() => {
-    const _version = terminal.hostColorsVersion;
+    void terminal.hostColorsVersion;
     return getHostBackgroundColor();
   });
   // Get selection state - keep full context to access selectionVersion reactively

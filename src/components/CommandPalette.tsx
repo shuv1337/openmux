@@ -17,9 +17,9 @@ import {
 import type { CommandPaletteCommand } from '../core/command-palette';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
 import type { KeyboardEvent } from '../effect/bridge';
-import { RGBA } from '@opentui/core';
 import { filterCommands } from './command-palette-utils';
 import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
+import { useOverlayColors } from './overlay-colors';
 import { truncateHint } from './overlay-hints';
 
 export interface CommandPaletteState {
@@ -60,6 +60,14 @@ function getCommandKeybinding(bindings: ResolvedKeybindings, action: string): st
 export function CommandPalette(props: CommandPaletteProps) {
   const config = useConfig();
   const theme = useTheme();
+  const {
+    background: overlayBg,
+    foreground: overlayFg,
+    muted: overlayMuted,
+    subtle: overlaySubtle,
+    separator: overlaySeparator,
+    match: overlayMatch,
+  } = useOverlayColors();
 
   const hasQuery = () => props.state.query.trim().length > 0;
   const filteredCommands = createMemo(() => filterCommands(props.commands, props.state.query));
@@ -358,20 +366,20 @@ export function CommandPalette(props: CommandPaletteProps) {
           paddingBottom: 0,
           zIndex: 160,
         }}
-        backgroundColor="#1a1a1a"
+        backgroundColor={overlayBg()}
         title=" Command Palette "
         titleAlignment="center"
       >
         <box style={{ flexDirection: 'column' }}>
           <box style={{ flexDirection: 'row', height: 1 }}>
             <text fg={accentColor()}>{promptText}</text>
-            <text fg="#FFFFFF">{queryDisplay()}</text>
+            <text fg={overlayFg()}>{queryDisplay()}</text>
             <text fg={accentColor()}>{cursorText}</text>
-            <text fg="#444444">{spacerText}</text>
-            <text fg={resultCount() > 0 ? '#88FF88' : '#888888'}>{matchDisplay()}</text>
+            <text fg={overlaySeparator()}>{spacerText}</text>
+            <text fg={resultCount() > 0 ? overlayMatch() : overlaySubtle()}>{matchDisplay()}</text>
             <Show when={hintDisplay().length > 0}>
-              <text fg="#444444">{spacerText}</text>
-              <text fg="#666666">{hintDisplay()}</text>
+              <text fg={overlaySeparator()}>{spacerText}</text>
+              <text fg={overlaySubtle()}>{hintDisplay()}</text>
             </Show>
           </box>
 
@@ -385,6 +393,11 @@ export function CommandPalette(props: CommandPaletteProps) {
                     maxWidth={innerWidth()}
                     keybinding={commandBindings().get(command.id) ?? ''}
                     keybindingWidth={keybindingColumnWidth()}
+                    colors={{
+                      foreground: overlayFg(),
+                      muted: overlayMuted(),
+                      subtle: overlaySubtle(),
+                    }}
                   />
                 </box>
               )}
@@ -402,6 +415,11 @@ interface CommandRowProps {
   maxWidth: number;
   keybinding: string;
   keybindingWidth: number;
+  colors: {
+    foreground: string;
+    muted: string;
+    subtle: string;
+  };
 }
 
 function fitLine(text: string, width: number): string {
@@ -428,12 +446,8 @@ function CommandRow(props: CommandRowProps) {
   const keybindingText = () => fitRight(props.keybinding, keybindingWidth());
   const titleWidth = () => Math.max(0, props.maxWidth - (keybindingWidth() ? keybindingWidth() + 1 : 0));
   const left = () => fitLine(`  ${props.command.title}${details()}`, titleWidth());
-  const fg = () => props.isSelected ? '#FFFFFF' : '#CCCCCC';
-  const bindingFg = () => (
-    props.isSelected
-      ? RGBA.fromInts(187, 187, 187, 128)
-      : RGBA.fromInts(119, 119, 119, 128)
-  );
+  const fg = () => props.isSelected ? '#FFFFFF' : props.colors.foreground;
+  const bindingFg = () => props.isSelected ? props.colors.muted : props.colors.subtle;
   const bg = () => props.isSelected ? '#334455' : undefined;
 
   return (

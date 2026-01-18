@@ -11,6 +11,7 @@ import { useSearch } from '../contexts/SearchContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { formatComboSet, type ResolvedKeybindingMap } from '../core/keybindings';
 import type { SearchState } from '../contexts/search/types';
+import { useOverlayColors } from './overlay-colors';
 import { truncateHint } from './overlay-hints';
 
 interface SearchOverlayProps {
@@ -27,6 +28,13 @@ export function SearchOverlay(props: SearchOverlayProps) {
   const config = useConfig();
   // Keep search context to access searchState reactively (it's a getter)
   const search = useSearch();
+  const {
+    background: overlayBg,
+    foreground: overlayFg,
+    separator: overlaySeparator,
+    subtle: overlaySubtle,
+    match: overlayMatch,
+  } = useOverlayColors();
   const accentColor = () => theme.searchAccentColor;
   const vimEnabled = () => config.config().keyboard.vimMode === 'overlays';
 
@@ -101,19 +109,19 @@ export function SearchOverlay(props: SearchOverlayProps) {
             paddingRight: 1,
             zIndex: 150,
           }}
-          backgroundColor="#1a1a1a"
+          backgroundColor={overlayBg()}
           title=" Search "
           titleAlignment="center"
         >
           <box style={{ flexDirection: 'row', height: 1 }}>
             <text fg={accentColor()}>{promptText}</text>
-            <text fg="#FFFFFF">{queryDisplay(state().query)}</text>
+            <text fg={overlayFg()}>{queryDisplay(state().query)}</text>
             <text fg={accentColor()}>{cursorText}</text>
-            <text fg="#444444">{spacerText}</text>
-            <text fg={state().matches.length > 0 ? '#88FF88' : '#888888'}>{matchDisplay()}</text>
+            <text fg={overlaySeparator()}>{spacerText}</text>
+            <text fg={state().matches.length > 0 ? overlayMatch() : overlaySubtle()}>{matchDisplay()}</text>
             <Show when={hintDisplay().length > 0}>
-              <text fg="#444444">{spacerText}</text>
-              <text fg="#666666">{hintDisplay()}</text>
+              <text fg={overlaySeparator()}>{spacerText}</text>
+              <text fg={overlaySubtle()}>{hintDisplay()}</text>
             </Show>
           </box>
         </box>

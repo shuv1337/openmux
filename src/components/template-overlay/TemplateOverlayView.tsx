@@ -8,6 +8,7 @@ import {
   formatRelativeTime,
   truncate,
 } from './formatting';
+import { useOverlayColors } from '../overlay-colors';
 import { truncateHint } from '../overlay-hints';
 import { getTemplateStats, type SaveSummaryLine } from './summary';
 
@@ -43,12 +44,18 @@ function getCombos(bindings: ResolvedKeybindingMap, action: string): string[] {
 }
 
 export function TemplateOverlayView(props: TemplateOverlayViewProps) {
+  const {
+    background: overlayBg,
+    foreground: overlayFg,
+    subtle: overlaySubtle,
+    separator: overlaySeparator,
+  } = useOverlayColors();
   const renderSaveLine = (line: SaveSummaryLine) => {
     const maxWidth = Math.max(1, props.overlayWidth - 4);
     if (line.type === 'text') {
       return (
         <box style={{ flexDirection: 'row', height: 1 }}>
-          <text fg="#888888">
+          <text fg={overlaySubtle()}>
             {truncate(`${props.saveIndent}${line.value}`, maxWidth)}
           </text>
         </box>
@@ -62,7 +69,7 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
       const fallback = `${prefix}${line.label}${suffix}`;
       return (
         <box style={{ flexDirection: 'row', height: 1 }}>
-          <text fg="#888888">{truncate(fallback, maxWidth)}</text>
+          <text fg={overlaySubtle()}>{truncate(fallback, maxWidth)}</text>
         </box>
       );
     }
@@ -71,9 +78,9 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
     const labelText = fitLabel(line.label, labelWidth);
     return (
       <box style={{ flexDirection: 'row', height: 1 }}>
-        <text fg="#888888">{prefix}</text>
-        <text fg={line.hasProcess ? '#CCCCCC' : '#888888'}>{labelText}</text>
-        <text fg="#888888">{suffix}</text>
+        <text fg={overlaySubtle()}>{prefix}</text>
+        <text fg={line.hasProcess ? overlayFg() : overlaySubtle()}>{labelText}</text>
+        <text fg={overlaySubtle()}>{suffix}</text>
       </box>
     );
   };
@@ -89,7 +96,7 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
     const nameWidth = Math.max(1, Math.min(24, maxWidth - (12 + timeWidth)));
     const name = truncate(template.name, nameWidth);
     const line = `  ${name} ${ws} ${panes} ${time}`;
-    const color = selected ? '#FFFFFF' : '#CCCCCC';
+    const color = selected ? '#FFFFFF' : overlayFg();
     const bg = selected ? '#334455' : undefined;
     return (
       <text fg={color} bg={bg}>
@@ -99,7 +106,7 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
   };
 
   const renderTab = (label: string, active: boolean) => (
-    <text fg={active ? '#FFFFFF' : '#888888'} bg={active ? '#334455' : undefined}>
+    <text fg={active ? '#FFFFFF' : overlaySubtle()} bg={active ? '#334455' : undefined}>
       {` ${label} `}
     </text>
   );
@@ -163,19 +170,19 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
           paddingRight: 1,
           zIndex: 120,
         }}
-        backgroundColor="#1a1a1a"
+        backgroundColor={overlayBg()}
         title=" Templates "
         titleAlignment="center"
       >
         <box style={{ flexDirection: 'column' }}>
           <box style={{ flexDirection: 'row', height: 1 }}>
             {renderTab('Apply', props.tab === 'apply')}
-            <text fg="#444444">{'  '}</text>
+            <text fg={overlaySeparator()}>{'  '}</text>
             {renderTab('Save', props.tab === 'save')}
           </box>
 
           <box style={{ height: 1 }}>
-            <text fg="#444444">{HORIZONTAL.repeat(props.overlayWidth - 4)}</text>
+            <text fg={overlaySeparator()}>{HORIZONTAL.repeat(props.overlayWidth - 4)}</text>
           </box>
 
           <Show
@@ -183,8 +190,8 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
             fallback={(
               <box style={{ flexDirection: 'column' }}>
                 <box style={{ height: 1, flexDirection: 'row' }}>
-                  <text fg="#888888">{props.saveIndent}Name: </text>
-                  <text fg="#FFFFFF">
+                  <text fg={overlaySubtle()}>{props.saveIndent}Name: </text>
+                  <text fg={overlayFg()}>
                     {truncate(
                       `${props.saveName}_`,
                       Math.max(1, props.overlayWidth - 4 - props.saveIndentWidth - 'Name: '.length)
@@ -198,14 +205,14 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
                 </For>
                 <Show when={props.saveSummaryTruncated}>
                   <box style={{ height: 1 }}>
-                    <text fg="#666666">...</text>
+                    <text fg={overlaySubtle()}>...</text>
                   </box>
                 </Show>
                 <box style={{ height: 1 }}>
-                  <text fg="#444444">{HORIZONTAL.repeat(props.overlayWidth - 4)}</text>
+                  <text fg={overlaySeparator()}>{HORIZONTAL.repeat(props.overlayWidth - 4)}</text>
                 </box>
                 <box style={{ height: 1 }}>
-                  <text fg="#666666">
+                  <text fg={overlaySubtle()}>
                     {saveHintDisplay()}
                   </text>
                 </box>
@@ -216,7 +223,7 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
               when={props.templates.length > 0}
               fallback={(
                 <box style={{ height: 1 }}>
-                  <text fg="#666666">  No templates saved</text>
+                  <text fg={overlaySubtle()}>  No templates saved</text>
                 </box>
               )}
             >
@@ -230,10 +237,10 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
             </Show>
 
             <box style={{ height: 1 }}>
-              <text fg="#444444">{HORIZONTAL.repeat(props.overlayWidth - 4)}</text>
+              <text fg={overlaySeparator()}>{HORIZONTAL.repeat(props.overlayWidth - 4)}</text>
             </box>
             <box style={{ height: 1 }}>
-              <text fg="#666666">
+              <text fg={overlaySubtle()}>
                 {applyHintDisplay()}
               </text>
             </box>

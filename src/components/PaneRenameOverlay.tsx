@@ -12,6 +12,7 @@ import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyb
 import { eventToCombo } from '../core/keybindings';
 import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
 import type { KeyboardEvent } from '../effect/bridge';
+import { useOverlayColors } from './overlay-colors';
 import { truncateHint } from './overlay-hints';
 import { DEFAULT_PANE_TITLE, resolvePaneRename } from './pane-rename-utils';
 
@@ -39,6 +40,7 @@ export function PaneRenameOverlay(props: PaneRenameOverlayProps) {
   const theme = useTheme();
   const layout = useLayout();
   const titleContext = useTitle();
+  const { background: overlayBg, foreground: overlayFg, separator: overlaySeparator, subtle: overlaySubtle } = useOverlayColors();
 
   const accentColor = () => theme.pane.focusedBorderColor;
   const vimEnabled = () => config.config().keyboard.vimMode === 'overlays';
@@ -261,17 +263,17 @@ export function PaneRenameOverlay(props: PaneRenameOverlayProps) {
           paddingBottom: 0,
           zIndex: 158,
         }}
-        backgroundColor="#1a1a1a"
+        backgroundColor={overlayBg()}
         title=" Rename Pane "
         titleAlignment="center"
       >
         <box style={{ flexDirection: 'row', height: 1 }}>
           <text fg={accentColor()}>{promptText}</text>
-          <text fg="#FFFFFF">{valueDisplay()}</text>
+          <text fg={overlayFg()}>{valueDisplay()}</text>
           <text fg={accentColor()}>{cursorText}</text>
           <Show when={hintDisplay().length > 0}>
-            <text fg="#444444">{spacerText}</text>
-            <text fg="#666666">{hintDisplay()}</text>
+            <text fg={overlaySeparator()}>{spacerText}</text>
+            <text fg={overlaySubtle()}>{hintDisplay()}</text>
           </Show>
         </box>
       </box>

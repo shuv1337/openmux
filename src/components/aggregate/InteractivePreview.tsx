@@ -6,6 +6,7 @@
 import { Show, createEffect, on } from 'solid-js';
 import { useRenderer, useTerminalDimensions } from '@opentui/solid';
 import { resizePty } from '../../effect/bridge';
+import { useOverlayColors } from '../overlay-colors';
 import { TerminalView } from '../TerminalView';
 
 interface InteractivePreviewProps {
@@ -18,6 +19,7 @@ interface InteractivePreviewProps {
 }
 
 export function InteractivePreview(props: InteractivePreviewProps) {
+  const { subtle: overlaySubtle } = useOverlayColors();
   const renderer = useRenderer();
   const dimensions = useTerminalDimensions();
   // Track last resize to avoid redundant calls
@@ -75,7 +77,7 @@ export function InteractivePreview(props: InteractivePreviewProps) {
       when={props.ptyId}
       fallback={
         <box style={{ width: props.width, height: props.height, alignItems: 'center', justifyContent: 'center' }}>
-          <text fg="#666666">No terminal selected</text>
+          <text fg={overlaySubtle()}>No terminal selected</text>
         </box>
       }
     >
