@@ -13,6 +13,7 @@
 import { ptr } from "bun:ffi";
 import fs from "node:fs";
 import os from "node:os";
+import process from "node:process";
 import { lib } from "./lib-loader";
 import { Terminal } from "./terminal";
 import type { IPty, IPtyForkOptions } from "./types";
@@ -118,13 +119,15 @@ const SIGNAL_NUMBER =
   (os.constants.signals as Record<string, number | undefined>)[SIGNAL_NAME] ??
   (process.platform === "darwin" ? 31 : 12);
 
-/**
- * Subscribe to macOS appearance changes via notify(3).
- * Returns a cleanup function, or null if unsupported.
- */
-export function watchSystemAppearance(onChange: () => void): (() => void) | null {
-  if (process.platform !== "darwin") return null;
+type AppearanceWatcher = {
+  callbacks: Set<() => void>;
+  cleanup: () => void;
+};
 
+let sharedAppearanceWatcher: AppearanceWatcher | null = null;
+let appearanceExitHookAttached = false;
+
+function createAppearanceWatcher(onChange: () => void): (() => void) | null {
   const watchers: Array<{
     stream: fs.ReadStream;
     token: number;
@@ -181,6 +184,52 @@ export function watchSystemAppearance(onChange: () => void): (() => void) | null
       } catch {
         // ignore
       }
+    }
+  };
+}
+
+/**
+ * Subscribe to macOS appearance changes via notify(3).
+ * Returns a cleanup function, or null if unsupported.
+ */
+export function watchSystemAppearance(onChange: () => void): (() => void) | null {
+  if (process.platform !== "darwin") return null;
+
+  if (!sharedAppearanceWatcher) {
+    const callbacks = new Set<() => void>();
+    const notifySubscribers = () => {
+      for (const callback of callbacks) {
+        try {
+          callback();
+        } catch {
+          // ignore
+        }
+      }
+    };
+    const cleanup = createAppearanceWatcher(notifySubscribers);
+    if (!cleanup) return null;
+    sharedAppearanceWatcher = { callbacks, cleanup };
+    if (!appearanceExitHookAttached) {
+      appearanceExitHookAttached = true;
+      process.once("exit", () => {
+        if (sharedAppearanceWatcher) {
+          sharedAppearanceWatcher.cleanup();
+          sharedAppearanceWatcher = null;
+        }
+      });
+    }
+  }
+
+  const handler = () => onChange();
+  sharedAppearanceWatcher.callbacks.add(handler);
+
+  return () => {
+    const watcher = sharedAppearanceWatcher;
+    if (!watcher) return;
+    watcher.callbacks.delete(handler);
+    if (watcher.callbacks.size === 0) {
+      watcher.cleanup();
+      sharedAppearanceWatcher = null;
     }
   };
 }
