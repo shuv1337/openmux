@@ -189,17 +189,19 @@ export function createAggregateMouseHandlers(deps: MouseHandlerDeps) {
   };
 
   const handlePreviewMouseScroll = (event: OpenTUIMouseEvent) => {
-    if (!getPreviewMode()) return;
-
     const ptyId = getSelectedPtyId();
     if (!ptyId) return;
 
     const { relX, relY } = getRelativeCoords(event);
+    if (!isInsideContent(relX, relY)) return;
+
     const direction = event.scroll?.direction;
     if (!direction) return;
 
-    // Forward scroll to app if it wants mouse input
-    if (mouseHandler.appWantsMouse(ptyId)) {
+    const inPreviewMode = getPreviewMode();
+
+    // Only forward scroll to the app when preview is actively selected.
+    if (inPreviewMode && mouseHandler.appWantsMouse(ptyId)) {
       const button = scrollDirectionToButton(direction);
       const sequence = inputHandler.encodeMouse({
         type: 'scroll',
@@ -211,14 +213,15 @@ export function createAggregateMouseHandlers(deps: MouseHandlerDeps) {
         ctrl: event.modifiers?.ctrl,
       });
       writeToPty(ptyId, sequence);
-    } else {
-      // Handle scroll locally
-      const scrollSpeed = 3;
-      if (direction === 'up') {
-        scrollTerminal(ptyId, scrollSpeed);
-      } else if (direction === 'down') {
-        scrollTerminal(ptyId, -scrollSpeed);
-      }
+      return;
+    }
+
+    // Handle scroll locally (works even when preview isn't active).
+    const scrollSpeed = 3;
+    if (direction === 'up') {
+      scrollTerminal(ptyId, scrollSpeed);
+    } else if (direction === 'down') {
+      scrollTerminal(ptyId, -scrollSpeed);
     }
   };
 
