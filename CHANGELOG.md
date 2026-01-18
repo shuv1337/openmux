@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.112](https://github.com/monotykamary/openmux/compare/v0.2.111...v0.2.112) (2026-01-18)
+
+
+### Bug Fixes
+
+* **zig-pty:** harden appearance watcher cleanup ([c7323ba](https://github.com/monotykamary/openmux/commit/c7323baeffab7308ac99f74169070019e738d2b8))
+
 ### [0.2.111](https://github.com/monotykamary/openmux/compare/v0.2.110...v0.2.111) (2026-01-18)
 
 ### [0.2.110](https://github.com/monotykamary/openmux/compare/v0.2.109...v0.2.110) (2026-01-18)
