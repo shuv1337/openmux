@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.110](https://github.com/monotykamary/openmux/compare/v0.2.109...v0.2.110) (2026-01-18)
+
+
+### Features
+
+* **theme:** centralize ui colors ([8fbdb52](https://github.com/monotykamary/openmux/commit/8fbdb5211e83c40c294a188f9f73115392c3dc17))
+
+
+### Bug Fixes
+
+* **theme:** sync terminal colors on macOS appearance changes ([2864f46](https://github.com/monotykamary/openmux/commit/2864f46ca5da4f49ddef828d92da3d5854e9f66f))
+* **ui:** improve overlay text contrast ([2a495ab](https://github.com/monotykamary/openmux/commit/2a495ab9b2a15c3626db69fe716697f3963b8a1c))
+
+
+### Refactoring
+
+* **theme:** modularize host color sync ([4067fa2](https://github.com/monotykamary/openmux/commit/4067fa21ffdf5f2e10a58c77cfb477c68b25e10e))
+
+
+### Tests
+
+* **theme:** cover host color sync ([ed2540a](https://github.com/monotykamary/openmux/commit/ed2540a1184a7ab0756f4b65f55eebe99ecb275b))
+
 ### [0.2.109](https://github.com/monotykamary/openmux/compare/v0.2.108...v0.2.109) (2026-01-17)
 
 ### [0.2.108](https://github.com/monotykamary/openmux/compare/v0.2.107...v0.2.108) (2026-01-16)
