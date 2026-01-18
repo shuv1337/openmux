@@ -84,9 +84,9 @@ export const DEFAULT_THEME: Theme = {
       background: '#334455',
     },
     copyNotification: {
-      borderColor: '#7aa2f7',
-      textColor: '#a9b1d6',
-      backgroundColor: '#22242ecc',
+      borderColor: 'auto',
+      textColor: 'auto',
+      backgroundColor: 'auto',
     },
     aggregate: {
       selection: {

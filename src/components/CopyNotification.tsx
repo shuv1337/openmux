@@ -3,9 +3,12 @@
  * Positioned at the top-right of the pane where copy occurred
  */
 
-import { Show, type Accessor } from 'solid-js';
+import { Show, createMemo, type Accessor } from 'solid-js';
 import { RGBA } from '@opentui/core';
 import { useTheme } from '../contexts/ThemeContext';
+import { useTerminal } from '../contexts/TerminalContext';
+import { getDefaultColors, getHostColors } from '../terminal/terminal-colors';
+import { mixColor, toRgba } from '../terminal/color-utils';
 
 interface PaneRectangle {
   x: number;
@@ -24,12 +27,15 @@ interface CopyNotificationProps {
 const TOAST_WIDTH = 25;
 const TOAST_HEIGHT = 3;
 
-// Dark gray background with 80% opacity
-const DEFAULT_BG_COLOR = RGBA.fromInts(34, 36, 46, 204);
 const HEX_RGBA_RE = /^#?([0-9a-fA-F]{6})([0-9a-fA-F]{2})?$/;
+const AUTO_VALUE = 'auto';
+const BG_ALPHA = 204;
+const BG_BLEND = 0.05;
 
 function parseRgbaHex(value: string, fallback: RGBA): RGBA {
-  const match = HEX_RGBA_RE.exec(value);
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed || trimmed === AUTO_VALUE) return fallback;
+  const match = HEX_RGBA_RE.exec(trimmed);
   if (!match) return fallback;
   const hex = match[1];
   const alpha = match[2];
@@ -47,8 +53,22 @@ function parseRgbaHex(value: string, fallback: RGBA): RGBA {
  */
 export function CopyNotification(props: CopyNotificationProps) {
   const theme = useTheme();
+  const terminal = useTerminal();
   const copyColors = () => theme.ui.copyNotification;
-  const bgColor = () => parseRgbaHex(copyColors().backgroundColor, DEFAULT_BG_COLOR);
+  const palette = createMemo(() => {
+    void terminal.hostColorsVersion;
+    return getHostColors() ?? getDefaultColors();
+  });
+  const backgroundColor = createMemo(() => palette().background);
+  const foregroundColor = createMemo(() => palette().foreground);
+  const autoBgColor = createMemo(() =>
+    toRgba(mixColor(backgroundColor(), foregroundColor(), BG_BLEND), BG_ALPHA)
+  );
+  const autoTextColor = createMemo(() => toRgba(foregroundColor()));
+  const autoBorderColor = createMemo(() => parseRgbaHex(theme.pane.focusedBorderColor, autoTextColor()));
+  const bgColor = () => parseRgbaHex(copyColors().backgroundColor, autoBgColor());
+  const textColor = () => parseRgbaHex(copyColors().textColor, autoTextColor());
+  const borderColor = () => parseRgbaHex(copyColors().borderColor, autoBorderColor());
 
   return (
     <Show when={props.visible && props.paneRect}>
@@ -69,14 +89,14 @@ export function CopyNotification(props: CopyNotificationProps) {
               zIndex: 250,
               border: ['left', 'right'],
               borderStyle: 'single',
-              borderColor: copyColors().borderColor,
+              borderColor: borderColor(),
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
             <text
               style={{
-                fg: copyColors().textColor,
+                fg: textColor(),
               }}
               content="Copied to clipboard"
             />

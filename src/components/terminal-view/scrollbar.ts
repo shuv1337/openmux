@@ -3,13 +3,24 @@
  */
 import { RGBA, type OptimizedBuffer } from '@opentui/core'
 import type { TerminalCell } from '../../core/types'
-import {
-  getCachedRGBA,
-  SCROLLBAR_TRACK,
-  SCROLLBAR_THUMB,
-} from '../../terminal/rendering'
+import { getCachedRGBA } from '../../terminal/rendering'
+import { getDefaultColors, getHostColors } from '../../terminal/terminal-colors'
+import { mixColor, luminance, toRgba } from '../../terminal/color-utils'
 
 const TRANSPARENT_BG = RGBA.fromInts(0, 0, 0, 0)
+const TRACK_ALPHA = 160
+const THUMB_ALPHA = 200
+
+function getScrollbarColors(): { track: RGBA; thumb: RGBA } {
+  const palette = getHostColors() ?? getDefaultColors()
+  const isLight = luminance(palette.background) > 0.6
+  const track = mixColor(palette.background, palette.foreground, isLight ? 0.06 : 0.06)
+  const thumb = mixColor(palette.background, palette.foreground, isLight ? 0.38 : 0.38)
+  return {
+    track: toRgba(track, TRACK_ALPHA),
+    thumb: toRgba(thumb, THUMB_ALPHA),
+  }
+}
 
 export interface ScrollbarOptions {
   viewportOffset: number
@@ -56,6 +67,8 @@ export function renderScrollbar(
   const scrollbarX = offsetX + width - 1
   const contentCol = cols - 1 // Last column in terminal content
 
+  const colors = getScrollbarColors()
+
   for (let y = 0; y < rows; y++) {
     const isThumb = y >= thumbPosition && y < thumbPosition + thumbHeight
     // Get the underlying cell to preserve its character
@@ -69,7 +82,7 @@ export function renderScrollbar(
       y + offsetY,
       underlyingChar,
       underlyingFg,
-      isThumb ? SCROLLBAR_THUMB : SCROLLBAR_TRACK,
+      isThumb ? colors.thumb : colors.track,
       0
     )
   }
