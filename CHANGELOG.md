@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.114](https://github.com/monotykamary/openmux/compare/v0.2.113...v0.2.114) (2026-01-18)
+
+
+### Bug Fixes
+
+* **aggregate:** allow preview scrollback when inactive ([4a8957b](https://github.com/monotykamary/openmux/commit/4a8957b3db65667f84fb83a27f6c833b1f8d0a3f))
+
 ### [0.2.113](https://github.com/monotykamary/openmux/compare/v0.2.112...v0.2.113) (2026-01-18)
 
 
