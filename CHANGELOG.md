@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.113](https://github.com/monotykamary/openmux/compare/v0.2.112...v0.2.113) (2026-01-18)
+
+
+### Features
+
+* **theme:** derive scroll and toast colors ([8b47ee3](https://github.com/monotykamary/openmux/commit/8b47ee391f782434289db8c860b6b4ba8b2b085a))
+
 ### [0.2.112](https://github.com/monotykamary/openmux/compare/v0.2.111...v0.2.112) (2026-01-18)
 
 
