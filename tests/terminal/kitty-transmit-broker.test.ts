@@ -1,8 +1,9 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { describe, expect, it, vi } from 'vitest';
-import { KittyTransmitBroker } from '../../src/terminal/kitty-graphics/transmit-broker';
+import { beforeAll, describe, expect, it, vi } from "bun:test";
+
+let KittyTransmitBroker: typeof import('../../src/terminal/kitty-graphics/transmit-broker').KittyTransmitBroker;
 
 vi.mock('../../src/terminal/capabilities', () => ({
   getHostCapabilities: () => ({
@@ -33,6 +34,10 @@ function withStubEnv<T>(fn: () => T): T {
 }
 
 describe('KittyTransmitBroker', () => {
+  beforeAll(async () => {
+    ({ KittyTransmitBroker } = await import('../../src/terminal/kitty-graphics/transmit-broker'));
+  });
+
   it('forwards transmit payloads to the host writer', () => {
     const broker = new KittyTransmitBroker();
     const writes: string[] = [];

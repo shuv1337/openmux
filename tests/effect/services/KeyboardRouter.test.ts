@@ -1,7 +1,7 @@
 /**
  * Tests for KeyboardRouter module
  */
-import { describe, test, expect, beforeEach } from "vitest"
+import { describe, test, expect, beforeEach } from "bun:test"
 import {
   registerHandler,
   routeKey,

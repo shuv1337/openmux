@@ -2,7 +2,7 @@
  * Tests for GhosttyVtTerminal with mocked FFI bindings.
  */
 
-import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, vi } from "bun:test";
 
 const mockGhostty: { symbols: Record<string, any> } = { symbols: {} };
 

@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "bun:test";
+import * as fsActual from "node:fs";
+import * as osActual from "node:os";
 
 type MockStream = {
   on: ReturnType<typeof vi.fn>;
@@ -125,16 +127,22 @@ vi.mock("bun:ffi", () => ({
 }));
 
 vi.mock("node:fs", () => ({
-  default: {
-    createReadStream: mocks.createReadStream,
-  },
+  ...fsActual,
+  default: { ...fsActual, createReadStream: mocks.createReadStream },
   createReadStream: mocks.createReadStream,
 }));
 
-vi.mock("node:os", () => ({
-  default: { constants: { signals: { SIGUSR2: 12 } } },
-  constants: { signals: { SIGUSR2: 12 } },
-}));
+vi.mock("node:os", () => {
+  const constants = {
+    ...osActual.constants,
+    signals: { ...osActual.constants.signals, SIGUSR2: 12 },
+  };
+  return {
+    ...osActual,
+    constants,
+    default: { ...osActual, constants },
+  };
+});
 
 vi.mock("node:process", () => ({
   default: mocks.processMock,
@@ -151,13 +159,12 @@ vi.mock("../../../native/zig-pty/ts/lib-loader", () => ({
 }));
 
 const loadWatchSystemAppearance = async () => {
-  const mod = await import("../../../native/zig-pty/ts/index");
+  const mod = await import(`../../../native/zig-pty/ts/index?appearance=${Date.now()}`);
   return mod.watchSystemAppearance;
 };
 
 beforeEach(() => {
   mocks.reset();
-  vi.resetModules();
 });
 
 describe("watchSystemAppearance", () => {

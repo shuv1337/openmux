@@ -1,14 +1,13 @@
-import { describe, expect, test, vi } from "vitest";
-import { resolvePaneCwd } from "../../../src/components/app/pty-creation";
+import { beforeAll, describe, expect, test } from "bun:test";
 
-vi.mock("../../../src/effect/bridge", () => ({
-  getSessionCwd: () => undefined,
-  getSessionCommand: () => undefined,
-  isPtyCreated: () => false,
-  markPtyCreated: () => {},
-}));
+let resolvePaneCwd: typeof import("../../../src/components/app/pty-creation").resolvePaneCwd;
+
 
 describe("usePtyCreation", () => {
+  beforeAll(async () => {
+    ({ resolvePaneCwd } = await import("../../../src/components/app/pty-creation"));
+  });
+
   test("uses pending cwd promise for focused pane when session cwd is missing", async () => {
     let resolveCwd: (cwd: string | null) => void = () => {};
     const pendingPromise = new Promise<string | null>((resolve) => {

@@ -2,8 +2,8 @@
  * Tests for Clipboard service.
  * Uses per-test layer provision to ensure fresh state isolation.
  */
+import { describe, expect, it } from "bun:test"
 import { Effect, Layer } from "effect"
-import { describe, expect, it } from "@effect/vitest"
 import { Clipboard } from "../../../src/effect/services/Clipboard"
 
 describe("Clipboard", () => {
@@ -11,11 +11,11 @@ describe("Clipboard", () => {
     // Provide fresh layer for each test to ensure state isolation
     const runWithFreshLayer = <A, E>(
       effect: Effect.Effect<A, E, Clipboard>
-    ): Effect.Effect<A, E> =>
-      effect.pipe(Effect.provide(Layer.fresh(Clipboard.testLayer)))
+    ): Promise<A> =>
+      Effect.runPromise(effect.pipe(Effect.provide(Layer.fresh(Clipboard.testLayer))))
 
-    it.effect("writes and reads text", () =>
-      runWithFreshLayer(
+    it("writes and reads text", async () => {
+      await runWithFreshLayer(
         Effect.gen(function* () {
           const clipboard = yield* Clipboard
 
@@ -25,10 +25,10 @@ describe("Clipboard", () => {
           expect(text).toBe("Hello, World!")
         })
       )
-    )
+    })
 
-    it.effect("overwrites previous content", () =>
-      runWithFreshLayer(
+    it("overwrites previous content", async () => {
+      await runWithFreshLayer(
         Effect.gen(function* () {
           const clipboard = yield* Clipboard
 
@@ -39,10 +39,10 @@ describe("Clipboard", () => {
           expect(text).toBe("Second")
         })
       )
-    )
+    })
 
-    it.effect("starts empty", () =>
-      runWithFreshLayer(
+    it("starts empty", async () => {
+      await runWithFreshLayer(
         Effect.gen(function* () {
           const clipboard = yield* Clipboard
           const text = yield* clipboard.read()
@@ -50,6 +50,6 @@ describe("Clipboard", () => {
           expect(text).toBe("")
         })
       )
-    )
+    })
   })
 })

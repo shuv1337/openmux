@@ -2,7 +2,7 @@
  * Tests for focus and navigation layout reducer actions.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from "bun:test";
 import type { PaneData } from '../../../src/core/types';
 import { layoutReducer, generatePaneId } from '../../../src/core/operations/layout-actions';
 import {

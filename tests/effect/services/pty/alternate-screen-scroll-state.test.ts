@@ -2,7 +2,7 @@
  * Integration-ish tests for scroll state stability during alt-screen toggles.
  */
 
-import { describe, it, expect, vi } from "vitest"
+import { describe, it, expect, vi } from "bun:test"
 import { getCurrentScrollState } from "../../../../src/effect/services/pty/notification"
 import { extractSelectedText } from "../../../../src/core/coordinates/selection-coords"
 import type { ITerminalEmulator } from "../../../../src/terminal/emulator-interface"

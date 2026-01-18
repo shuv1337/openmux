@@ -1,27 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from "bun:test";
 
 import type { Workspaces } from '../../src/core/operations/layout-actions';
 import type { SessionState } from '../../src/core/operations/session-actions';
 import type { SessionMetadata, WorkspaceId } from '../../src/core/types';
-import { createSessionOperations } from '../../src/contexts/session-operations';
-import {
-  createSessionLegacy,
-  deleteSessionLegacy,
-  listSessionsLegacy,
-  loadSessionData,
-  saveCurrentSession,
-  switchToSession,
-} from '../../src/effect/bridge';
+let createSessionOperations: typeof import('../../src/contexts/session-operations').createSessionOperations;
+let createSessionLegacy: typeof import('../../src/effect/bridge').createSessionLegacy;
+let deleteSessionLegacy: typeof import('../../src/effect/bridge').deleteSessionLegacy;
+let listSessionsLegacy: typeof import('../../src/effect/bridge').listSessionsLegacy;
+let loadSessionData: typeof import('../../src/effect/bridge').loadSessionData;
+let saveCurrentSession: typeof import('../../src/effect/bridge').saveCurrentSession;
+let switchToSession: typeof import('../../src/effect/bridge').switchToSession;
 
-vi.mock('../../src/effect/bridge', () => ({
-  createSessionLegacy: vi.fn(),
-  listSessionsLegacy: vi.fn(),
-  renameSessionLegacy: vi.fn(),
-  deleteSessionLegacy: vi.fn(),
-  saveCurrentSession: vi.fn(),
-  loadSessionData: vi.fn(),
-  switchToSession: vi.fn(),
-}));
 
 const createMetadata = (id: string, name = id): SessionMetadata => ({
   id,
@@ -48,6 +37,18 @@ const createState = (overrides: Partial<SessionState> = {}): SessionState => ({
 });
 
 describe('createSessionOperations', () => {
+  beforeAll(async () => {
+    ({ createSessionOperations } = await import('../../src/contexts/session-operations'));
+    ({
+      createSessionLegacy,
+      deleteSessionLegacy,
+      listSessionsLegacy,
+      loadSessionData,
+      saveCurrentSession,
+      switchToSession,
+    } = await import('../../src/effect/bridge'));
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });

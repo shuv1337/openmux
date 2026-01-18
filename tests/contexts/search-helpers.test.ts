@@ -1,7 +1,7 @@
 /**
  * Tests for search helper functions
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from "bun:test";
 import type { TerminalCell } from '../../src/core/types';
 import type { SearchMatch } from '../../src/contexts/search/types';
 import {

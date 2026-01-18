@@ -1,7 +1,7 @@
 /**
  * Tests for PTY session factory exit hooks.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "bun:test"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -9,7 +9,8 @@ import { Effect } from "effect"
 import type { TerminalColors } from "../../../../src/terminal/terminal-colors"
 import { Cols, Rows } from "../../../../src/effect/types"
 import { ScrollbackArchiveManager } from "../../../../src/terminal/scrollback-archive"
-import { spawnAsync } from "../../../../native/zig-pty/ts/index"
+
+let spawnAsync: typeof import("../../../../native/zig-pty/ts/index").spawnAsync
 
 const { mockCreateGhosttyVTEmulator, mockGhosttySymbols } = vi.hoisted(() => ({
   mockCreateGhosttyVTEmulator: vi.fn(),
@@ -25,6 +26,7 @@ let createSession: typeof import("../../../../src/effect/services/pty/session-fa
 
 vi.mock("../../../../native/zig-pty/ts/index", () => ({
   spawnAsync: vi.fn(),
+  watchSystemAppearance: vi.fn(() => null),
 }))
 
 vi.mock("../../../../src/terminal/ghostty-vt/emulator", () => ({
@@ -56,6 +58,7 @@ vi.mock("../../../../src/effect/services/pty/query-setup", () => ({
 describe("createSession", () => {
   beforeEach(async () => {
     ;({ createSession } = await import("../../../../src/effect/services/pty/session-factory"))
+    ;({ spawnAsync } = await import("../../../../native/zig-pty/ts/index"))
   })
 
   beforeEach(() => {

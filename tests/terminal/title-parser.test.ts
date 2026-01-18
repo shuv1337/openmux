@@ -2,7 +2,7 @@
  * Tests for OSC Title Parser
  * Verifies parsing of terminal title escape sequences (OSC 0/1/2)
  */
-import { describe, test, expect, vi } from 'vitest'
+import { describe, test, expect, vi } from "bun:test"
 import { createTitleParser } from '../../src/terminal/title-parser'
 
 describe('Title Parser', () => {

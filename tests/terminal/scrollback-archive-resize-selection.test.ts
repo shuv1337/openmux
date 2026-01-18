@@ -5,7 +5,7 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { describe, it, expect } from "vitest"
+import { describe, it, expect } from "bun:test"
 import { ArchivedTerminalEmulator } from "../../src/terminal/archived-emulator"
 import { ScrollbackArchive } from "../../src/terminal/scrollback-archive"
 import { extractSelectedText } from "../../src/core/coordinates/selection-coords"

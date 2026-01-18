@@ -2,7 +2,7 @@
  * Tests for OSC stripping used by ghostty-vt emulator.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { stripProblematicOscSequences } from "../../src/terminal/ghostty-vt/osc-stripping";
 
 describe("stripProblematicOscSequences", () => {

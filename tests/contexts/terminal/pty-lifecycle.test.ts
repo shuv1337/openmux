@@ -1,18 +1,13 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "bun:test";
 
 import type { TerminalScrollState } from "../../../src/core/types";
 import type { ITerminalEmulator } from "../../../src/terminal/emulator-interface";
-import { createPtyLifecycleHandlers } from "../../../src/contexts/terminal/pty-lifecycle";
-import { createPtySession, destroyPty } from "../../../src/effect/bridge";
-import { clearPtyCaches, subscribeToPtyExit, subscribeToPtyWithCaches } from "../../../src/hooks/usePtySubscription";
-
-vi.mock("../../../src/effect/bridge", () => ({
-  createPtySession: vi.fn(),
-  destroyPty: vi.fn(),
-  destroyAllPtys: vi.fn(),
-  getActiveSessionIdForShim: vi.fn(),
-  registerPtyPane: vi.fn(),
-}));
+let createPtyLifecycleHandlers: typeof import("../../../src/contexts/terminal/pty-lifecycle").createPtyLifecycleHandlers;
+let createPtySession: typeof import("../../../src/effect/bridge").createPtySession;
+let destroyPty: typeof import("../../../src/effect/bridge").destroyPty;
+let clearPtyCaches: typeof import("../../../src/hooks/usePtySubscription").clearPtyCaches;
+let subscribeToPtyExit: typeof import("../../../src/hooks/usePtySubscription").subscribeToPtyExit;
+let subscribeToPtyWithCaches: typeof import("../../../src/hooks/usePtySubscription").subscribeToPtyWithCaches;
 
 vi.mock("../../../src/hooks/usePtySubscription", () => ({
   subscribeToPtyWithCaches: vi.fn(),
@@ -22,6 +17,13 @@ vi.mock("../../../src/hooks/usePtySubscription", () => ({
 }));
 
 describe("createPtyLifecycleHandlers", () => {
+  beforeAll(async () => {
+    ({ createPtyLifecycleHandlers } = await import("../../../src/contexts/terminal/pty-lifecycle"));
+    ({ createPtySession, destroyPty } = await import("../../../src/effect/bridge"));
+    ({ clearPtyCaches, subscribeToPtyExit, subscribeToPtyWithCaches } =
+      await import("../../../src/hooks/usePtySubscription"));
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });

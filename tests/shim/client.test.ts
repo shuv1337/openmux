@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, test, vi } from "bun:test";
 
 const ptyStates = new Map<string, { title: string }>();
 
@@ -21,11 +21,18 @@ vi.mock('../../src/shim/client/connection', () => ({
   sendRequest: vi.fn(),
 }));
 
-import { getTitle } from '../../src/shim/client';
-import { getPtyState, handlePtyTitle } from '../../src/shim/client/state';
-import { sendRequest } from '../../src/shim/client/connection';
+let getTitle: typeof import('../../src/shim/client').getTitle;
+let getPtyState: typeof import('../../src/shim/client/state').getPtyState;
+let handlePtyTitle: typeof import('../../src/shim/client/state').handlePtyTitle;
+let sendRequest: typeof import('../../src/shim/client/connection').sendRequest;
 
 describe('shim client getTitle', () => {
+  beforeAll(async () => {
+    ({ getTitle } = await import('../../src/shim/client'));
+    ({ getPtyState, handlePtyTitle } = await import('../../src/shim/client/state'));
+    ({ sendRequest } = await import('../../src/shim/client/connection'));
+  });
+
   beforeEach(() => {
     ptyStates.clear();
     vi.clearAllMocks();

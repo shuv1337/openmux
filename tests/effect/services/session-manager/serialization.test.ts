@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "bun:test"
 
 import { SessionMetadata } from "../../../../src/effect/models"
 import { serializeSession } from "../../../../src/effect/services/session-manager/serialization"

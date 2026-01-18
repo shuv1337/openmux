@@ -1,3 +1,7 @@
 # Solid.js JSX transform preload
 
 [test]
+preload = ["./tests/setup.ts"]
+timeout = 10000
+coverageReporter = ["text", "lcov"]
+coveragePathIgnorePatterns = ["**/*.test.ts", "**/*.test.tsx", "**/*.d.ts"]

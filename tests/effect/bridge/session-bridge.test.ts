@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "bun:test"
 
 import type { Workspace, WorkspaceId } from "../../../src/core/types"
 import type { Workspaces } from "../../../src/core/operations/layout-actions"

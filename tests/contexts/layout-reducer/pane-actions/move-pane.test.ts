@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from "bun:test";
 import type { PaneData, SplitNode } from '../../../../src/core/types';
 import { layoutReducer, generatePaneId } from '../../../../src/core/operations/layout-actions';
 import { collectPanes, isSplitNode } from '../../../../src/core/layout-tree';

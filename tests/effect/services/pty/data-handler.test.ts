@@ -1,7 +1,7 @@
 /**
  * Tests for PTY data handler scheduling and sync buffering.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "bun:test"
 import { createDataHandler } from "../../../../src/effect/services/pty/data-handler"
 import { createSyncModeParser } from "../../../../src/terminal/sync-mode-parser"
 import type { InternalPtySession } from "../../../../src/effect/services/pty/types"

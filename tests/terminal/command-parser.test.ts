@@ -1,7 +1,7 @@
 /*
  * Tests for OSC command parsing and notifications.
  */
-import { describe, test, expect, vi } from 'vitest'
+import { describe, test, expect, vi } from "bun:test"
 import { createCommandParser } from '../../src/terminal/command-parser'
 
 describe('Command Parser', () => {

@@ -2,7 +2,7 @@
  * Tests for Effect domain models and schemas.
  */
 import { Schema } from "effect"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "bun:test"
 import {
   PaneId,
   PtyId,

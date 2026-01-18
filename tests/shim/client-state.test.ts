@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "bun:test";
 import type { TerminalCell, TerminalState, UnifiedTerminalUpdate } from '../../src/core/types';
 import {
   deletePtyState,

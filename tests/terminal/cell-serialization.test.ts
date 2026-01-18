@@ -3,7 +3,7 @@
  * These utilities pack/unpack terminal cells for efficient Web Worker transfer
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from "bun:test";
 import {
   packCells,
   unpackCells,

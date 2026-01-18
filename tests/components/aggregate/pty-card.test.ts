@@ -1,7 +1,7 @@
 /**
  * Tests for PtyCard diff stat rendering behavior.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { PtyCard } from "../../../src/components/aggregate/PtyCard";
 import type { GitDiffStats, PtyInfo } from "../../../src/contexts/aggregate-view-types";
 import { DEFAULT_THEME } from "../../../src/core/config";

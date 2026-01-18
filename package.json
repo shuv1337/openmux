@@ -21,14 +21,14 @@
     "install:local": "./scripts/build.sh --install",
     "update:submodules": "./scripts/update-submodules.sh",
     "prepare": "effect-language-service patch",
-    "test": "vitest run && (cd native/zig-pty && zig build test --summary all) && (cd native/zig-git && zig build test --summary all) && bun run test:zig-ghostty-wrapper",
-    "test:ts": "vitest run",
+    "test": "bun test && (cd native/zig-pty && zig build test --summary all) && (cd native/zig-git && zig build test --summary all) && bun run test:zig-ghostty-wrapper",
+    "test:ts": "bun test",
     "test:pty": "cd native/zig-pty && zig build test --summary all",
     "test:git": "cd native/zig-git && zig build test --summary all",
     "test:zig-ghostty-wrapper": "./scripts/test-ghostty-vt.sh",
     "test:ghostty-wrapper": "bun run test:zig-ghostty-wrapper",
     "test:ghostty-vt": "bun run test:zig-ghostty-wrapper",
-    "test:watch": "vitest",
+    "test:watch": "bun test --watch",
     "check:circular": "bunx madge --circular --extensions ts,tsx src/",
     "lint:effect": "effect-language-service diagnostics --format pretty --project ./tsconfig.json",
     "lint:ts": "eslint src",
@@ -67,14 +67,11 @@
   "devDependencies": {
     "@effect/eslint-plugin": "^0.3.2",
     "@effect/language-service": "^0.60.0",
-    "@effect/vitest": "^0.27.0",
     "@types/bun": "latest",
     "@typescript-eslint/eslint-plugin": "^8.53.0",
     "@typescript-eslint/parser": "^8.53.0",
-    "@vitest/coverage-v8": "^4.0.17",
     "eslint": "^9.39.2",
-    "standard-version": "^9.5.0",
-    "vitest": "^4.0.17"
+    "standard-version": "^9.5.0"
   },
   "peerDependencies": {
     "typescript": "^5.9.3"

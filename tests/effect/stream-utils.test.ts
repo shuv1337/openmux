@@ -1,7 +1,7 @@
 /**
  * Tests for Stream utilities.
  */
-import { describe, test, expect, vi } from 'vitest'
+import { describe, test, expect, vi } from "bun:test"
 import { Chunk, Duration, Effect, Schedule, Stream } from 'effect'
 import { runStream, streamFromSubscription } from '../../src/effect/stream-utils'
 

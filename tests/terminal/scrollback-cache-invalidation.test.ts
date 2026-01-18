@@ -13,7 +13,7 @@
  * new content arrives, AND prevents flicker from in-place animations.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from "bun:test";
 import type { DirtyTerminalUpdate, TerminalCell, TerminalScrollState } from '../../src/core/types';
 import type { TerminalColors } from '../../src/terminal/terminal-colors';
 

@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test, vi } from "bun:test";
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -6,6 +6,15 @@ import type { Workspace } from '../../src/core/types';
 import type { LayoutState } from '../../src/core/operations/layout-actions';
 import { DEFAULT_CONFIG } from '../../src/core/config';
 import type { ITerminalEmulator } from '../../src/terminal/emulator-interface';
+
+const mockControlProtocol = async () => {
+  const protocol = await import('../../src/control/protocol');
+  vi.mock('../../src/control/protocol', () => ({
+    ...protocol,
+    CONTROL_SOCKET_DIR: process.env.OPENMUX_CONTROL_SOCKET_DIR,
+    CONTROL_SOCKET_PATH: process.env.OPENMUX_CONTROL_SOCKET_PATH,
+  }));
+};
 
 function createLayoutState(workspace: Workspace): LayoutState {
   return {
@@ -24,7 +33,7 @@ describe('control server smoke', () => {
     process.env.OPENMUX_CONTROL_SOCKET_DIR = tempDir;
     process.env.OPENMUX_CONTROL_SOCKET_PATH = path.join(tempDir, 'openmux-ui.sock');
 
-    vi.resetModules();
+    await mockControlProtocol();
 
     const { startControlServer } = await import('../../src/control/server');
     const { connectControlClient } = await import('../../src/control/client');

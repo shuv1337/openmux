@@ -2,7 +2,7 @@
  * Tests for terminal query detection.
  */
 
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect } from "bun:test";
 import { mightContainQueries } from '../../../src/terminal/terminal-query-passthrough/parser';
 import {
   ESC,

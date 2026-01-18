@@ -1,7 +1,7 @@
 /**
  * Tests for GhosttyVTEmulator update gating.
  */
-import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest"
+import { describe, it, expect, beforeAll, beforeEach, vi } from "bun:test"
 import { DirtyState } from "../../src/terminal/ghostty-vt/types"
 import { getDefaultColors } from "../../src/terminal/terminal-colors"
 

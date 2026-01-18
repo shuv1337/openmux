@@ -1,7 +1,7 @@
 /**
  * Tests for sync mode parser (DEC Mode 2026)
  */
-import { describe, test, expect } from 'vitest'
+import { describe, test, expect } from "bun:test"
 import { createSyncModeParser } from '../../src/terminal/sync-mode-parser'
 
 const SYNC_SET = '\x1b[?2026h'

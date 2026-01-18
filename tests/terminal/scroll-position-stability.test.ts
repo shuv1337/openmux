@@ -8,7 +8,7 @@
  * 4. Stale cache entries are cleared when content shifts (at scrollback limit)
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from "bun:test";
 import type { TerminalCell } from '../../src/core/types';
 
 describe('scroll-position-stability', () => {

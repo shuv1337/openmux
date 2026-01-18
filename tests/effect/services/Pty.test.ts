@@ -2,8 +2,8 @@
  * Tests for Pty service types and testLayer behavior.
  * Note: Full PTY integration tests require bun runtime due to zig-pty.
  */
-import { Effect, Context, Layer } from "effect"
-import { describe, expect, layer, it as vitestIt } from "@effect/vitest"
+import { describe, expect, it } from "bun:test"
+import { Context, Effect, Layer } from "effect"
 import { Cols, Rows, makePtyId, PtyId } from "../../../src/effect/types"
 import { PtySession } from "../../../src/effect/models"
 
@@ -47,8 +47,11 @@ class MockPty extends Context.Tag("@openmux/MockPty")<
 
 describe("Pty", () => {
   describe("testLayer behavior", () => {
-    layer(MockPty.testLayer)((it) => {
-      it.effect("creates a PTY session", () =>
+    const runWithLayer = <A, E>(effect: Effect.Effect<A, E, MockPty>) =>
+      Effect.runPromise(effect.pipe(Effect.provide(MockPty.testLayer)))
+
+    it("creates a PTY session", async () => {
+      await runWithLayer(
         Effect.gen(function* () {
           const pty = yield* MockPty
 
@@ -62,8 +65,10 @@ describe("Pty", () => {
           expect(ptyId).toContain("pty-")
         })
       )
+    })
 
-      it.effect("gets session info", () =>
+    it("gets session info", async () => {
+      await runWithLayer(
         Effect.gen(function* () {
           const pty = yield* MockPty
 
@@ -81,8 +86,10 @@ describe("Pty", () => {
           expect(session.shell).toBe("/bin/bash")
         })
       )
+    })
 
-      it.effect("gets CWD", () =>
+    it("gets CWD", async () => {
+      await runWithLayer(
         Effect.gen(function* () {
           const pty = yield* MockPty
 
@@ -96,8 +103,10 @@ describe("Pty", () => {
           expect(cwd).toBe("/test/cwd")
         })
       )
+    })
 
-      it.effect("writes to PTY without error", () =>
+    it("writes to PTY without error", async () => {
+      await runWithLayer(
         Effect.gen(function* () {
           const pty = yield* MockPty
 
@@ -109,8 +118,10 @@ describe("Pty", () => {
           yield* pty.write(ptyId, "echo hello")
         })
       )
+    })
 
-      it.effect("resizes PTY without error", () =>
+    it("resizes PTY without error", async () => {
+      await runWithLayer(
         Effect.gen(function* () {
           const pty = yield* MockPty
 
@@ -122,8 +133,10 @@ describe("Pty", () => {
           yield* pty.resize(ptyId, Cols.make(120), Rows.make(40))
         })
       )
+    })
 
-      it.effect("destroys PTY session", () =>
+    it("destroys PTY session", async () => {
+      await runWithLayer(
         Effect.gen(function* () {
           const pty = yield* MockPty
 
@@ -135,8 +148,10 @@ describe("Pty", () => {
           yield* pty.destroy(ptyId)
         })
       )
+    })
 
-      it.effect("destroys all PTY sessions", () =>
+    it("destroys all PTY sessions", async () => {
+      await runWithLayer(
         Effect.gen(function* () {
           const pty = yield* MockPty
 
@@ -150,7 +165,7 @@ describe("Pty", () => {
   })
 
   describe("PtySession model", () => {
-    vitestIt("creates valid PtySession", () => {
+    it("creates valid PtySession", () => {
       const session = PtySession.make({
         id: PtyId.make("test-pty-1"),
         pid: 9999,
@@ -170,7 +185,7 @@ describe("Pty", () => {
   })
 
   describe("makePtyId", () => {
-    vitestIt("generates unique IDs", () => {
+    it("generates unique IDs", () => {
       const id1 = makePtyId()
       const id2 = makePtyId()
       const id3 = makePtyId()
@@ -180,7 +195,7 @@ describe("Pty", () => {
       expect(id1).not.toBe(id3)
     })
 
-    vitestIt("generates IDs with correct prefix", () => {
+    it("generates IDs with correct prefix", () => {
       const id = makePtyId()
       expect(id.startsWith("pty-")).toBe(true)
     })

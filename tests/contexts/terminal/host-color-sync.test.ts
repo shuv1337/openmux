@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "bun:test";
 
-import { createHostColorSync } from "../../../src/contexts/terminal/host-color-sync";
 import type { TerminalColors } from "../../../src/terminal/terminal-colors";
+import { effectBridgeMocks } from "../../mocks/effect-bridge";
 
+let createHostColorSync: typeof import("../../../src/contexts/terminal/host-color-sync").createHostColorSync;
 const mocks = vi.hoisted(() => {
   const schemeListenerRef: { current: ((scheme: "light" | "dark") => void) | null } = { current: null };
   const appearanceTriggerRef: { current: (() => void) | null } = { current: null };
@@ -18,7 +19,7 @@ const mocks = vi.hoisted(() => {
     refreshHostColorsCache: vi.fn(),
     setHostColors: vi.fn(),
     setHostCapabilitiesColors: vi.fn(),
-    applyHostColors: vi.fn(),
+    applyHostColors: effectBridgeMocks.applyHostColors,
     watchSystemAppearance: vi.fn(),
   };
 });
@@ -52,11 +53,8 @@ vi.mock("../../../src/terminal", () => ({
   setHostCapabilitiesColors: mocks.setHostCapabilitiesColors,
 }));
 
-vi.mock("../../../src/effect/bridge", () => ({
-  applyHostColors: mocks.applyHostColors,
-}));
-
 vi.mock("../../../native/zig-pty/ts/index", () => ({
+  spawnAsync: vi.fn(),
   watchSystemAppearance: (cb: () => void) => {
     mocks.appearanceTriggerRef.current = cb;
     return vi.fn();
@@ -75,6 +73,10 @@ describe("createHostColorSync", () => {
   const bumpHostColorsVersion = vi.fn();
   const isActive = () => true;
   const originalHome = process.env.HOME;
+
+  beforeAll(async () => {
+    ({ createHostColorSync } = await import("../../../src/contexts/terminal/host-color-sync"));
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "bun:test";
 import type { PaneData } from '../../src/core/types';
 import { DEFAULT_CONFIG } from '../../src/core/config';
 import { pruneMissingPanes } from '../../src/components/session-bridge-utils';

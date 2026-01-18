@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "bun:test";
 import type { ITerminalEmulator, KittyGraphicsImageInfo } from '../../src/terminal/emulator-interface';
 import { KittyGraphicsCompression, KittyGraphicsFormat } from '../../src/terminal/emulator-interface';
 import { createKittyHandlers } from '../../src/shim/server/kitty';

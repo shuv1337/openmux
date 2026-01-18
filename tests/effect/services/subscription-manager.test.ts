@@ -2,7 +2,7 @@
  * Tests for SubscriptionRegistry
  * Verifies Effect-based subscription management with synchronous cleanup
  */
-import { describe, test, expect, vi } from 'vitest'
+import { describe, test, expect, vi } from "bun:test"
 import { Effect, Logger, LogLevel } from 'effect'
 import {
   makeSubscriptionRegistry,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "bun:test";
 
 import { createOverlayVimMode } from '../../../src/components/app/overlay-vim-mode';
 import type { CommandPaletteState } from '../../../src/components/CommandPalette';

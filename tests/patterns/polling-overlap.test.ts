@@ -3,7 +3,7 @@
  * Verifies that the `refreshInProgress` flag correctly prevents
  * overlapping async refresh calls from causing issues.
  */
-import { describe, test, expect, vi } from 'vitest'
+import { describe, test, expect, vi } from "bun:test"
 
 /**
  * Simulates the refresh overlap prevention pattern used in AggregateViewContext.

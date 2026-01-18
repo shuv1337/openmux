@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
 import type { ITerminalEmulator } from '../../../src/terminal/emulator-interface';
 import { createImageInfo, createPlacement, defaultRenderTarget, sendKittyTransmit } from './helpers';
 

@@ -2,7 +2,7 @@
  * Tests for scrollback cache invalidation on alternate screen transitions.
  */
 
-import { describe, it, expect } from "vitest"
+import { describe, it, expect } from "bun:test"
 import { shouldClearCacheOnUpdate } from "../../src/terminal/emulator-utils/scrollback-cache"
 import type { DirtyTerminalUpdate, TerminalCell } from "../../src/core/types"
 import type { TerminalModes } from "../../src/terminal/emulator-interface"

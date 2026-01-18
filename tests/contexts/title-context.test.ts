@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "bun:test";
 import { createRoot } from 'solid-js';
 
 import { createTitleStore } from '../../src/contexts/TitleContext';

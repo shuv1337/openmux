@@ -2,7 +2,7 @@
  * Tests for the layout reducer helper functions.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from "bun:test";
 import { createWorkspace, getActiveWorkspace, generatePaneId } from '../../../src/core/operations/layout-actions';
 import { createInitialState, createWorkspaceWithPanes, setupLayoutReducerTest } from './fixtures';
 

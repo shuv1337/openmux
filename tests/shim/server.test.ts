@@ -1,7 +1,7 @@
 import net from 'net';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "bun:test";
 import fs from 'fs/promises';
 
 import { encodeFrame, FrameReader, type ShimHeader } from '../../src/shim/protocol';

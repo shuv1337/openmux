@@ -3,7 +3,7 @@
  * Verifies that the `mounted` flag pattern correctly handles the race
  * where a component unmounts before async registration completes.
  */
-import { describe, test, expect, vi } from 'vitest'
+import { describe, test, expect, vi } from "bun:test"
 
 /**
  * Simulates the async registration pattern used in components.

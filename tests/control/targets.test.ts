@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "bun:test";
 import type { Workspace, WorkspaceId } from '../../src/core/types';
 import type { LayoutState } from '../../src/core/operations/layout-actions';
 import { DEFAULT_CONFIG } from '../../src/core/config';

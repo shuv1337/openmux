@@ -1,9 +1,10 @@
 /**
  * Tests for processNormalModeKey keyboard forwarding behavior.
  */
-import { beforeEach, describe, expect, test, vi } from "vitest";
-import { processNormalModeKey } from "../../../src/components/app/key-processor";
-import { encodeKeyForEmulator } from "../../../src/terminal/key-encoder";
+import { beforeAll, beforeEach, describe, expect, test, vi } from "bun:test";
+
+let processNormalModeKey: typeof import("../../../src/components/app/key-processor").processNormalModeKey;
+let encodeKeyForEmulator: typeof import("../../../src/terminal/key-encoder").encodeKeyForEmulator;
 
 vi.mock("../../../src/terminal/key-encoder", () => ({
   encodeKeyForEmulator: vi.fn(),
@@ -14,6 +15,11 @@ describe("processNormalModeKey", () => {
   const getFocusedEmulator = vi.fn(() => emulator);
   const writeToFocused = vi.fn();
   const clearAllSelections = vi.fn();
+
+  beforeAll(async () => {
+    ({ processNormalModeKey } = await import("../../../src/components/app/key-processor"));
+    ({ encodeKeyForEmulator } = await import("../../../src/terminal/key-encoder"));
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
