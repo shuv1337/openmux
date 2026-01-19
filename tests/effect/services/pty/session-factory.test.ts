@@ -40,18 +40,6 @@ vi.mock("../../../../src/terminal/capabilities", () => ({
   getCapabilityEnvironment: vi.fn(() => ({})),
 }))
 
-vi.mock("../../../../src/effect/services/pty/notification", () => ({
-  notifySubscribers: vi.fn(),
-}))
-
-vi.mock("../../../../src/effect/services/pty/data-handler", () => ({
-  createDataHandler: vi.fn(() => ({ handleData: vi.fn() })),
-}))
-
-vi.mock("../../../../src/effect/services/pty/query-setup", () => ({
-  setupQueryPassthrough: vi.fn(),
-}))
-
 describe("createSession", () => {
   beforeEach(async () => {
     ;({ createSession } = await import("../../../../src/effect/services/pty/session-factory"))

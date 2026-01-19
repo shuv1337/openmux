@@ -8,7 +8,7 @@ import { mockGhostty, resetGhosttySymbols } from "../mocks/ghostty-ffi";
 let GhosttyVtTerminal: typeof import("../../src/terminal/ghostty-vt/terminal").GhosttyVtTerminal;
 
 beforeAll(async () => {
-  ({ GhosttyVtTerminal } = await import("../../src/terminal/ghostty-vt/terminal"));
+  ({ GhosttyVtTerminal } = await import(`../../src/terminal/ghostty-vt/terminal?test=${Date.now()}`));
 });
 
 beforeEach(() => {
