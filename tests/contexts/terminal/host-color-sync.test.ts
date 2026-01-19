@@ -1,9 +1,14 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "bun:test";
+import * as fsActual from "node:fs";
 
+import * as capabilitiesActual from "../../../src/terminal/capabilities";
+import * as hostColorSchemeActual from "../../../src/terminal/host-color-scheme";
+import * as terminalColorsActual from "../../../src/terminal/terminal-colors";
 import type { TerminalColors } from "../../../src/terminal/terminal-colors";
 import { effectBridgeMocks } from "../../mocks/effect-bridge";
 
 let createHostColorSync: typeof import("../../../src/contexts/terminal/host-color-sync").createHostColorSync;
+const originalPlatform = Object.getOwnPropertyDescriptor(process, "platform");
 const mocks = vi.hoisted(() => {
   const schemeListenerRef: { current: ((scheme: "light" | "dark") => void) | null } = { current: null };
   const appearanceTriggerRef: { current: (() => void) | null } = { current: null };
@@ -30,12 +35,14 @@ vi.mock("node:fs", () => {
     return { close: mocks.watchClose };
   };
   return {
-    default: { watch },
+    ...fsActual,
+    default: { ...fsActual, watch },
     watch,
   };
 });
 
 vi.mock("../../../src/terminal/terminal-colors", () => ({
+  ...terminalColorsActual,
   areTerminalColorsEqual: mocks.areTerminalColorsEqual,
   getHostColors: mocks.getHostColors,
   refreshHostColors: mocks.refreshHostColorsCache,
@@ -43,13 +50,15 @@ vi.mock("../../../src/terminal/terminal-colors", () => ({
 }));
 
 vi.mock("../../../src/terminal/host-color-scheme", () => ({
+  ...hostColorSchemeActual,
   onHostColorScheme: (listener: (scheme: "light" | "dark") => void) => {
     mocks.schemeListenerRef.current = listener;
     return vi.fn();
   },
 }));
 
-vi.mock("../../../src/terminal", () => ({
+vi.mock("../../../src/terminal/capabilities", () => ({
+  ...capabilitiesActual,
   setHostCapabilitiesColors: mocks.setHostCapabilitiesColors,
 }));
 
@@ -80,6 +89,9 @@ describe("createHostColorSync", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    if (originalPlatform) {
+      Object.defineProperty(process, "platform", { ...originalPlatform, value: "darwin" });
+    }
     process.env.HOME = "/tmp";
     mocks.areTerminalColorsEqual.mockReturnValue(false);
     mocks.applyHostColors.mockResolvedValue(undefined);
@@ -87,6 +99,9 @@ describe("createHostColorSync", () => {
 
   afterEach(() => {
     process.env.HOME = originalHome;
+    if (originalPlatform) {
+      Object.defineProperty(process, "platform", originalPlatform);
+    }
     vi.useRealTimers();
   });
 

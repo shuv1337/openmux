@@ -1,6 +1,7 @@
 import { mock, vi } from "bun:test";
 import * as solidJsxRuntime from "solid-js/h/jsx-runtime";
 import { effectBridgeMocks } from "./mocks/effect-bridge";
+import { mockGhostty } from "./mocks/ghostty-ffi";
 
 type ViCompat = typeof vi & {
   mocked?: <T>(value: T) => T;
@@ -48,3 +49,4 @@ if (!viCompat.runAllTimersAsync) {
 mock.module("@opentui/solid/jsx-runtime", () => solidJsxRuntime);
 mock.module("@opentui/solid/jsx-dev-runtime", () => solidJsxRuntime);
 mock.module("../src/effect/bridge", () => effectBridgeMocks);
+mock.module("../src/terminal/ghostty-vt/ffi", () => ({ ghostty: mockGhostty }));

@@ -3,12 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll, beforeEach, vi } from "bun:test";
-
-const mockGhostty: { symbols: Record<string, any> } = { symbols: {} };
-
-vi.mock("../../src/terminal/ghostty-vt/ffi", () => ({
-  ghostty: mockGhostty,
-}));
+import { mockGhostty, resetGhosttySymbols } from "../mocks/ghostty-ffi";
 
 let GhosttyVtTerminal: typeof import("../../src/terminal/ghostty-vt/terminal").GhosttyVtTerminal;
 
@@ -17,7 +12,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  mockGhostty.symbols = {};
+  resetGhosttySymbols();
 });
 
 const CELL_SIZE = 16;

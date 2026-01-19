@@ -2,10 +2,12 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { beforeAll, describe, expect, it, vi } from "bun:test";
+import * as capabilitiesActual from '../../src/terminal/capabilities';
 
 let KittyTransmitBroker: typeof import('../../src/terminal/kitty-graphics/transmit-broker').KittyTransmitBroker;
 
 vi.mock('../../src/terminal/capabilities', () => ({
+  ...capabilitiesActual,
   getHostCapabilities: () => ({
     terminalName: 'kitty',
     da1Response: null,

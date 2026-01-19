@@ -7,8 +7,10 @@ import os from "node:os"
 import path from "node:path"
 import { Effect } from "effect"
 import type { TerminalColors } from "../../../../src/terminal/terminal-colors"
+import * as capabilitiesActual from "../../../../src/terminal/capabilities"
 import { Cols, Rows } from "../../../../src/effect/types"
 import { ScrollbackArchiveManager } from "../../../../src/terminal/scrollback-archive"
+import { mockGhostty, resetGhosttySymbols } from "../../../mocks/ghostty-ffi"
 
 let spawnAsync: typeof import("../../../../native/zig-pty/ts/index").spawnAsync
 
@@ -33,13 +35,8 @@ vi.mock("../../../../src/terminal/ghostty-vt/emulator", () => ({
   createGhosttyVTEmulator: mockCreateGhosttyVTEmulator,
 }))
 
-vi.mock("../../../../src/terminal/ghostty-vt/ffi", () => ({
-  ghostty: {
-    symbols: mockGhosttySymbols,
-  },
-}))
-
 vi.mock("../../../../src/terminal/capabilities", () => ({
+  ...capabilitiesActual,
   getCapabilityEnvironment: vi.fn(() => ({})),
 }))
 
@@ -63,6 +60,8 @@ describe("createSession", () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    resetGhosttySymbols()
+    mockGhostty.symbols = mockGhosttySymbols
   })
 
   it("notifies onExit hook when the PTY exits", async () => {

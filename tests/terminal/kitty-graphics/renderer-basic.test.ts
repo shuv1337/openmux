@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
 import type { ITerminalEmulator } from '../../../src/terminal/emulator-interface';
+import * as capabilitiesActual from '../../../src/terminal/capabilities';
 import { createImageInfo, createPlacement, defaultRenderTarget, sendKittyTransmit } from './helpers';
 
 let KittyGraphicsRenderer: typeof import('../../../src/terminal/kitty-graphics').KittyGraphicsRenderer;
@@ -7,6 +8,7 @@ let KittyTransmitBroker: typeof import('../../../src/terminal/kitty-graphics').K
 let setKittyTransmitBroker: typeof import('../../../src/terminal/kitty-graphics').setKittyTransmitBroker;
 
 vi.mock('../../../src/terminal/capabilities', () => ({
+  ...capabilitiesActual,
   getHostCapabilities: () => ({
     terminalName: 'kitty',
     da1Response: null,

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { setHostCapabilitiesColors } from '../../terminal';
+import { setHostCapabilitiesColors } from '../../terminal/capabilities';
 import {
   areTerminalColorsEqual,
   getHostColors,
