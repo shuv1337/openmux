@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.116](https://github.com/monotykamary/openmux/compare/v0.2.115...v0.2.116) (2026-01-22)
+
+
+### Bug Fixes
+
+* **zig-ghostty-wrapper:** align wrapper with ghostty api ([e101a7c](https://github.com/monotykamary/openmux/commit/e101a7ca11720e5eec3e10d25f7f56ffa15484bb))
+
 ### [0.2.115](https://github.com/monotykamary/openmux/compare/v0.2.114...v0.2.115) (2026-01-22)
 
 
