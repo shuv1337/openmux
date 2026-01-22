@@ -68,8 +68,8 @@
     "@effect/eslint-plugin": "^0.3.2",
     "@effect/language-service": "^0.60.0",
     "@types/bun": "latest",
-    "@typescript-eslint/eslint-plugin": "^8.53.0",
-    "@typescript-eslint/parser": "^8.53.0",
+    "@typescript-eslint/eslint-plugin": "^8.53.1",
+    "@typescript-eslint/parser": "^8.53.1",
     "eslint": "^9.39.2",
     "standard-version": "^9.5.0"
   },
