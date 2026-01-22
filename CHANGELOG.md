@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.115](https://github.com/monotykamary/openmux/compare/v0.2.114...v0.2.115) (2026-01-22)
+
+
+### Bug Fixes
+
+* **test:** prevent module mock leakage ([a54e1f6](https://github.com/monotykamary/openmux/commit/a54e1f6830ff541c7051081cf620639cbc3b73f9))
+* **test:** stabilize bun mocks on linux ([7f0c043](https://github.com/monotykamary/openmux/commit/7f0c043d768f9cd07ea30bcbe1d59916c9663764))
+
 ### [0.2.114](https://github.com/monotykamary/openmux/compare/v0.2.113...v0.2.114) (2026-01-18)
 
 
