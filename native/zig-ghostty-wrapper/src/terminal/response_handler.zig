@@ -97,8 +97,8 @@ pub const ResponseHandler = struct {
             .delete_lines => self.terminal.deleteLines(value),
             .scroll_up => try self.terminal.scrollUp(value),
             .scroll_down => self.terminal.scrollDown(value),
-            .horizontal_tab => try self.horizontalTab(value),
-            .horizontal_tab_back => try self.horizontalTabBack(value),
+            .horizontal_tab => self.horizontalTab(value),
+            .horizontal_tab_back => self.horizontalTabBack(value),
             .tab_clear_current => self.terminal.tabClear(.current),
             .tab_clear_all => self.terminal.tabClear(.all),
             .tab_set => self.terminal.tabSet(),
@@ -120,7 +120,7 @@ pub const ResponseHandler = struct {
                 }
             },
             .save_cursor => self.terminal.saveCursor(),
-            .restore_cursor => try self.terminal.restoreCursor(),
+            .restore_cursor => self.terminal.restoreCursor(),
             .invoke_charset => self.terminal.invokeCharset(value.bank, value.charset, value.locking),
             .configure_charset => self.terminal.configureCharset(value.slot, value.charset),
             .set_attribute => switch (value) {
@@ -393,18 +393,18 @@ pub const ResponseHandler = struct {
         }
     }
 
-    inline fn horizontalTab(self: *ResponseHandler, count: u16) !void {
+    inline fn horizontalTab(self: *ResponseHandler, count: u16) void {
         for (0..count) |_| {
             const x = self.terminal.screens.active.cursor.x;
-            try self.terminal.horizontalTab();
+            self.terminal.horizontalTab();
             if (x == self.terminal.screens.active.cursor.x) break;
         }
     }
 
-    inline fn horizontalTabBack(self: *ResponseHandler, count: u16) !void {
+    inline fn horizontalTabBack(self: *ResponseHandler, count: u16) void {
         for (0..count) |_| {
             const x = self.terminal.screens.active.cursor.x;
-            try self.terminal.horizontalTabBack();
+            self.terminal.horizontalTabBack();
             if (x == self.terminal.screens.active.cursor.x) break;
         }
     }
@@ -424,7 +424,7 @@ pub const ResponseHandler = struct {
             .save_cursor => if (enabled) {
                 self.terminal.saveCursor();
             } else {
-                try self.terminal.restoreCursor();
+                self.terminal.restoreCursor();
             },
             .enable_mode_3 => {},
             .@"132_column" => try self.terminal.deccolm(

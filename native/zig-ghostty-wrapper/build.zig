@@ -229,10 +229,9 @@ pub fn build(b: *std.Build) !void {
     addBuildOptions(b, ghostty_module, simd_enabled);
     unicode_tables.addModuleImport(ghostty_module);
     addVtDeps(b, ghostty_module, target, optimize);
+    addUucodeImport(b, ghostty_module, uucode_tables, target, optimize, ghostty_dep.path("src/build/uucode_config.zig"));
     if (simd_enabled) {
         try addSimdDeps(b, ghostty_module, ghostty_dep, target, optimize);
-    } else {
-        addUucodeImport(b, ghostty_module, uucode_tables, target, optimize, ghostty_dep.path("src/build/uucode_config.zig"));
     }
 
     const lib = b.addLibrary(.{
