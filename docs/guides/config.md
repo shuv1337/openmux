@@ -33,12 +33,14 @@ searchAccentColor = "#FFAA00"
   [theme.pane]
   borderColor = "#444444"
   focusedBorderColor = "#00AAFF"
+  copyModeBorderColor = "#8b5cf6"
   urgentBorderColor = "#FF5500"
   borderStyle = "rounded"
   innerGap = 1
   outerGap = 1
   titleColor = "#888888"
   focusedTitleColor = "#FFFFFF"
+  copyModeTitleColor = "#8b5cf6"
 
   [theme.statusBar]
   backgroundColor = "#1a1a1a"
@@ -62,6 +64,14 @@ searchAccentColor = "#FFAA00"
     borderColor = "auto"
     textColor = "auto"
     backgroundColor = "auto"
+
+[theme.ui.copyMode.selection]
+foreground = "#f5f3ff"
+background = "#7c3aed"
+
+[theme.ui.copyMode.cursor]
+foreground = "#1f2937"
+background = "#c4b5fd"
 
 [theme.ui.aggregate.selection]
 foreground = "#FFFFFF"
@@ -141,6 +151,7 @@ prefixTimeoutMs = 2_000
   s = "session.picker.toggle"
   g = "aggregate.toggle"
   "/" = "search.open"
+  "[" = "copy.mode"
   ":" = "command.palette.toggle"
   z = "pane.zoom"
   "]" = "clipboard.paste"
