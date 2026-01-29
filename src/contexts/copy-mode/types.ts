@@ -1,7 +1,7 @@
 import type { SelectionBounds } from '../../core/types';
 import type { SelectionRange } from '../../core/coordinates';
 
-export type CopyVisualType = 'char' | 'line';
+export type CopyVisualType = 'char' | 'line' | 'block';
 
 export interface CopyCursor {
   x: number;

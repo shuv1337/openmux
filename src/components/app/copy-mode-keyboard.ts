@@ -310,6 +310,12 @@ export function createCopyModeKeyHandler(deps: {
       }
     }
 
+    if (combo === 'ctrl+v') {
+      resetOperator();
+      deps.copyMode.toggleVisual('block');
+      return true;
+    }
+
     if (combo === 'v') {
       resetOperator();
       deps.copyMode.toggleVisual('char');

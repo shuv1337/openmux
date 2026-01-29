@@ -48,3 +48,13 @@ export const buildLineSelectionRange = (
     : { startX: -1, startY, endX: Math.max(0, safeCols - 1), endY, focusAtEnd: false };
   return { range, bounds: calculateBounds(range) };
 };
+
+export const buildBlockSelectionRange = (
+  anchor: CopyCursor,
+  cursor: CopyCursor
+): SelectionResult => {
+  const anchorPoint: SelectionPoint = { x: anchor.x, y: 0, absoluteY: anchor.absY };
+  const focusPoint: SelectionPoint = { x: cursor.x, y: 0, absoluteY: cursor.absY };
+  const range = normalizeSelection(anchorPoint, focusPoint);
+  return { range, bounds: calculateBounds(range) };
+};

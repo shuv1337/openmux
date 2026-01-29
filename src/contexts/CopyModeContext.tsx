@@ -21,7 +21,11 @@ import type {
   CopyCursor,
   CopyVisualType,
 } from './copy-mode/types';
-import { buildCharSelectionRange, buildLineSelectionRange } from './copy-mode/selection-utils';
+import {
+  buildBlockSelectionRange,
+  buildCharSelectionRange,
+  buildLineSelectionRange,
+} from './copy-mode/selection-utils';
 import {
   type LineAccessor,
   findSpanAtOrAfter,
@@ -125,7 +129,9 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     const selection =
       next.visualType === 'line'
         ? buildLineSelectionRange(next.anchor, next.cursor, cols)
-        : buildCharSelectionRange(next.anchor, next.cursor, cols);
+        : next.visualType === 'block'
+          ? buildBlockSelectionRange(next.anchor, next.cursor)
+          : buildCharSelectionRange(next.anchor, next.cursor, cols);
     return {
       ...next,
       selectionRange: selection.range,
@@ -464,6 +470,15 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     if (!current || current.ptyId !== ptyId || !current.selectionRange || !current.bounds) {
       return false;
     }
+    if (current.visualType === 'block' && current.anchor) {
+      const minX = Math.min(current.anchor.x, current.cursor.x);
+      const maxX = Math.max(current.anchor.x, current.cursor.x);
+      const minY = Math.min(current.anchor.absY, current.cursor.absY);
+      const maxY = Math.max(current.anchor.absY, current.cursor.absY);
+      if (absY < minY || absY > maxY) return false;
+      if (x < minX || x > maxX) return false;
+      return true;
+    }
     const { bounds } = current;
     if (absY < bounds.minY || absY > bounds.maxY) return false;
     if (absY === bounds.minY && absY === bounds.maxY) {
@@ -478,6 +493,36 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     const meta = getScrollMeta(current.ptyId);
     if (!meta.terminalState) return;
     const scrollbackLength = meta.scrollbackLength ?? 0;
+
+    if (current.visualType === 'block' && current.anchor) {
+      const minX = Math.min(current.anchor.x, current.cursor.x);
+      const maxX = Math.max(current.anchor.x, current.cursor.x);
+      const minY = Math.min(current.anchor.absY, current.cursor.absY);
+      const maxY = Math.max(current.anchor.absY, current.cursor.absY);
+      const lines: string[] = [];
+      for (let absY = minY; absY <= maxY; absY += 1) {
+        const row = getLineCells(current.ptyId, absY);
+        let rowText = '';
+        for (let x = minX; x <= maxX; x += 1) {
+          const cell = row?.[x];
+          if (!cell) {
+            rowText += ' ';
+            continue;
+          }
+          rowText += cell.char;
+          if (cell.width === 2) {
+            x += 1;
+          }
+        }
+        lines.push(rowText);
+      }
+      const text = lines.join('\n');
+      if (text.length > 0) {
+        await copyToClipboard(text);
+        selection.notifyCopy(text.length, current.ptyId);
+      }
+      return;
+    }
 
     let range = current.selectionRange;
     if (!range) {
