@@ -3,7 +3,7 @@
  */
 import { RGBA, type OptimizedBuffer } from '@opentui/core'
 import type { TerminalCell } from '../../core/types'
-import { getCachedRGBA } from '../../terminal/rendering'
+import { getCachedRGBA, SELECTION_BG } from '../../terminal/rendering'
 import { getDefaultColors, getHostColors } from '../../terminal/terminal-colors'
 import { mixColor, luminance, toRgba } from '../../terminal/color-utils'
 
@@ -32,6 +32,13 @@ export interface ScrollbarOptions {
   offsetY: number
   labelFg?: RGBA
   labelBg?: RGBA
+  ptyId?: string
+  hasSelection?: boolean
+  hasCopySelection?: boolean
+  isCellSelected?: (ptyId: string, x: number, absY: number) => boolean
+  isCopySelected?: (ptyId: string, x: number, absY: number) => boolean
+  selectionBg?: RGBA
+  copySelectionBg?: RGBA
 }
 
 /**
@@ -44,7 +51,22 @@ export function renderScrollbar(
   options: ScrollbarOptions,
   fallbackFg: RGBA
 ): void {
-  const { viewportOffset, scrollbackLength, rows, cols, width, offsetX, offsetY } = options
+  const {
+    viewportOffset,
+    scrollbackLength,
+    rows,
+    cols,
+    width,
+    offsetX,
+    offsetY,
+    ptyId,
+    hasSelection,
+    hasCopySelection,
+    isCellSelected,
+    isCopySelected,
+    selectionBg,
+    copySelectionBg,
+  } = options
 
   // Don't render if at bottom or no scrollback
   if (viewportOffset === 0 || scrollbackLength === 0) {
@@ -69,6 +91,13 @@ export function renderScrollbar(
 
   const colors = getScrollbarColors()
 
+  const blendOverlay = (base: RGBA, overlay: RGBA, t: number) => {
+    const [br, bg, bb] = base.toInts()
+    const [or, og, ob, oa] = overlay.toInts()
+    const mixed = mixColor((br << 16) | (bg << 8) | bb, (or << 16) | (og << 8) | ob, t)
+    return toRgba(mixed, oa)
+  }
+
   for (let y = 0; y < rows; y++) {
     const isThumb = y >= thumbPosition && y < thumbPosition + thumbHeight
     // Get the underlying cell to preserve its character
@@ -76,13 +105,27 @@ export function renderScrollbar(
     const cell = contentCol >= 0 ? row?.[contentCol] : null
     const underlyingChar = cell?.char || ' '
     const underlyingFg = cell ? getCachedRGBA(cell.fg.r, cell.fg.g, cell.fg.b) : fallbackFg
+    const overlayBg = isThumb ? colors.thumb : colors.track
+    let finalBg = overlayBg
+    if (ptyId) {
+      const absY = scrollbackLength - viewportOffset + y
+      const copySelected = hasCopySelection && isCopySelected?.(ptyId, contentCol, absY)
+      const mouseSelected = !copySelected && hasSelection && isCellSelected?.(ptyId, contentCol, absY)
+      if (copySelected) {
+        const base = copySelectionBg ?? selectionBg ?? SELECTION_BG
+        finalBg = blendOverlay(base, overlayBg, isThumb ? 0.6 : 0.45)
+      } else if (mouseSelected) {
+        const base = selectionBg ?? SELECTION_BG
+        finalBg = blendOverlay(base, overlayBg, isThumb ? 0.6 : 0.45)
+      }
+    }
 
     buffer.setCell(
       scrollbarX,
       y + offsetY,
       underlyingChar,
       underlyingFg,
-      isThumb ? colors.thumb : colors.track,
+      finalBg,
       0
     )
   }

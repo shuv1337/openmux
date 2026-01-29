@@ -1,6 +1,6 @@
 import type { OptimizedBuffer } from '@opentui/core';
 import { isAtBottom as checkIsAtBottom } from '../../core/scroll-utils';
-import { BLACK, getCachedRGBA } from '../../terminal/rendering';
+import { BLACK, getCachedRGBA, SELECTION_BG } from '../../terminal/rendering';
 import { extractRgb, getDefaultColors, getHostColors } from '../../terminal/terminal-colors';
 import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
 import {
@@ -224,6 +224,13 @@ export function createTerminalRenderer(params: {
         width,
         offsetX,
         offsetY,
+        ptyId,
+        hasSelection,
+        hasCopySelection,
+        isCellSelected: selection.isCellSelected,
+        isCopySelected: copyMode.isCellSelected,
+        selectionBg: SELECTION_BG,
+        copySelectionBg,
       }, fallbackFg);
       const scrollLabelColor = resolveThemeColor(
         isFocused
