@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.119](https://github.com/monotykamary/openmux/compare/v0.2.118...v0.2.119) (2026-01-29)
+
+
+### Bug Fixes
+
+* **scrollbar:** alpha blend selection ([c149405](https://github.com/monotykamary/openmux/commit/c1494056671f36f6a64f8d587fc02ae0042ef9cc))
+* **selection:** blend scrollbar with selection ([e5eba7c](https://github.com/monotykamary/openmux/commit/e5eba7cec4c2b3e56e5f02e732a3736947690813))
+
 ### [0.2.118](https://github.com/monotykamary/openmux/compare/v0.2.117...v0.2.118) (2026-01-29)
 
 
