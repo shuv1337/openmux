@@ -68,8 +68,8 @@
     "@effect/eslint-plugin": "^0.3.2",
     "@effect/language-service": "^0.60.0",
     "@types/bun": "latest",
-    "@typescript-eslint/eslint-plugin": "^8.53.1",
-    "@typescript-eslint/parser": "^8.53.1",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
     "eslint": "^9.39.2",
     "standard-version": "^9.5.0"
   },
@@ -80,9 +80,9 @@
     "@effect/cli": "^0.72.1",
     "@effect/platform": "^0.93.8",
     "@iarna/toml": "^3.0.0",
-    "@opentui/core": "^0.1.74",
-    "@opentui/solid": "^0.1.74",
-    "effect": "^3.19.14",
-    "solid-js": "^1.9.10"
+    "@opentui/core": "^0.1.75",
+    "@opentui/solid": "^0.1.75",
+    "effect": "^3.19.15",
+    "solid-js": "^1.9.11"
   }
 }

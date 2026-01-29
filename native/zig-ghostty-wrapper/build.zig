@@ -196,7 +196,7 @@ pub fn build(b: *std.Build) !void {
         .artifact = .lib,
         .oniguruma = true,
         .simd = simd_enabled,
-        .c_abi = true,
+        .c_abi = false,
         .slow_runtime_safety = switch (optimize) {
             .Debug => true,
             .ReleaseSafe,
