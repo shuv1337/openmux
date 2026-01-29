@@ -9,6 +9,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useTerminal } from '../contexts/TerminalContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { useCopyMode } from '../contexts/CopyModeContext';
+import { useKeyboardState } from '../contexts/KeyboardContext';
 import { useTitle } from '../contexts/TitleContext';
 import { TerminalView } from './TerminalView';
 import { inputHandler } from '../terminal';
@@ -47,6 +48,8 @@ export function Pane(props: PaneProps) {
   const selection = useSelection();
   const { startSelection, updateSelection, completeSelection, clearSelection, getSelection } = selection;
   const copyMode = useCopyMode();
+  const keyboard = useKeyboardState();
+  const { exitCopyMode: keyboardExitCopyMode } = keyboard;
   const titleCtx = useTitle();
 
   // Calculate inner dimensions (account for border)
@@ -178,6 +181,10 @@ export function Pane(props: PaneProps) {
 
   const handleMouseDown = (event: OpenTUIMouseEvent) => {
     event.preventDefault();
+    if (copyMode.isActive() && copyMode.getActivePtyId() !== props.ptyId) {
+      copyMode.exitCopyMode();
+      keyboardExitCopyMode();
+    }
     props.onClick?.();
 
     const { relX, relY } = getRelativeCoords(event);

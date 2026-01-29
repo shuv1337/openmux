@@ -10,86 +10,33 @@ import {
   createSignal,
   type ParentProps,
 } from 'solid-js';
-import type { SelectionBounds, TerminalCell } from '../core/types';
-import {
-  type SelectionPoint,
-  type SelectionRange,
-  normalizeSelection,
-  calculateBounds,
-  isCellInRange,
-  extractSelectedText,
-} from '../core/coordinates';
+import type { TerminalCell } from '../core/types';
+import { isCellInRange, extractSelectedText } from '../core/coordinates';
 import { copyToClipboard } from '../effect/bridge';
 import { useTerminal } from './TerminalContext';
 import { useSelection } from './SelectionContext';
+import type {
+  CopyModeContextValue,
+  CopyModeState,
+  CopyCursor,
+  CopyVisualType,
+} from './copy-mode/types';
+import { buildCharSelectionRange, buildLineSelectionRange } from './copy-mode/selection-utils';
+import {
+  type LineAccessor,
+  findSpanAtOrAfter,
+  findSpanAtOrBefore,
+  findNextRun,
+  findPrevRun,
+  getRunAt,
+  getLineEndX,
+  getLineStartX,
+  isWideWordChar,
+  isWhitespaceChar,
+  isWordChar,
+} from './copy-mode/text-utils';
 
-export type CopyVisualType = 'char' | 'line';
-
-export interface CopyCursor {
-  x: number;
-  absY: number;
-}
-
-interface CopyModeState {
-  ptyId: string;
-  cursor: CopyCursor;
-  anchor: CopyCursor | null;
-  visualType: CopyVisualType | null;
-  selectionRange: SelectionRange | null;
-  bounds: SelectionBounds | null;
-}
-
-export interface CopyModeContextValue {
-  /** Enter copy mode for a PTY */
-  enterCopyMode: (ptyId: string) => void;
-  /** Exit copy mode */
-  exitCopyMode: () => void;
-  /** Whether copy mode is active (optionally for a PTY) */
-  isActive: (ptyId?: string) => boolean;
-  /** Get active PTY ID */
-  getActivePtyId: () => string | null;
-  /** Get virtual cursor for a PTY */
-  getCursor: (ptyId: string) => CopyCursor | null;
-  /** Move cursor by delta */
-  moveCursorBy: (dx: number, dy: number) => void;
-  /** Move cursor to absolute position */
-  moveCursorTo: (cursor: CopyCursor) => void;
-  /** Move cursor to top/bottom */
-  moveToTop: () => void;
-  moveToBottom: () => void;
-  /** Move cursor to line start/end */
-  moveToLineStart: () => void;
-  moveToLineEnd: () => void;
-  moveToLineFirstNonBlank: () => void;
-  /** Get current viewport row count */
-  getViewportRows: () => number;
-  /** Word motions */
-  moveWordForward: () => void;
-  moveWordBackward: () => void;
-  moveWordEnd: () => void;
-  /** WORD motions (whitespace-delimited) */
-  moveWideWordForward: () => void;
-  moveWideWordBackward: () => void;
-  moveWideWordEnd: () => void;
-  /** Toggle visual selection */
-  toggleVisual: (type: CopyVisualType) => void;
-  /** Start visual selection without toggling off */
-  startSelection: (type: CopyVisualType) => void;
-  /** Select word under cursor (inner/around) */
-  selectWord: (mode: 'inner' | 'around') => void;
-  /** Select current line */
-  selectLine: () => void;
-  /** Copy current selection or line */
-  copySelection: () => Promise<void>;
-  /** Clear visual selection */
-  clearSelection: () => void;
-  /** Whether a cell is selected in copy mode */
-  isCellSelected: (ptyId: string, x: number, absY: number) => boolean;
-  /** Whether selection exists for a PTY */
-  hasSelection: (ptyId: string) => boolean;
-  /** Version counter for re-render triggers */
-  copyModeVersion: number;
-}
+export type { CopyModeContextValue, CopyCursor, CopyVisualType } from './copy-mode/types';
 
 const CopyModeContext = createContext<CopyModeContextValue | null>(null);
 
@@ -167,40 +114,6 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     } else if (cursor.absY > bottomAbsY) {
       setScrollOffset(ptyId, meta.scrollbackLength - (cursor.absY - (meta.rows - 1)));
     }
-  };
-
-  const isForwardSelection = (anchor: CopyCursor, cursor: CopyCursor): boolean => {
-    return cursor.absY > anchor.absY ||
-      (cursor.absY === anchor.absY && cursor.x >= anchor.x);
-  };
-
-  const buildCharSelectionRange = (
-    anchor: CopyCursor,
-    cursor: CopyCursor,
-    cols: number
-  ): { range: SelectionRange; bounds: SelectionBounds } => {
-    const forward = isForwardSelection(anchor, cursor);
-    const focusX = forward ? cursor.x + 1 : cursor.x - 1;
-    const clampedFocusX = clamp(focusX, -1, Math.max(cols, 0));
-    const anchorPoint: SelectionPoint = { x: anchor.x, y: 0, absoluteY: anchor.absY };
-    const focusPoint: SelectionPoint = { x: clampedFocusX, y: 0, absoluteY: cursor.absY };
-    const range = normalizeSelection(anchorPoint, focusPoint);
-    return { range, bounds: calculateBounds(range) };
-  };
-
-  const buildLineSelectionRange = (
-    anchor: CopyCursor,
-    cursor: CopyCursor,
-    cols: number
-  ): { range: SelectionRange; bounds: SelectionBounds } => {
-    const forward = isForwardSelection(anchor, cursor);
-    const startY = Math.min(anchor.absY, cursor.absY);
-    const endY = Math.max(anchor.absY, cursor.absY);
-    const safeCols = Math.max(1, cols);
-    const range: SelectionRange = forward
-      ? { startX: 0, startY, endX: safeCols, endY, focusAtEnd: true }
-      : { startX: -1, startY, endX: Math.max(0, safeCols - 1), endY, focusAtEnd: false };
-    return { range, bounds: calculateBounds(range) };
   };
 
   const recomputeSelection = (next: CopyModeState): CopyModeState => {
@@ -294,28 +207,18 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     return meta.terminalState.cells[liveY] ?? null;
   };
 
-  const getLineEndX = (line: TerminalCell[] | null): number => {
-    if (!line || line.length === 0) return 0;
-    for (let x = line.length - 1; x >= 0; x -= 1) {
-      const cell = line[x];
-      const char = cell?.char ?? ' ';
-      if (char.trim().length > 0) {
-        return x;
+  const getLineAccessor = (ptyId: string): LineAccessor | null => {
+    const meta = getScrollMeta(ptyId);
+    if (!meta.terminalState) return null;
+    const maxAbsY = Math.max(0, meta.scrollbackLength + meta.rows - 1);
+    const getLine = (absY: number) => {
+      if (absY < meta.scrollbackLength) {
+        return meta.emulator?.getScrollbackLine(absY) ?? null;
       }
-    }
-    return 0;
-  };
-
-  const getLineStartX = (line: TerminalCell[] | null): number => {
-    if (!line || line.length === 0) return 0;
-    for (let x = 0; x < line.length; x += 1) {
-      const cell = line[x];
-      const char = cell?.char ?? ' ';
-      if (char.trim().length > 0) {
-        return x;
-      }
-    }
-    return 0;
+      const liveY = absY - meta.scrollbackLength;
+      return meta.terminalState?.cells[liveY] ?? null;
+    };
+    return { maxAbsY, getLine };
   };
 
   const moveToLineStart = () => {
@@ -345,149 +248,68 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     return meta.rows ?? 0;
   };
 
-  const isWordChar = (char: string): boolean => {
-    if (!char) return false;
-    const code = char.charCodeAt(0);
-    return /[A-Za-z0-9_]/.test(char) || code > 127;
-  };
-
-  const isWhitespaceChar = (char: string): boolean => {
-    return !char || char.trim().length === 0;
-  };
-
-  const isWideWordChar = (char: string): boolean => {
-    if (!char) return false;
-    return !isWhitespaceChar(char);
-  };
-
-  const findSpanAtOrAfter = (
-    ptyId: string,
-    absY: number,
-    startX: number,
-    predicate: (char: string) => boolean
-  ) => {
-    const meta = getScrollMeta(ptyId);
-    if (!meta.terminalState) return null;
-    const maxAbsY = Math.max(0, meta.scrollbackLength + meta.rows - 1);
-    for (let y = absY; y <= maxAbsY; y += 1) {
-      const line = getLineCells(ptyId, y) ?? [];
-      const limit = line.length;
-      let x = y === absY ? clamp(startX, 0, Math.max(0, limit - 1)) : 0;
-      for (; x < limit; x += 1) {
-        const char = line[x]?.char ?? ' ';
-        if (predicate(char)) {
-          let start = x;
-          let end = x;
-          while (start > 0 && predicate(line[start - 1]?.char ?? ' ')) start -= 1;
-          while (end < limit - 1 && predicate(line[end + 1]?.char ?? ' ')) end += 1;
-          return { absY: y, start, end, line };
-        }
-      }
-    }
-    return null;
-  };
-
-  const findSpanAtOrBefore = (
-    ptyId: string,
-    absY: number,
-    startX: number,
-    predicate: (char: string) => boolean
-  ) => {
-    const meta = getScrollMeta(ptyId);
-    if (!meta.terminalState) return null;
-    for (let y = absY; y >= 0; y -= 1) {
-      const line = getLineCells(ptyId, y) ?? [];
-      const limit = line.length;
-      let x = y === absY ? clamp(startX, 0, Math.max(0, limit - 1)) : Math.max(0, limit - 1);
-      for (; x >= 0; x -= 1) {
-        const char = line[x]?.char ?? ' ';
-        if (predicate(char)) {
-          let start = x;
-          let end = x;
-          while (start > 0 && predicate(line[start - 1]?.char ?? ' ')) start -= 1;
-          while (end < limit - 1 && predicate(line[end + 1]?.char ?? ' ')) end += 1;
-          return { absY: y, start, end, line };
-        }
-      }
-    }
-    return null;
-  };
-
   const moveWordForward = () => {
     const current = state();
     if (!current) return;
-    const line = getLineCells(current.ptyId, current.cursor.absY);
-    const currentChar = line?.[current.cursor.x]?.char ?? ' ';
-    const word = findSpanAtOrAfter(current.ptyId, current.cursor.absY, current.cursor.x, isWordChar);
-    if (!word) return;
-
-    if (isWordChar(currentChar) && word.absY === current.cursor.absY && current.cursor.x <= word.end) {
-      const next = findSpanAtOrAfter(current.ptyId, word.absY, word.end + 1, isWordChar);
-      if (next) {
-        moveCursorTo({ x: next.start, absY: next.absY });
-      }
-      return;
+    const access = getLineAccessor(current.ptyId);
+    if (!access) return;
+    const run = getRunAt(access, current.cursor.absY, current.cursor.x);
+    const searchAbsY = run ? run.absY : current.cursor.absY;
+    const searchX = run ? run.end + 1 : current.cursor.x;
+    const next = findNextRun(access, searchAbsY, searchX);
+    if (next) {
+      moveCursorTo({ x: next.start, absY: next.absY });
     }
-
-    moveCursorTo({ x: word.start, absY: word.absY });
   };
 
   const moveWordBackward = () => {
     const current = state();
     if (!current) return;
-    const line = getLineCells(current.ptyId, current.cursor.absY);
-    const currentChar = line?.[current.cursor.x]?.char ?? ' ';
-    const word = findSpanAtOrBefore(current.ptyId, current.cursor.absY, current.cursor.x, isWordChar);
-    if (!word) return;
-
-    if (isWordChar(currentChar) &&
-      word.absY === current.cursor.absY &&
-      current.cursor.x === word.start) {
-      const prev = findSpanAtOrBefore(current.ptyId, word.absY, word.start - 1, isWordChar);
-      if (prev) {
-        moveCursorTo({ x: prev.start, absY: prev.absY });
-      }
+    const access = getLineAccessor(current.ptyId);
+    if (!access) return;
+    const run = getRunAt(access, current.cursor.absY, current.cursor.x);
+    if (run && current.cursor.x > run.start) {
+      moveCursorTo({ x: run.start, absY: run.absY });
       return;
     }
-
-    moveCursorTo({ x: word.start, absY: word.absY });
+    const searchAbsY = run ? run.absY : current.cursor.absY;
+    const searchX = run ? run.start - 1 : current.cursor.x - 1;
+    const prev = findPrevRun(access, searchAbsY, searchX);
+    if (prev) {
+      moveCursorTo({ x: prev.start, absY: prev.absY });
+    }
   };
 
   const moveWordEnd = () => {
     const current = state();
     if (!current) return;
-    const line = getLineCells(current.ptyId, current.cursor.absY);
-    const currentChar = line?.[current.cursor.x]?.char ?? ' ';
-    const word = findSpanAtOrAfter(current.ptyId, current.cursor.absY, current.cursor.x, isWordChar);
-    if (!word) return;
-
-    if (isWordChar(currentChar) &&
-      word.absY === current.cursor.absY &&
-      current.cursor.x <= word.end) {
-      if (current.cursor.x < word.end) {
-        moveCursorTo({ x: word.end, absY: word.absY });
-        return;
-      }
-      const next = findSpanAtOrAfter(current.ptyId, word.absY, word.end + 1, isWordChar);
-      if (next) {
-        moveCursorTo({ x: next.end, absY: next.absY });
-      }
+    const access = getLineAccessor(current.ptyId);
+    if (!access) return;
+    const run = getRunAt(access, current.cursor.absY, current.cursor.x);
+    if (run && current.cursor.x < run.end) {
+      moveCursorTo({ x: run.end, absY: run.absY });
       return;
     }
-
-    moveCursorTo({ x: word.end, absY: word.absY });
+    const searchAbsY = run ? run.absY : current.cursor.absY;
+    const searchX = run ? run.end + 1 : current.cursor.x;
+    const next = findNextRun(access, searchAbsY, searchX);
+    if (next) {
+      moveCursorTo({ x: next.end, absY: next.absY });
+    }
   };
 
   const moveWideWordForward = () => {
     const current = state();
     if (!current) return;
-    const line = getLineCells(current.ptyId, current.cursor.absY);
+    const access = getLineAccessor(current.ptyId);
+    if (!access) return;
+    const line = access.getLine(current.cursor.absY);
     const currentChar = line?.[current.cursor.x]?.char ?? ' ';
-    const word = findSpanAtOrAfter(current.ptyId, current.cursor.absY, current.cursor.x, isWideWordChar);
+    const word = findSpanAtOrAfter(access, current.cursor.absY, current.cursor.x, isWideWordChar);
     if (!word) return;
 
     if (isWideWordChar(currentChar) && word.absY === current.cursor.absY && current.cursor.x <= word.end) {
-      const next = findSpanAtOrAfter(current.ptyId, word.absY, word.end + 1, isWideWordChar);
+      const next = findSpanAtOrAfter(access, word.absY, word.end + 1, isWideWordChar);
       if (next) {
         moveCursorTo({ x: next.start, absY: next.absY });
       }
@@ -500,15 +322,17 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
   const moveWideWordBackward = () => {
     const current = state();
     if (!current) return;
-    const line = getLineCells(current.ptyId, current.cursor.absY);
+    const access = getLineAccessor(current.ptyId);
+    if (!access) return;
+    const line = access.getLine(current.cursor.absY);
     const currentChar = line?.[current.cursor.x]?.char ?? ' ';
-    const word = findSpanAtOrBefore(current.ptyId, current.cursor.absY, current.cursor.x, isWideWordChar);
+    const word = findSpanAtOrBefore(access, current.cursor.absY, current.cursor.x, isWideWordChar);
     if (!word) return;
 
     if (isWideWordChar(currentChar) &&
       word.absY === current.cursor.absY &&
       current.cursor.x === word.start) {
-      const prev = findSpanAtOrBefore(current.ptyId, word.absY, word.start - 1, isWideWordChar);
+      const prev = findSpanAtOrBefore(access, word.absY, word.start - 1, isWideWordChar);
       if (prev) {
         moveCursorTo({ x: prev.start, absY: prev.absY });
       }
@@ -521,9 +345,11 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
   const moveWideWordEnd = () => {
     const current = state();
     if (!current) return;
-    const line = getLineCells(current.ptyId, current.cursor.absY);
+    const access = getLineAccessor(current.ptyId);
+    if (!access) return;
+    const line = access.getLine(current.cursor.absY);
     const currentChar = line?.[current.cursor.x]?.char ?? ' ';
-    const word = findSpanAtOrAfter(current.ptyId, current.cursor.absY, current.cursor.x, isWideWordChar);
+    const word = findSpanAtOrAfter(access, current.cursor.absY, current.cursor.x, isWideWordChar);
     if (!word) return;
 
     if (isWideWordChar(currentChar) &&
@@ -533,7 +359,7 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
         moveCursorTo({ x: word.end, absY: word.absY });
         return;
       }
-      const next = findSpanAtOrAfter(current.ptyId, word.absY, word.end + 1, isWideWordChar);
+      const next = findSpanAtOrAfter(access, word.absY, word.end + 1, isWideWordChar);
       if (next) {
         moveCursorTo({ x: next.end, absY: next.absY });
       }
@@ -570,7 +396,9 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
   const selectWord = (mode: 'inner' | 'around') => {
     const current = state();
     if (!current) return;
-    const word = findSpanAtOrAfter(current.ptyId, current.cursor.absY, current.cursor.x, isWordChar);
+    const access = getLineAccessor(current.ptyId);
+    if (!access) return;
+    const word = findSpanAtOrAfter(access, current.cursor.absY, current.cursor.x, isWordChar);
     if (!word) return;
 
     let start = word.start;

@@ -2,7 +2,7 @@
  * PaneContainer - renders master-stack layout panes
  */
 
-import { Show, For, Index, createMemo } from 'solid-js';
+import { Show, For, Index, createMemo, createEffect } from 'solid-js';
 import type { PaneData, LayoutNode } from '../core/types';
 import { useLayout } from '../contexts/LayoutContext';
 import { useTerminal } from '../contexts/TerminalContext';
@@ -11,6 +11,7 @@ import { useAggregateView } from '../contexts/AggregateViewContext';
 import { useTitle } from '../contexts/TitleContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useCopyMode } from '../contexts/CopyModeContext';
+import { useKeyboardState } from '../contexts/KeyboardContext';
 import { getFocusedPane, isMainPaneFocused } from '../core/workspace-utils';
 import { collectPanes, findPane, getFirstPane } from '../core/layout-tree';
 import { Pane } from './Pane';
@@ -22,6 +23,9 @@ export function PaneContainer() {
   const session = useSession();
   const { state: aggregateState } = useAggregateView();
   const theme = useTheme();
+  const copyMode = useCopyMode();
+  const keyboard = useKeyboardState();
+  const { exitCopyMode: keyboardExitCopyMode } = keyboard;
 
   // Memoize workspace properties to prevent cascading re-renders
   // Access layout.activeWorkspace once and derive stable values
@@ -53,9 +57,33 @@ export function PaneContainer() {
     return panes;
   });
 
+  const resolvePaneById = (paneId: string) => {
+    return findPane(mainPane(), paneId) ??
+      stackPanes().reduce<PaneData | null>((found, node) => found ?? findPane(node, paneId), null);
+  };
+
   const handlePaneClick = (paneId: string) => {
+    const activeCopyPty = copyMode.getActivePtyId();
+    if (activeCopyPty) {
+      const targetPtyId = resolvePaneById(paneId)?.ptyId ?? null;
+      if (targetPtyId !== activeCopyPty) {
+        copyMode.exitCopyMode();
+        keyboardExitCopyMode();
+      }
+    }
     focusPane(paneId);
   };
+
+  createEffect(() => {
+    const activeCopyPty = copyMode.getActivePtyId();
+    if (!activeCopyPty) return;
+    const focusedId = focusedPaneId();
+    const focusedPtyId = focusedId ? resolvePaneById(focusedId)?.ptyId ?? null : null;
+    if (focusedPtyId !== activeCopyPty) {
+      copyMode.exitCopyMode();
+      keyboardExitCopyMode();
+    }
+  });
 
   const handleMouseInput = (ptyId: string, data: string) => {
     // Only forward mouse events if the child application has enabled mouse tracking

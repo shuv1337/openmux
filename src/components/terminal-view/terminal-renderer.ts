@@ -40,6 +40,7 @@ interface ThemeDeps {
     copyModeBorderColor: string;
   };
   ui: {
+    mutedText: string;
     copyMode: {
       selection: { foreground: string; background: string };
       cursor: { foreground: string; background: string };
@@ -225,9 +226,9 @@ export function createTerminalRenderer(params: {
         offsetY,
       }, fallbackFg);
       const scrollLabelColor = resolveThemeColor(
-        copyModeActive
-          ? theme.pane.copyModeBorderColor
-          : (isFocused ? theme.pane.focusedBorderColor : theme.pane.borderColor),
+        isFocused
+          ? (copyModeActive ? theme.pane.copyModeBorderColor : theme.pane.focusedBorderColor)
+          : theme.ui.mutedText,
         getCachedRGBA(160, 160, 160)
       );
       renderScrollDepth(buffer, {
