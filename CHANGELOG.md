@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.118](https://github.com/monotykamary/openmux/compare/v0.2.117...v0.2.118) (2026-01-29)
+
+
+### Features
+
+* **copy-mode:** add visual block selection ([6cb4f4c](https://github.com/monotykamary/openmux/commit/6cb4f4c5dc89a98933b80d335dd4f0a816b3350a))
+
 ### [0.2.117](https://github.com/monotykamary/openmux/compare/v0.2.116...v0.2.117) (2026-01-29)
 
 
