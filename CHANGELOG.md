@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.117](https://github.com/monotykamary/openmux/compare/v0.2.116...v0.2.117) (2026-01-29)
+
+
+### Features
+
+* **copy-mode:** add vim-style copy mode ([bc103e6](https://github.com/monotykamary/openmux/commit/bc103e64d720f2509e54b292bffead7bd7f92ad6))
+
+
+### Bug Fixes
+
+* **copy-mode:** refine motions and focus exit ([864240f](https://github.com/monotykamary/openmux/commit/864240f8e6cd677b3d774cacc96cc5d9b8c0b5a4))
+* **ghostty:** sync wrapper with upstream ([95a93b4](https://github.com/monotykamary/openmux/commit/95a93b47335e7c40bf8edc389e2dab917b3be00b))
+
 ### [0.2.116](https://github.com/monotykamary/openmux/compare/v0.2.115...v0.2.116) (2026-01-22)
 
 
