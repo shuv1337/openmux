@@ -59,12 +59,14 @@ export const DEFAULT_THEME: Theme = {
   pane: {
     borderColor: '#444444',
     focusedBorderColor: '#00AAFF',
+    copyModeBorderColor: '#8b5cf6',
     urgentBorderColor: '#FF5500',
     borderStyle: 'rounded',
     innerGap: 1,
     outerGap: 1,
     titleColor: '#888888',
     focusedTitleColor: '#FFFFFF',
+    copyModeTitleColor: '#8b5cf6',
   },
   statusBar: {
     backgroundColor: '#1a1a1a',
@@ -87,6 +89,16 @@ export const DEFAULT_THEME: Theme = {
       borderColor: 'auto',
       textColor: 'auto',
       backgroundColor: 'auto',
+    },
+    copyMode: {
+      selection: {
+        foreground: '#f5f3ff',
+        background: '#7c3aed',
+      },
+      cursor: {
+        foreground: '#1f2937',
+        background: '#c4b5fd',
+      },
     },
     aggregate: {
       selection: {

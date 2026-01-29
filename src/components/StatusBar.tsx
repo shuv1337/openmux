@@ -102,6 +102,7 @@ function ModeIndicator(props: ModeIndicatorProps) {
     normal: '',
     prefix: '[PREFIX]',
     search: '[SEARCH]',
+    copy: '[COPY]',
     aggregate: '[GLOBAL]',
     confirm: '[CONFIRM]',
     move: '[MOVE]',
@@ -110,6 +111,8 @@ function ModeIndicator(props: ModeIndicatorProps) {
     switch (props.mode) {
       case 'search':
         return theme.searchAccentColor;
+      case 'copy':
+        return theme.pane.copyModeBorderColor;
       case 'confirm':
         return theme.pane.urgentBorderColor;
       default:

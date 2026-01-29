@@ -7,6 +7,7 @@ import { createSignal, createEffect, createMemo, on, Show } from 'solid-js';
 import { useRenderer } from '@opentui/solid';
 import { useTerminal } from '../contexts/TerminalContext';
 import { useSelection } from '../contexts/SelectionContext';
+import { useCopyMode } from '../contexts/CopyModeContext';
 import { useSearch } from '../contexts/SearchContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getHostBackgroundColor } from '../effect/bridge';
@@ -32,6 +33,7 @@ export function TerminalView(props: TerminalViewProps) {
   // Get selection state - keep full context to access selectionVersion reactively
   const selection = useSelection();
   const { isCellSelected, getSelection } = selection;
+  const copyMode = useCopyMode();
   // Get search state - keep full context to access searchVersion reactively
   const search = useSearch();
   const { isSearchMatch, isCurrentMatch } = search;
@@ -59,6 +61,12 @@ export function TerminalView(props: TerminalViewProps) {
       isCellSelected,
       getSelection,
     },
+    copyMode: {
+      isActive: copyMode.isActive,
+      getCursor: copyMode.getCursor,
+      isCellSelected: copyMode.isCellSelected,
+      hasSelection: copyMode.hasSelection,
+    },
     search: {
       isSearchMatch,
       isCurrentMatch,
@@ -71,7 +79,7 @@ export function TerminalView(props: TerminalViewProps) {
   // Request render when selection or search version changes.
   createEffect(
     on(
-      [() => selection.selectionVersion, () => search.searchVersion],
+      [() => selection.selectionVersion, () => search.searchVersion, () => copyMode.copyModeVersion],
       () => renderer.requestRender()
     )
   );

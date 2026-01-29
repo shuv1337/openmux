@@ -86,6 +86,17 @@ export function KeyboardProvider(props: KeyboardProviderProps) {
     setState('mode', 'normal');
   };
 
+  const enterCopyMode = () => {
+    setState(produce((s) => {
+      s.mode = 'copy';
+      s.prefixActivatedAt = undefined;
+    }));
+  };
+
+  const exitCopyMode = () => {
+    setState('mode', 'normal');
+  };
+
   const enterAggregateMode = () => {
     setState(produce((s) => {
       s.mode = 'aggregate';
@@ -129,6 +140,8 @@ export function KeyboardProvider(props: KeyboardProviderProps) {
     exitPrefixMode,
     enterSearchMode,
     exitSearchMode,
+    enterCopyMode,
+    exitCopyMode,
     enterAggregateMode,
     exitAggregateMode,
     enterMoveMode,

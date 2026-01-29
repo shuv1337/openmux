@@ -8,6 +8,7 @@ import type { MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTerminal } from '../contexts/TerminalContext';
 import { useSelection } from '../contexts/SelectionContext';
+import { useCopyMode } from '../contexts/CopyModeContext';
 import { useTitle } from '../contexts/TitleContext';
 import { TerminalView } from './TerminalView';
 import { inputHandler } from '../terminal';
@@ -45,6 +46,7 @@ export function Pane(props: PaneProps) {
   const { isMouseTrackingEnabled, scrollTerminal, getScrollState, setScrollOffset, getEmulatorSync, getTerminalStateSync } = terminal;
   const selection = useSelection();
   const { startSelection, updateSelection, completeSelection, clearSelection, getSelection } = selection;
+  const copyMode = useCopyMode();
   const titleCtx = useTitle();
 
   // Calculate inner dimensions (account for border)
@@ -119,9 +121,13 @@ export function Pane(props: PaneProps) {
   };
 
   // Dynamic border color based on focus state
-  const borderColor = () => props.isFocused
-    ? theme.pane.focusedBorderColor
-    : theme.pane.borderColor;
+  const borderColor = () => {
+    const copyActive = props.isFocused && props.ptyId && copyMode.isActive(props.ptyId);
+    if (copyActive) {
+      return theme.pane.copyModeBorderColor;
+    }
+    return props.isFocused ? theme.pane.focusedBorderColor : theme.pane.borderColor;
+  };
 
   // Title with focus indicator
   // Read from TitleContext (non-reactive Map + version signal) to avoid layout store re-renders

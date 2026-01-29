@@ -47,6 +47,7 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
     's': 'session.picker.toggle',
     'g': 'aggregate.toggle',
     '/': 'search.open',
+    '[': 'copy.mode',
     ':': 'command.palette.toggle',
     'z': 'pane.zoom',
     ']': 'clipboard.paste',

@@ -21,6 +21,7 @@ import {
 
 export interface CellRenderingDeps {
   isCellSelected: (ptyId: string, x: number, y: number) => boolean
+  isCopySelected?: (ptyId: string, x: number, y: number) => boolean
   isSearchMatch: (ptyId: string, x: number, y: number) => boolean
   isCurrentMatch: (ptyId: string, x: number, y: number) => boolean
   getSelection: (ptyId: string) => { normalizedRange: unknown } | undefined
@@ -30,13 +31,20 @@ export interface CellRenderingOptions {
   ptyId: string
   hasSelection: boolean
   hasSearch: boolean
+  hasCopySelection: boolean
+  copyModeActive: boolean
   isAtBottom: boolean
   isFocused: boolean
   cursorX: number
   cursorY: number
   cursorVisible: boolean
+  copyCursor: { x: number; absY: number } | null
   scrollbackLength: number
   viewportOffset: number
+  copySelectionFg: RGBA
+  copySelectionBg: RGBA
+  copyCursorFg: RGBA
+  copyCursorBg: RGBA
 }
 
 /**
@@ -51,14 +59,33 @@ export function getCellColors(
   options: CellRenderingOptions,
   deps: CellRenderingDeps
 ): { fg: RGBA; bg: RGBA; attributes: number } {
-  const { ptyId, hasSelection, hasSearch, isAtBottom, isFocused, cursorX, cursorY, cursorVisible } = options
+  const {
+    ptyId,
+    hasSelection,
+    hasSearch,
+    hasCopySelection,
+    copyModeActive,
+    isAtBottom,
+    isFocused,
+    cursorX,
+    cursorY,
+    cursorVisible,
+    copyCursor,
+    copySelectionFg,
+    copySelectionBg,
+    copyCursorFg,
+    copyCursorBg,
+  } = options
 
   // Only show cursor when at bottom (not scrolled back) and focused
-  const isCursor = isAtBottom && isFocused && cursorVisible &&
-                   cursorY === screenY && cursorX === x
+  const isVirtualCursor = !!copyCursor && copyCursor.absY === absoluteY && copyCursor.x === x
+  const isRealCursor = !copyModeActive && isAtBottom && isFocused && cursorVisible &&
+                       cursorY === screenY && cursorX === x
+  const isCursor = isVirtualCursor || isRealCursor
 
   // Check if cell is selected (skip function call if no active selection)
   const isSelected = hasSelection && deps.isCellSelected(ptyId, x, absoluteY)
+  const isCopySelected = hasCopySelection && deps.isCopySelected?.(ptyId, x, absoluteY)
 
   // Check if cell is a search match (skip function calls if no active search)
   const isMatch = hasSearch && deps.isSearchMatch(ptyId, x, absoluteY)
@@ -85,11 +112,19 @@ export function getCellColors(
   let fg = getCachedRGBA(fgR, fgG, fgB)
   let bg = getCachedRGBA(bgR, bgG, bgB)
 
-  // Apply styling in priority order: cursor > selection > current match > other matches
+  // Apply styling in priority order: cursor > copy selection > selection > current match > other matches
   if (isCursor) {
     // Cursor styling (highest priority when visible)
-    fg = bg ?? BLACK
-    bg = WHITE
+    if (isVirtualCursor) {
+      fg = copyCursorFg
+      bg = copyCursorBg
+    } else {
+      fg = bg ?? BLACK
+      bg = WHITE
+    }
+  } else if (isCopySelected) {
+    fg = copySelectionFg
+    bg = copySelectionBg
   } else if (isSelected) {
     // Selection styling
     fg = SELECTION_FG

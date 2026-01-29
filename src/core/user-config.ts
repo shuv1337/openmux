@@ -200,6 +200,10 @@ function mergeUserConfig(base: UserConfig, overrides?: Partial<UserConfig>): Use
         listSelection: { ...base.theme.ui.listSelection, ...uiOverrides?.listSelection },
         buttonFocus: { ...base.theme.ui.buttonFocus, ...uiOverrides?.buttonFocus },
         copyNotification: { ...base.theme.ui.copyNotification, ...uiOverrides?.copyNotification },
+        copyMode: {
+          selection: { ...base.theme.ui.copyMode.selection, ...uiOverrides?.copyMode?.selection },
+          cursor: { ...base.theme.ui.copyMode.cursor, ...uiOverrides?.copyMode?.cursor },
+        },
         aggregate: {
           selection: { ...base.theme.ui.aggregate.selection, ...uiOverrides?.aggregate?.selection },
           diff: { ...base.theme.ui.aggregate.diff, ...uiOverrides?.aggregate?.diff },

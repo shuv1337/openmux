@@ -219,7 +219,7 @@ export interface SelectionBounds {
 /**
  * Keyboard mode for prefix key system
  */
-export type KeyMode = 'normal' | 'prefix' | 'search' | 'aggregate' | 'confirm' | 'move';
+export type KeyMode = 'normal' | 'prefix' | 'search' | 'copy' | 'aggregate' | 'confirm' | 'move';
 
 /** Confirmation dialog type */
 export type ConfirmationType =
@@ -247,12 +247,14 @@ export interface KeyboardState {
 export interface PaneTheme {
   borderColor: string;
   focusedBorderColor: string;
+  copyModeBorderColor: string;
   urgentBorderColor: string;
   borderStyle: 'single' | 'double' | 'rounded' | 'bold';
   innerGap: number;
   outerGap: number;
   titleColor: string;
   focusedTitleColor: string;
+  copyModeTitleColor: string;
 }
 
 /**
@@ -282,6 +284,11 @@ export interface CopyNotificationTheme {
   backgroundColor: string;
 }
 
+export interface CopyModeTheme {
+  selection: SelectionTheme;
+  cursor: SelectionTheme;
+}
+
 export interface AggregateSelectionTheme {
   foreground: string;
   background: string;
@@ -306,6 +313,7 @@ export interface UiTheme {
   listSelection: SelectionTheme;
   buttonFocus: ButtonFocusTheme;
   copyNotification: CopyNotificationTheme;
+  copyMode: CopyModeTheme;
   aggregate: AggregateTheme;
 }
 

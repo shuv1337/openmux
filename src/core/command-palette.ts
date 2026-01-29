@@ -134,6 +134,13 @@ const BASE_COMMANDS: CommandPaletteCommand[] = [
     keywords: ['search', 'find', 'scrollback'],
   },
   {
+    id: 'copy.mode',
+    title: 'Copy mode',
+    description: 'Enter copy mode for the focused pane',
+    action: 'copy.mode',
+    keywords: ['copy', 'select', 'scrollback', 'vim'],
+  },
+  {
     id: 'session.picker.toggle',
     title: 'Session picker',
     description: 'Open the session picker',

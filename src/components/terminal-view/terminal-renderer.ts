@@ -26,10 +26,24 @@ interface SearchDeps {
   getSearchState: () => { ptyId: string; matches: unknown[] } | null | undefined;
 }
 
+interface CopyModeDeps {
+  isActive: (ptyId?: string) => boolean;
+  getCursor: (ptyId: string) => { x: number; absY: number } | null;
+  isCellSelected: (...args: any[]) => boolean;
+  hasSelection: (ptyId: string) => boolean;
+}
+
 interface ThemeDeps {
   pane: {
     focusedBorderColor: string;
     borderColor: string;
+    copyModeBorderColor: string;
+  };
+  ui: {
+    copyMode: {
+      selection: { foreground: string; background: string };
+      cursor: { foreground: string; background: string };
+    };
   };
 }
 
@@ -37,11 +51,12 @@ export function createTerminalRenderer(params: {
   props: TerminalViewProps;
   viewState: TerminalViewState;
   selection: SelectionDeps;
+  copyMode: CopyModeDeps;
   search: SearchDeps;
   theme: ThemeDeps;
   kittyPaneKey: string;
 }) {
-  const { props, viewState, selection, search, theme, kittyPaneKey } = params;
+  const { props, viewState, selection, copyMode, search, theme, kittyPaneKey } = params;
 
   return (buffer: OptimizedBuffer) => {
     const state = viewState.terminalState;
@@ -146,24 +161,40 @@ export function createTerminalRenderer(params: {
     const isAtBottom = checkIsAtBottom(renderViewportOffset);
 
     const hasSelection = !!selection.getSelection(ptyId)?.normalizedRange;
+    const copyModeActive = copyMode.isActive(ptyId);
+    const copyCursor = copyModeActive ? copyMode.getCursor(ptyId) : null;
+    const hasCopySelection = copyModeActive && copyMode.hasSelection(ptyId);
     const currentSearchState = search.getSearchState();
     const hasSearch = currentSearchState?.ptyId === ptyId && currentSearchState.matches.length > 0;
+
+    const copySelectionFg = resolveThemeColor(theme.ui.copyMode.selection.foreground, getCachedRGBA(245, 243, 255));
+    const copySelectionBg = resolveThemeColor(theme.ui.copyMode.selection.background, getCachedRGBA(124, 58, 237));
+    const copyCursorFg = resolveThemeColor(theme.ui.copyMode.cursor.foreground, getCachedRGBA(31, 41, 55));
+    const copyCursorBg = resolveThemeColor(theme.ui.copyMode.cursor.background, getCachedRGBA(196, 181, 253));
 
     const renderOptions = {
       ptyId,
       hasSelection,
       hasSearch,
+      hasCopySelection,
+      copyModeActive,
       isAtBottom,
       isFocused,
       cursorX: state.cursor.x,
       cursorY: state.cursor.y,
       cursorVisible: state.cursor.visible,
+      copyCursor,
       scrollbackLength: renderScrollbackLength,
       viewportOffset: renderViewportOffset,
+      copySelectionFg,
+      copySelectionBg,
+      copyCursorFg,
+      copyCursorBg,
     };
 
     const renderDeps = {
       isCellSelected: selection.isCellSelected,
+      isCopySelected: copyMode.isCellSelected,
       isSearchMatch: search.isSearchMatch,
       isCurrentMatch: search.isCurrentMatch,
       getSelection: selection.getSelection,
@@ -194,7 +225,9 @@ export function createTerminalRenderer(params: {
         offsetY,
       }, fallbackFg);
       const scrollLabelColor = resolveThemeColor(
-        isFocused ? theme.pane.focusedBorderColor : theme.pane.borderColor,
+        copyModeActive
+          ? theme.pane.copyModeBorderColor
+          : (isFocused ? theme.pane.focusedBorderColor : theme.pane.borderColor),
         getCachedRGBA(160, 160, 160)
       );
       renderScrollDepth(buffer, {

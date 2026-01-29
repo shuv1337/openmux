@@ -10,6 +10,8 @@ export interface KeyboardContextValue {
   exitPrefixMode: () => void;
   enterSearchMode: () => void;
   exitSearchMode: () => void;
+  enterCopyMode: () => void;
+  exitCopyMode: () => void;
   enterAggregateMode: () => void;
   exitAggregateMode: () => void;
   enterMoveMode: () => void;
@@ -31,6 +33,7 @@ export interface KeyboardHandlerOptions {
   onToggleSessionPicker?: () => void;
   onToggleTemplateOverlay?: () => void;
   onEnterSearch?: () => void;
+  onEnterCopyMode?: () => void;
   onToggleConsole?: () => void;
   onToggleAggregateView?: () => void;
   onToggleCommandPalette?: () => void;

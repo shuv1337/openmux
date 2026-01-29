@@ -10,6 +10,7 @@ import {
   useKeyboardState,
   useOverlays,
   useTerminal,
+  useCopyMode,
 } from './contexts';
 import { useSelection } from './contexts/SelectionContext';
 import { useSearch } from './contexts/SearchContext';
@@ -34,6 +35,8 @@ import { AppOverlays } from './components/app/AppOverlays';
 import { createKittyGraphicsBridge } from './components/app/kitty-graphics-bridge';
 import { createCellMetricsGetter, createPixelResizeTracker } from './components/app/pixel-metrics';
 import { createSearchVimState } from './components/app/search-vim';
+import { createCopyModeVimState } from './components/app/copy-mode-vim';
+import { createCopyModeKeyHandler } from './components/app/copy-mode-keyboard';
 import { setupAppLayoutEffects } from './components/app/layout-effects';
 import { setupAppEffects } from './components/app/app-effects';
 import { setupControlServer } from './components/app/control-server';
@@ -75,9 +78,10 @@ function AppContent() {
   const { clearAllSelections } = selection;
   const search = useSearch();
   const { enterSearchMode, exitSearchMode, setSearchQuery, nextMatch, prevMatch } = search;
+  const copyMode = useCopyMode();
   const { state: aggregateState, openAggregateView } = useAggregateView();
   const keyboardState = useKeyboardState();
-  const { exitSearchMode: keyboardExitSearchMode } = keyboardState;
+  const { exitSearchMode: keyboardExitSearchMode, exitCopyMode: keyboardExitCopyMode } = keyboardState;
   const renderer = useRenderer();
   const overlays = useOverlays();
   const {
@@ -219,6 +223,10 @@ function AppContent() {
   };
 
   const searchVimState = createSearchVimState({ config, search });
+  const copyModeVimState = createCopyModeVimState({
+    config,
+    isCopyModeActive: () => keyboardState.state.mode === 'copy',
+  });
 
   // Search mode enter handler
   const handleEnterSearch = async () => {
@@ -231,6 +239,27 @@ function AppContent() {
       await enterSearchMode(focusedPtyId);
     }
   };
+
+  const handleEnterCopyMode = () => {
+    clearAllSelections();
+    const focusedPtyId = getActivePtyId();
+    if (!focusedPtyId) {
+      keyboardExitCopyMode();
+      return;
+    }
+    copyMode.enterCopyMode(focusedPtyId);
+  };
+
+  const handleExitCopyMode = () => {
+    copyMode.exitCopyMode();
+    keyboardExitCopyMode();
+  };
+
+  const handleCopyModeKey = createCopyModeKeyHandler({
+    copyMode,
+    exitCopyMode: handleExitCopyMode,
+    getVimHandler: copyModeVimState.getCopyVimHandler,
+  });
 
   const executeCommandAction = (action: string) => {
     handleNormalModeAction(
@@ -249,6 +278,7 @@ function AppContent() {
         onToggleSessionPicker: togglePicker,
         onToggleTemplateOverlay: toggleTemplateOverlay,
         onEnterSearch: handleEnterSearch,
+        onEnterCopyMode: handleEnterCopyMode,
         onToggleConsole: handleToggleConsole,
         onToggleAggregateView: openAggregateView,
         onToggleCommandPalette: toggleCommandPalette,
@@ -275,6 +305,7 @@ function AppContent() {
     onToggleSessionPicker: togglePicker,
     onToggleTemplateOverlay: toggleTemplateOverlay,
     onEnterSearch: handleEnterSearch,
+    onEnterCopyMode: handleEnterCopyMode,
     onToggleConsole: handleToggleConsole,
     onToggleAggregateView: openAggregateView,
     onToggleCommandPalette: toggleCommandPalette,
@@ -315,6 +346,7 @@ function AppContent() {
     getFocusedEmulator,
     writeToFocused,
     isOverlayActive: () => sessionState.showSessionPicker || session.showTemplateOverlay,
+    handleCopyModeKey,
   });
 
   return (

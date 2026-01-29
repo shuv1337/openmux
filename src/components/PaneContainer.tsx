@@ -10,6 +10,7 @@ import { useSession } from '../contexts/SessionContext';
 import { useAggregateView } from '../contexts/AggregateViewContext';
 import { useTitle } from '../contexts/TitleContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useCopyMode } from '../contexts/CopyModeContext';
 import { getFocusedPane, isMainPaneFocused } from '../core/workspace-utils';
 import { collectPanes, findPane, getFirstPane } from '../core/layout-tree';
 import { Pane } from './Pane';
@@ -233,6 +234,7 @@ interface StackedPanesRendererProps {
 function StackedPanesRenderer(props: StackedPanesRendererProps) {
   const theme = useTheme();
   const titleCtx = useTitle();
+  const copyMode = useCopyMode();
   const activeEntry = () => props.stackPanes[props.activeStackIndex];
   const rect = () => activeEntry()?.rectangle ?? { x: 0, y: 0, width: 40, height: 12 };
   const activePanes = createMemo(() => {
@@ -323,7 +325,16 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
     return !!findPane(entry, props.focusedPaneId);
   };
   // Active tab background color based on focus state
-  const activeTabBg = () => isPaneFocused() ? theme.pane.focusedBorderColor : theme.pane.borderColor;
+  const activeTabBg = () => {
+    if (!isPaneFocused()) return theme.pane.borderColor;
+    const entry = activeEntry();
+    const focusedPane = entry && props.focusedPaneId ? findPane(entry, props.focusedPaneId) : null;
+    const focusedPtyId = focusedPane?.ptyId;
+    if (focusedPtyId && copyMode.isActive(focusedPtyId)) {
+      return theme.pane.copyModeBorderColor;
+    }
+    return theme.pane.focusedBorderColor;
+  };
 
   return (
     <Show when={activeEntry()}>

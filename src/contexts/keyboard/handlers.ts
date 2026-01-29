@@ -107,6 +107,13 @@ export function handleNormalModeAction(
         return true;
       }
       return false;
+    case 'copy.mode':
+      if (options.onEnterCopyMode) {
+        keyboard.enterCopyMode();
+        options.onEnterCopyMode();
+        return true;
+      }
+      return false;
     case 'aggregate.toggle':
       if (options.onToggleAggregateView) {
         keyboard.enterAggregateMode();
@@ -236,6 +243,14 @@ export function handlePrefixModeAction(
       if (options.onEnterSearch) {
         keyboard.enterSearchMode();
         options.onEnterSearch();
+        return true;
+      }
+      exitPrefix();
+      return true;
+    case 'copy.mode':
+      if (options.onEnterCopyMode) {
+        keyboard.enterCopyMode();
+        options.onEnterCopyMode();
         return true;
       }
       exitPrefix();

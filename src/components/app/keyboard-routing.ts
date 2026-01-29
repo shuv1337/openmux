@@ -35,6 +35,7 @@ export function setupKeyboardRouting(params: {
   getFocusedEmulator: () => ITerminalEmulator | null;
   writeToFocused: (data: string) => void;
   isOverlayActive: () => boolean;
+  handleCopyModeKey: (event: KeyboardEvent) => void;
 }) {
   const {
     config,
@@ -53,6 +54,7 @@ export function setupKeyboardRouting(params: {
     getFocusedEmulator,
     writeToFocused,
     isOverlayActive,
+    handleCopyModeKey,
   } = params;
 
   useKeyboard(
@@ -96,6 +98,11 @@ export function setupKeyboardRouting(params: {
           setVimMode: setSearchVimMode,
           getVimHandler: getSearchVimHandler,
         });
+        return;
+      }
+
+      if (keyboardHandler.mode === 'copy') {
+        handleCopyModeKey(normalizedEvent);
         return;
       }
 

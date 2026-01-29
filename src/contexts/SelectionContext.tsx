@@ -118,6 +118,11 @@ interface SelectionContextValue {
    * Copy notification state (for showing "Copied X chars" toast)
    */
   copyNotification: CopyNotificationState;
+
+  /**
+   * Show copy notification (used by copy mode)
+   */
+  notifyCopy: (charCount: number, ptyId: string) => void;
 }
 
 // =============================================================================
@@ -312,6 +317,7 @@ export function SelectionProvider(props: SelectionProviderProps) {
     clearAllSelections,
     isCellSelected,
     getSelection,
+    notifyCopy: showCopyNotification,
     get selectionVersion() { return selectionVersion(); },
     get copyNotification() { return copyNotification(); },
   };

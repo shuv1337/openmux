@@ -22,6 +22,10 @@ export function ThemeProvider(props: ThemeProviderProps) {
       listSelection: { ...DEFAULT_THEME.ui.listSelection, ...uiOverrides?.listSelection },
       buttonFocus: { ...DEFAULT_THEME.ui.buttonFocus, ...uiOverrides?.buttonFocus },
       copyNotification: { ...DEFAULT_THEME.ui.copyNotification, ...uiOverrides?.copyNotification },
+      copyMode: {
+        selection: { ...DEFAULT_THEME.ui.copyMode.selection, ...uiOverrides?.copyMode?.selection },
+        cursor: { ...DEFAULT_THEME.ui.copyMode.cursor, ...uiOverrides?.copyMode?.cursor },
+      },
       aggregate: {
         selection: { ...DEFAULT_THEME.ui.aggregate.selection, ...uiOverrides?.aggregate?.selection },
         diff: { ...DEFAULT_THEME.ui.aggregate.diff, ...uiOverrides?.aggregate?.diff },
