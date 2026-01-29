@@ -91,13 +91,6 @@ export function renderScrollbar(
 
   const colors = getScrollbarColors()
 
-  const blendOverlay = (base: RGBA, overlay: RGBA, t: number) => {
-    const [br, bg, bb] = base.toInts()
-    const [or, og, ob, oa] = overlay.toInts()
-    const mixed = mixColor((br << 16) | (bg << 8) | bb, (or << 16) | (og << 8) | ob, t)
-    return toRgba(mixed, oa)
-  }
-
   for (let y = 0; y < rows; y++) {
     const isThumb = y >= thumbPosition && y < thumbPosition + thumbHeight
     // Get the underlying cell to preserve its character
@@ -106,17 +99,48 @@ export function renderScrollbar(
     const underlyingChar = cell?.char || ' '
     const underlyingFg = cell ? getCachedRGBA(cell.fg.r, cell.fg.g, cell.fg.b) : fallbackFg
     const overlayBg = isThumb ? colors.thumb : colors.track
-    let finalBg = overlayBg
     if (ptyId) {
       const absY = scrollbackLength - viewportOffset + y
       const copySelected = hasCopySelection && isCopySelected?.(ptyId, contentCol, absY)
       const mouseSelected = !copySelected && hasSelection && isCellSelected?.(ptyId, contentCol, absY)
       if (copySelected) {
         const base = copySelectionBg ?? selectionBg ?? SELECTION_BG
-        finalBg = blendOverlay(base, overlayBg, isThumb ? 0.6 : 0.45)
+        buffer.setCellWithAlphaBlending(
+          scrollbarX,
+          y + offsetY,
+          underlyingChar,
+          underlyingFg,
+          base,
+          0
+        )
+        buffer.setCellWithAlphaBlending(
+          scrollbarX,
+          y + offsetY,
+          underlyingChar,
+          underlyingFg,
+          overlayBg,
+          0
+        )
+        continue
       } else if (mouseSelected) {
         const base = selectionBg ?? SELECTION_BG
-        finalBg = blendOverlay(base, overlayBg, isThumb ? 0.6 : 0.45)
+        buffer.setCellWithAlphaBlending(
+          scrollbarX,
+          y + offsetY,
+          underlyingChar,
+          underlyingFg,
+          base,
+          0
+        )
+        buffer.setCellWithAlphaBlending(
+          scrollbarX,
+          y + offsetY,
+          underlyingChar,
+          underlyingFg,
+          overlayBg,
+          0
+        )
+        continue
       }
     }
 
@@ -125,7 +149,7 @@ export function renderScrollbar(
       y + offsetY,
       underlyingChar,
       underlyingFg,
-      finalBg,
+      overlayBg,
       0
     )
   }
