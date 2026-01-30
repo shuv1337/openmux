@@ -8,6 +8,11 @@ REPO="monotykamary/openmux"
 OPENMUX_HOME="${OPENMUX_HOME:-$HOME/.openmux}"
 BIN_DIR="$OPENMUX_HOME/bin"
 
+# Global temp directory for cleanup trap (must be declared before trap with set -u)
+TMP_DIR=""
+cleanup() { [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]] && rm -rf "$TMP_DIR"; }
+trap cleanup EXIT
+
 # Colors for output
 BOLD='\033[1m'
 RED='\033[0;31m'
@@ -74,36 +79,34 @@ get_latest_version() {
 
 download_and_extract() {
     local url="https://github.com/$REPO/releases/download/$VERSION/openmux-$VERSION-$TARGET.tar.gz"
-    local tmp_dir
 
-    tmp_dir=$(mktemp -d)
-    trap 'rm -rf "$tmp_dir"' EXIT
+    TMP_DIR=$(mktemp -d)
 
     mkdir -p "$BIN_DIR"
 
     # Download with spinner
     if command -v curl &> /dev/null; then
-        curl -fsSL "$url" -o "$tmp_dir/openmux.tar.gz" 2>/dev/null &
+        curl -fsSL "$url" -o "$TMP_DIR/openmux.tar.gz" 2>/dev/null &
     else
-        wget -q "$url" -O "$tmp_dir/openmux.tar.gz" 2>/dev/null &
+        wget -q "$url" -O "$TMP_DIR/openmux.tar.gz" 2>/dev/null &
     fi
     spinner $! "Downloading..."
     wait $! || error "Download failed"
     printf "  ${GREEN}✓${NC} Downloaded\n"
 
     # Extract with spinner
-    tar -xzf "$tmp_dir/openmux.tar.gz" -C "$tmp_dir" &
+    tar -xzf "$TMP_DIR/openmux.tar.gz" -C "$TMP_DIR" &
     spinner $! "Extracting..."
     wait $!
     printf "  ${GREEN}✓${NC} Extracted\n"
 
     # Move files to ~/.openmux/bin/
-    mv "$tmp_dir/openmux" "$BIN_DIR/"
-    mv "$tmp_dir/openmux-bin" "$BIN_DIR/"
-    mv "$tmp_dir/libzig_pty.$LIB_EXT" "$BIN_DIR/"
-    mv "$tmp_dir/libzig_git.$LIB_EXT" "$BIN_DIR/"
-    mv "$tmp_dir/libghostty-vt.$LIB_EXT" "$BIN_DIR/" || true
-    mv "$tmp_dir/bunfig.toml" "$BIN_DIR/" || true
+    mv "$TMP_DIR/openmux" "$BIN_DIR/"
+    mv "$TMP_DIR/openmux-bin" "$BIN_DIR/"
+    mv "$TMP_DIR/libzig_pty.$LIB_EXT" "$BIN_DIR/"
+    mv "$TMP_DIR/libzig_git.$LIB_EXT" "$BIN_DIR/"
+    mv "$TMP_DIR/libghostty-vt.$LIB_EXT" "$BIN_DIR/" || true
+    mv "$TMP_DIR/bunfig.toml" "$BIN_DIR/" || true
     chmod +x "$BIN_DIR/openmux-bin" "$BIN_DIR/openmux"
 
     # Write version file
