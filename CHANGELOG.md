@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.120](https://github.com/monotykamary/openmux/compare/v0.2.119...v0.2.120) (2026-01-30)
+
+
+### Bug Fixes
+
+* **install:** resolve unbound variable error in cleanup trap ([1590b4d](https://github.com/monotykamary/openmux/commit/1590b4d8aeab0043bd4be1be24cd7f0c04a795cc))
+
 ### [0.2.119](https://github.com/monotykamary/openmux/compare/v0.2.118...v0.2.119) (2026-01-29)
 
 
